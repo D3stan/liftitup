@@ -12,7 +12,6 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - DATABASE_PATH=/app/data/liftitup.db
-      - SESSION_SECRET=${SESSION_SECRET:-liftitup-homelab-secret-key-2026}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-https://lift.0xpuddu.com}
     volumes:
       - liftitup-data:/app/data
