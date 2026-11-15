@@ -1,0 +1,44 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
+import { requireAuth } from '@/lib/auth/session';
+import {
+  applyAiImport,
+  getAiPromptContext,
+  validateImportForUser,
+} from '@/lib/ai';
+
+interface ImportBody {
+  mode?: unknown;
+  rawText?: unknown;
+}
+
+export const GET = withApiHandler('ai.import.context', async (req: NextRequest, ctx) => {
+  const { user } = requireAuth(req, ctx);
+  const context = getAiPromptContext(user);
+  return NextResponse.json(context);
+});
+
+export const POST = withApiHandler('ai.import', async (req: NextRequest, ctx) => {
+  const { user } = requireAuth(req, ctx);
+  const body = await parseJsonBody<ImportBody>(req);
+
+  if (body.mode !== 'validate' && body.mode !== 'confirm') {
+    throw ApiError.validation('mode must be "validate" or "confirm"');
+  }
+
+  if (typeof body.rawText !== 'string') {
+    throw ApiError.validation('rawText must be a string');
+  }
+
+  if (body.mode === 'validate') {
+    const result = validateImportForUser(user, body.rawText);
+    return NextResponse.json(result);
+  }
+
+  const result = applyAiImport(user, body.rawText);
+  if (!result.valid) {
+    throw ApiError.validation('Invalid AI plan JSON', { errors: result.errors });
+  }
+
+  return NextResponse.json(result);
+});
