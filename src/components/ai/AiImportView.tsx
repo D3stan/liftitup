@@ -32,6 +32,12 @@ interface ConfirmApiResponse extends ValidateApiResponse {
   createdCustomExercises?: Array<{ id: string; name: string }>;
 }
 
+function formatWeight(weightKg: number, unit: 'kg' | 'lb'): string {
+  const val =
+    unit === 'lb' ? Math.round(weightKg * 2.20462 * 10) / 10 : weightKg;
+  return `${val} ${unit}`;
+}
+
 function formatExerciseTarget(ex: AiPreviewExercise, unit: 'kg' | 'lb'): string {
   const parts: string[] = [`${ex.targetSets}×`];
   if (ex.targetReps !== null) {
@@ -49,11 +55,7 @@ function formatExerciseTarget(ex: AiPreviewExercise, unit: 'kg' | 'lb'): string 
   }
 
   if (ex.targetWeightKg !== null) {
-    const val =
-      unit === 'lb'
-        ? Math.round(ex.targetWeightKg * 2.20462 * 10) / 10
-        : ex.targetWeightKg;
-    parts.push(`${val}${unit}`);
+    parts.push(formatWeight(ex.targetWeightKg, unit));
   }
 
   parts.push(`${ex.restSeconds}s rest`);
@@ -315,7 +317,7 @@ export function AiImportView() {
 
           <div className="flex flex-wrap gap-1.5 text-sm font-bold">
             <span className="pill">
-              {preview.profile.weightKg} {preview.profile.unit}
+              {formatWeight(preview.profile.weightKg, preview.profile.unit)}
             </span>
             {preview.profile.heightCm !== null && (
               <span className="pill">{preview.profile.heightCm} cm</span>
