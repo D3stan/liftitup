@@ -238,7 +238,7 @@ export function SettingsView() {
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             required
-            className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3"
+            className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
           />
         </label>
 
@@ -254,7 +254,7 @@ export function SettingsView() {
               value={weightInput}
               onChange={(e) => setWeightInput(e.target.value)}
               required
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3"
+              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
             />
           </label>
 
@@ -268,7 +268,7 @@ export function SettingsView() {
               inputMode="decimal"
               value={heightCm}
               onChange={(e) => setHeightCm(e.target.value)}
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3"
+              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
             />
           </label>
 
@@ -281,7 +281,7 @@ export function SettingsView() {
               inputMode="numeric"
               value={age}
               onChange={(e) => setAge(e.target.value)}
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3"
+              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
             />
           </label>
 
@@ -295,7 +295,7 @@ export function SettingsView() {
               inputMode="decimal"
               value={trainingYears}
               onChange={(e) => setTrainingYears(e.target.value)}
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3"
+              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
             />
           </label>
         </div>
@@ -332,7 +332,7 @@ export function SettingsView() {
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               required
-              className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3"
+              className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
             />
             <Button
               variant="alt"
@@ -390,7 +390,7 @@ export function SettingsView() {
               readOnly
               value={mcpUrl}
               aria-label="MCP Endpoint"
-              className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-sm"
+              className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
             />
             <Button
               variant="alt"
@@ -439,7 +439,7 @@ export function SettingsView() {
                 readOnly
                 value={revealedKey}
                 aria-label="Generated API Key"
-                className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 font-mono text-sm"
+                className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 font-mono text-base"
               />
               <Button
                 variant="primary"

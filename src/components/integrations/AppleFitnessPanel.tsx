@@ -278,7 +278,7 @@ export function AppleFitnessPanel({
             readOnly
             value={webhookUrl}
             aria-label="Apple Health webhook URL"
-            className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-sm"
+            className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
           />
           <Button
             variant="alt"
