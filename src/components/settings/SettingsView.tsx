@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Check, Copy, Download, KeyRound, LogOut, RefreshCw } from 'lucide-react';
 import { ApiClientError, Button, apiFetch, toast } from '@/components/ui';
 import { AppleFitnessPanel } from '@/components/integrations/AppleFitnessPanel';
+import { getMcpClientConfigSnippet, normalizeMcpEndpointUrl } from '@/lib/mcp';
 import type { ApiKeyInfo, UserProfile, WeightUnit } from '@/types/domain';
 
 interface SettingsPayload {
@@ -27,25 +28,6 @@ function kgToDisplay(kg: number, unit: WeightUnit): string {
 function displayToKg(val: number, unit: WeightUnit): number {
   const kg = unit === 'lb' ? val / 2.20462 : val;
   return Math.round(kg * 10) / 10;
-}
-
-function formatMcpSnippet(mcpUrl: string, apiKey: string | null): string {
-  const token = apiKey || '<YOUR_API_KEY>';
-  return JSON.stringify(
-    {
-      mcpServers: {
-        liftitup: {
-          type: 'http',
-          url: mcpUrl,
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      },
-    },
-    null,
-    2,
-  );
 }
 
 export function SettingsView() {
@@ -211,8 +193,8 @@ export function SettingsView() {
     );
   }
 
-  const mcpUrl = origin ? `${origin}/api/mcp` : '/api/mcp';
-  const snippet = formatMcpSnippet(mcpUrl, revealedKey);
+  const mcpUrl = origin ? normalizeMcpEndpointUrl(origin) : '/api/mcp';
+  const snippet = getMcpClientConfigSnippet(origin || 'https://lift.0xpuddu.com', revealedKey);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pb-28 pt-4">
