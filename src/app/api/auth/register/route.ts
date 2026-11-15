@@ -91,13 +91,13 @@ export const POST = withApiHandler(
       80,
     );
 
-    if (getUserByUsername(username)) {
-      throw ApiError.conflict('Username is already taken');
-    }
-
     const passwordHash = await hashPassword(body.password);
 
     const user = withTransaction(() => {
+      if (getUserByUsername(username)) {
+        throw ApiError.conflict('Username is already taken');
+      }
+
       const created = createUser({
         username,
         displayName,

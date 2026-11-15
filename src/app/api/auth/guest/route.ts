@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseJsonBody, withApiHandler } from '@/lib/api/handler';
+import { ApiError, withApiHandler } from '@/lib/api/handler';
 import { createGuestSandbox } from '@/lib/auth/sandbox';
 import { createSessionCookieForUser } from '@/lib/auth/session';
 
@@ -9,9 +9,18 @@ interface GuestBody {
 
 export const POST = withApiHandler('auth.guest', async (req: NextRequest, ctx) => {
   let timezone: string | undefined;
-  const contentLength = req.headers.get('content-length');
-  if (contentLength && Number(contentLength) > 0) {
-    const body = await parseJsonBody<GuestBody>(req);
+  const raw = await req.text();
+  if (raw.trim().length > 0) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw ApiError.badRequest('Invalid JSON request body');
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw ApiError.badRequest('Request body must be a JSON object');
+    }
+    const body = parsed as GuestBody;
     if (typeof body.timezone === 'string') {
       timezone = body.timezone;
     }
