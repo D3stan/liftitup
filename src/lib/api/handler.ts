@@ -81,7 +81,7 @@ export function withApiHandler<TParams = Record<string, string>>(
 ) {
   return async (
     req: NextRequest,
-    segmentContext?: RouteSegmentContext<TParams>,
+    segmentContext: RouteSegmentContext<TParams>,
   ): Promise<Response> => {
     const requestId = generateRequestId();
     const startedAt = performance.now();
