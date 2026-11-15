@@ -2,11 +2,12 @@ import type { Metadata, Viewport } from 'next';
 import '@fontsource/permanent-marker';
 import '@fontsource/patrick-hand';
 import '@/styles/notebook.css';
+import { AppShell } from '@/components/shell/AppShell';
 
 export const metadata: Metadata = {
-  title: 'LiftItUp — Gamified Hypertrophy & Schedule Tracker',
+  title: 'LiftItUp — Workout & Rotation Tracker',
   description:
-    'Science-based hypertrophy workout & schedule tracker with Precompiled Sessions, Smart Double-Progression, Variation Equivalence, AI Compiler & MCP Server.',
+    'Minimal notebook workout tracker with rotation-queue scheduling, custom exercise library, progress charts, and AI plan import.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -35,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased selection:bg-[#f2b632] selection:text-[#1d1a16]">
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
