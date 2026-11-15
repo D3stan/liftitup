@@ -124,7 +124,19 @@
 
 ## J. Docs
 
-- [ ] J1. `docs/USER_GUIDE.md` (how to use, onboarding, AI prompt, MCP setup, export format).
+- [ ] J1. `docs/QUICKSTART.md` (short) + `docs/GUIDE.md` (detailed: usage, onboarding, AI prompts,
+      MCP setup per user, export format, deploy + DB wipe steps).
+
+## Phases
+
+1. **Plan** — `architect` writes `docs/ARCHITECTURE_PLAN.md` (IA/routes, DB schema v2, API, onboarding
+   JSON schema, schedule queue algorithm, set-quality model, export format, MCP tools, work breakdown
+   with file ownership). Coordinator reviews. In parallel `catalog` builds the exercise catalog data.
+2. **Foundation** — DB schema v2 + auth/session + guest sandbox + API contracts + domain types.
+3. **Features in parallel** (strict file ownership from the plan) — shell/nav/home calendar,
+   workout logging, split editor, library, progress/charts, onboarding + AI page, MCP + export,
+   cleanup of removed features. Peer verifiers (Gemini) review; coordinator reviews critical parts.
+4. **Integrate** — typecheck + build, end-to-end click-through, docs, push.
 
 ---
 

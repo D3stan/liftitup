@@ -627,3 +627,73 @@ session_id,session_date,session_title,is_jolly,jolly_mode,duration_minutes,user_
 2. **Phase 3a (parallel)**: WP2 (Schedule/Calendar), WP5 (Exercises), WP6 (AI/MCP/Export), WP7 (Progress/Settings/Cleanup).
 3. **Phase 3b (after WP2 interfaces settle)**: WP3 (Workout Logger), WP4 (Split View/Edit).
 4. **Phase 4 (Integration)**: Full `npm run typecheck && npm run build`, end-to-end click-through, `docs/QUICKSTART.md` & `docs/GUIDE.md`, deploy + wipe DB.
+
+
+---
+
+## 10. Coordinator Review — BINDING AMENDMENTS (override anything above)
+
+**Git.** All work happens on branch `v2-rework` (pushed to origin regularly; merged to `main` only at the
+end, so a half-done app is never deployed). Small commits, `git add <your own paths>` only, conventional
+messages (`feat(schedule): …`, `fix(auth): …`). If `git commit` hits `index.lock`, wait a few seconds and retry.
+All workers share one working copy; respect file ownership strictly. When you run `npx tsc --noEmit`,
+fix errors in YOUR files only; report errors you see in others' files to their owner by name.
+
+**A. Legacy code removal happens first (WP1).** WP1 moves every v1 file that is rewritten/deleted into
+`legacy/` at repo root (excluded in `tsconfig.json` `exclude`) so the tree compiles at each step and later
+packages can still read old code for reference. Files later packages will *edit* (FloatingRestTimer,
+VariationSwapSheet, AppleFitnessPanel, outbox, apple-health route) also move to `legacy/`; the owning
+package re-creates them under `src/`. `src/app/page.tsx` becomes a minimal placeholder until WP2.
+`legacy/` is deleted in Phase 4.
+
+**B. Schedule algorithm fixes (WP2).**
+1. Simulate from `rotation_anchor_date`; a `reset` event does NOT start the simulation — when the loop
+   reaches the reset date it sets `qIdx = 0` and continues. History before a reset must stay visible.
+2. Completing a planned session advances the pointer to `(position(session.schedule_day_id) + 1) % N`
+   (not blindly `+1`), so a session logged for a specific queue day keeps the queue consistent.
+3. Missed past training days: only the FIRST missed day of a given queue item is status `skipped`
+   (counted once); further consecutive empty past days while the same item is still pending are `idle`
+   (shown neutral, not counted). Skip statistics count each missed queue item once.
+4. Editing the split (`PUT /api/schedule`) must preserve day/exercise ids where possible (diff by id),
+   and re-anchor: compute the pointer for today, then store `rotation_anchor_date = today`,
+   `rotation_anchor_index = pointer mapped to the new positions`. Days before the anchor display only
+   logged sessions and events (no projection).
+5. "Today" is the user's local date: add `users.timezone TEXT NOT NULL DEFAULT 'UTC'` (set from the
+   browser at register/guest creation, editable in settings). Client pages pass `today=YYYY-MM-DD`;
+   MCP uses the stored timezone.
+6. `queue.ts` is a pure module (no DB, no `@/` imports, relative imports only) with tests run by
+   `node --test` (Node 26 strips TS natively). Add the worked examples above + the rules here as tests.
+
+**C. Home stays minimal (WP2).** `/` = week calendar + one "today" card (planned day label, **Start** / **Open**)
++ one `⋯ Plan` button opening a sheet with: Postpone +1 / +2 / +3, Skip, Jolly day (extra / instead), Reset.
+No other text blocks.
+
+**D. Auth details (WP1).**
+- Passwords: `crypto.scrypt` with per-user random salt, `timingSafeEqual`.
+- Session cookie: random 32 bytes, store SHA-256 hash, `httpOnly`, `sameSite=lax`, `secure` in production, 30-day sliding expiry.
+- **API keys are shown once** on (re)generation; only the hash + prefix are stored. Drop `key_encrypted`.
+  Settings shows prefix + "Regenerate". (No reliance on `SESSION_SECRET` for key storage.)
+- Guest purge runs at most once per hour per process (not on every request).
+- `SESSION_SECRET` default in docker-compose must be removed; production must fail fast if unset (only if still used).
+
+**E. Body weight history.** Add `body_metrics (id, user_id, measured_on TEXT, weight_kg REAL, source TEXT)`;
+settings weight changes, onboarding import and Apple Health weight write rows. `/progress` charts it.
+
+**F. Export.** CSV gets an extra `rep_qualities` column formatted `3:70;4:50` (empty if none). Volume
+(`weight × reps`) is only computed for `weight_reps` / `weighted_bodyweight` (added load) in charts — never stored.
+
+**G. MCP.** Must be a spec-compliant MCP Streamable HTTP endpoint (`initialize`, `notifications/initialized`,
+`tools/list`, `tools/call`, `ping`; JSON responses to POST; GET → 405), Bearer API-key auth only, 401 otherwise,
+so Claude/ChatGPT/other MCP clients can connect. Settings shows a copyable config snippet.
+
+**H. Shared types during Phase 3.** WP1's worker stays available as owner of `src/types/domain.ts` and
+`src/lib/db/**`. Other packages that need a new query/type ask `@foundation` on the board, or keep
+package-local types/queries inside their own owned files (preferred for package-specific queries:
+e.g. `src/lib/schedule/repo.ts` owned by WP2).
+
+**I. UI copy rule (all UI packages).** No explanatory paragraphs. Labels, short headings, icons, empty
+states of ≤ 5 words. Explanations go to `docs/GUIDE.md`. Keep the notebook look; colours only for
+status/progression. Mobile-first: inputs ≥16px font, tap targets ≥44px.
+
+**J. Errors (all packages).** Every client mutation shows a visible toast on failure with the server
+message; never silently enqueue a failing (4xx) request into the outbox. Server: `withApiHandler` + logger on every route.
