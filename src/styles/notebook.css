@@ -1,0 +1,404 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* ==========================================================================
+   1. MOBILE-NATIVE BASELINE (mobile-native skill hard rules)
+   ========================================================================== */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: "Patrick Hand", "Comic Sans MS", "Chalkboard SE", cursive, sans-serif;
+  font-size: 19px;
+  line-height: 1.35;
+  color: var(--ink);
+  background: var(--paper) radial-gradient(rgba(29, 26, 22, 0.10) 1px, transparent 1.2px) 0 0 / 14px 14px;
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Headings, Brand, Big Numbers, KPIs, Steppers */
+h1, h2, h3, .font-marker, .brand, .kpi-val, .stepper-val {
+  font-family: "Permanent Marker", "Marker Felt", cursive, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.4px;
+  line-height: 1.1;
+}
+
+/* Prevent iOS Safari Focus Auto-Zoom (Always >= 16px) */
+input, select, textarea {
+  font-family: "Patrick Hand", "Comic Sans MS", cursive, sans-serif;
+  font-size: max(16px, 19px);
+  color: var(--ink);
+}
+
+/* Touch Action & Selection Protection on Controls */
+button, a, [role="button"], .chip, .tab, .pill, .tappable {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* ==========================================================================
+   2. SIGNATURE CARTOON NOTEBOOK COMPONENTS (fit-or-pivot + myfood)
+   ========================================================================== */
+
+/* Wobbly Cards */
+.card {
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--wob);
+  padding: 16px;
+  box-shadow: var(--sh);
+}
+
+.card-sm {
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--wob-sm);
+  padding: 12px;
+  box-shadow: var(--sh-s);
+}
+
+/* Hero Today Card (tilted gold highlight card) */
+.hero-card {
+  background: var(--gold);
+  border: 3px solid var(--ink);
+  border-radius: var(--wob);
+  padding: 18px;
+  box-shadow: var(--sh-l);
+  transform: rotate(-0.4deg);
+}
+
+/* Playful Grid Micro-Rotations */
+.wobble-grid > *:nth-child(odd) {
+  transform: rotate(-0.45deg);
+}
+.wobble-grid > *:nth-child(even) {
+  transform: rotate(0.4deg);
+}
+
+/* Brand Badge */
+.brand {
+  font-family: "Permanent Marker", cursive;
+  color: var(--red);
+  transform: rotate(-1.5deg);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.brand-badge {
+  background: var(--gold);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 4px 8px 4px 8px;
+  padding: 2px 8px;
+  font-size: 0.78em;
+  box-shadow: 2px 2px 0 var(--ink);
+  transform: rotate(2.5deg);
+}
+
+/* Physical Mechanical Buttons (instant pointerdown depression) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 16px;
+  border: 3px solid var(--ink);
+  border-radius: var(--wob-sm);
+  background: var(--gold);
+  color: var(--ink);
+  font-family: "Patrick Hand", cursive;
+  font-size: 19px;
+  font-weight: 700;
+  box-shadow: var(--sh);
+  cursor: pointer;
+  transition: transform 80ms var(--ease-out), box-shadow 80ms var(--ease-out), background-color 120ms ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn.alt {
+  background: var(--card);
+  color: var(--ink);
+}
+
+.btn.red {
+  background: var(--red);
+  color: #ffffff;
+}
+
+.btn.green {
+  background: var(--green-bg);
+  color: var(--ink);
+}
+
+.btn.blue {
+  background: var(--blue-bg);
+  color: var(--ink);
+}
+
+.btn.big {
+  font-family: "Permanent Marker", cursive;
+  font-size: 1.25rem;
+  min-height: 52px;
+  padding: 10px 20px;
+}
+
+.btn.icon {
+  padding: 0;
+  width: 44px;
+  height: 44px;
+}
+
+/* Gate Hover Effects Strictly to Fine Pointer Devices */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) {
+    filter: brightness(1.03);
+  }
+  .chip:hover:not(:disabled) {
+    background: var(--gold-bg);
+  }
+}
+
+/* Tactile Steppers (Weight / Reps / RIR) */
+.stepper-btn {
+  width: 44px;
+  height: 44px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--ink);
+  font-family: "Permanent Marker", cursive;
+  font-size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--sh-s);
+  cursor: pointer;
+  transition: transform 70ms var(--ease-out), box-shadow 70ms var(--ease-out);
+}
+
+.stepper-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--ink);
+  background: var(--gold);
+}
+
+/* Sticky Notes with Masking Tape */
+.note {
+  position: relative;
+  background: var(--note);
+  border: 2.5px solid var(--ink);
+  border-radius: 3px 8px 4px 10px;
+  padding: 12px 14px;
+  transform: rotate(-0.5deg);
+  box-shadow: 3px 3px 0 rgba(29, 26, 22, 0.35);
+}
+
+.note::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: calc(50% - 28px);
+  width: 56px;
+  height: 16px;
+  background: rgba(251, 245, 228, 0.78);
+  border: 1.5px dashed rgba(29, 26, 22, 0.4);
+  transform: rotate(1.5deg);
+  pointer-events: none;
+}
+
+/* 12-Segment Candy-Striped Progress Bar */
+.bar {
+  position: relative;
+  height: 20px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.bar-fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--red) 0 8px,
+    #b5321f 8px 16px
+  );
+  transition: transform 220ms var(--ease-out), width 220ms var(--ease-out);
+}
+
+.bar-fill.gold {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--gold) 0 8px,
+    #d99b16 8px 16px
+  );
+}
+
+.bar-fill.green {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--green) 0 8px,
+    #22602c 8px 16px
+  );
+}
+
+.bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(8.333% - 1.5px),
+    rgba(29, 26, 22, 0.28) calc(8.333% - 1.5px) 8.333%
+  );
+  pointer-events: none;
+}
+
+/* 4-Box Discrete Mastery Meter */
+.level-meter {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.level-box {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  background: var(--card);
+}
+
+.level-box.on {
+  background: var(--green);
+}
+
+.level-box.gold {
+  background: var(--gold);
+}
+
+/* Status Pills & Chips */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.pill.gold {
+  background: var(--gold);
+}
+
+.pill.green {
+  background: var(--green-bg);
+}
+
+.pill.red {
+  background: var(--red-bg);
+}
+
+.pill.blue {
+  background: var(--blue-bg);
+}
+
+/* KPI Before -> After Tile */
+.kpi {
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--wob-sm);
+  padding: 10px 12px;
+  box-shadow: var(--sh-s);
+}
+
+.kpi.ok {
+  background: var(--green-bg);
+}
+
+/* Bottom Sheets & Modals (Interruptible & Safe-Area Aware) */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(29, 26, 22, 0.55);
+  backdrop-filter: blur(3px);
+  z-index: 60;
+  transition: opacity 200ms var(--ease-out);
+}
+
+.sheet-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 88dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  background: var(--paper);
+  border-top: 4px solid var(--ink);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 16px calc(22px + var(--sab));
+  box-shadow: 0 -6px 0 var(--ink);
+  z-index: 70;
+  transition: transform 240ms var(--ease-drawer), opacity 200ms var(--ease-out);
+}
+
+/* Notebook Input Fields */
+.nb-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: var(--wob-sm);
+  box-shadow: inset 2px 2px 0 rgba(29, 26, 22, 0.12);
+  font-size: 19px;
+  color: var(--ink);
+  outline: none;
+}
+
+.nb-input:focus {
+  border-color: var(--red);
+  background: #fffef9;
+}
+
+/* Reduced Motion Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 120ms !important;
+  }
+  .hero-card, .wobble-grid > *, .note, .brand, .brand-badge {
+    transform: none !important;
+  }
+}

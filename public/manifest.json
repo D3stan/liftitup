@@ -1,0 +1,18 @@
+{
+  "name": "LiftItUp — Hypertrophy & Schedule Tracker",
+  "short_name": "LiftItUp",
+  "description": "Gamified Science-Based Hypertrophy & Gym Schedule Tracker with Smart Double-Progression, Variation Equivalence, AI Compiler & MCP Server.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ece2c6",
+  "theme_color": "#ece2c6",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

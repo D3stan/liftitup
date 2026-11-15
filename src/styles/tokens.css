@@ -1,0 +1,36 @@
+:root {
+  /* Core Ink-on-Paper Cartoon Notebook Palette (fit-or-pivot + myfood) */
+  --ink: #1d1a16;        /* Primary text, 3px solid borders, hard offset shadows */
+  --paper: #ece2c6;      /* Warm vintage notebook paper background + PWA theme-color */
+  --card: #fbf5e4;       /* Card, sheet, pill, and surface background */
+  --muted: #5d5446;      /* Secondary text, labels, inactive tabs */
+  --line: #1d1a16;       /* Border color */
+  --red: #d9412b;        /* Brand title, PR flame, high-intensity CTA, MRV warning */
+  --red-bg: #f6cfc4;     /* Bad/warning card/banner fill */
+  --gold: #f2b632;       /* Primary button fill, Hero card fill, XP/streak/rank highlight */
+  --gold-bg: #fbedba;    /* Light gold highlight */
+  --green: #2e7d3a;      /* Positive delta, target hit, level bar fill */
+  --green-bg: #cde6c0;   /* Success KPI / PR / completed set fill */
+  --blue: #2b5fa8;       /* Info hint border, variation swap badge, AI/MCP accent */
+  --blue-bg: #d4e3f7;    /* Secondary info badge fill */
+  --note: #fff27a;       /* Sticky-note yellow for tips, warnings, PR notes */
+
+  /* Hard Offset Shadows (Never soft/blurred shadows on cards/buttons) */
+  --sh: 4px 4px 0 var(--ink);
+  --sh-s: 3px 3px 0 var(--ink);
+  --sh-l: 6px 6px 0 var(--ink);
+
+  /* Hand-Drawn Wobbly Border Radius */
+  --wob: 3px 10px 4px 12px / 10px 3px 12px 4px;
+  --wob-sm: 4px 8px 4px 10px;
+
+  /* Custom Easing Curves (emil-design-eng & apple-design) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Mobile Safe Areas & Chrome */
+  --tabbar: 68px;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+}
