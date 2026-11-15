@@ -1,0 +1,303 @@
+import type { DatabaseSync } from 'node:sqlite';
+import { EXERCISE_CATALOG } from '@/lib/exercises/catalog';
+
+export const SCHEMA_VERSION = 2;
+
+const SCHEMA_V2_DDL = `
+  PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL;
+  PRAGMA foreign_keys = ON;
+
+  CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    display_name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    height_cm REAL,
+    weight_kg REAL NOT NULL DEFAULT 75,
+    age INTEGER,
+    training_years REAL,
+    unit TEXT NOT NULL DEFAULT 'kg' CHECK (unit IN ('kg', 'lb')),
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    enable_set_quality INTEGER NOT NULL DEFAULT 0 CHECK (enable_set_quality IN (0, 1)),
+    apple_fitness_enabled INTEGER NOT NULL DEFAULT 1 CHECK (apple_fitness_enabled IN (0, 1)),
+    is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
+    last_active_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_users_guest_active ON users (is_guest, last_active_at);
+
+  CREATE TABLE IF NOT EXISTS body_metrics (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    measured_on TEXT NOT NULL,
+    weight_kg REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'settings',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_body_metrics_user_date ON body_metrics (user_id, measured_on DESC);
+
+  CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id);
+
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT UNIQUE NOT NULL,
+    key_hash TEXT UNIQUE NOT NULL,
+    key_prefix TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS exercises (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    tracking_type TEXT NOT NULL CHECK (
+      tracking_type IN (
+        'weight_reps', 'bodyweight_reps', 'weighted_bodyweight',
+        'assisted_bodyweight', 'time', 'weight_time', 'distance', 'distance_time'
+      )
+    ),
+    equipment TEXT NOT NULL DEFAULT 'other',
+    category TEXT NOT NULL DEFAULT 'other',
+    default_rest_seconds INTEGER NOT NULL DEFAULT 120,
+    is_custom INTEGER NOT NULL DEFAULT 0 CHECK (is_custom IN (0, 1)),
+    aliases_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_exercises_user ON exercises (user_id, is_custom);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_user_slug ON exercises (COALESCE(user_id, '__global__'), slug);
+
+  CREATE TABLE IF NOT EXISTS hidden_exercises (
+    user_id TEXT NOT NULL,
+    exercise_id TEXT NOT NULL,
+    hidden_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, exercise_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS schedules (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    rotation_anchor_date TEXT NOT NULL,
+    rotation_anchor_index INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_schedules_user_active ON schedules (user_id, is_active);
+
+  CREATE TABLE IF NOT EXISTS schedule_days (
+    id TEXT PRIMARY KEY,
+    schedule_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    is_rest_day INTEGER NOT NULL DEFAULT 0 CHECK (is_rest_day IN (0, 1)),
+    FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE,
+    UNIQUE (schedule_id, position)
+  );
+
+  CREATE TABLE IF NOT EXISTS schedule_day_exercises (
+    id TEXT PRIMARY KEY,
+    schedule_day_id TEXT NOT NULL,
+    exercise_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    target_sets INTEGER NOT NULL DEFAULT 3,
+    target_reps INTEGER,
+    target_reps_min INTEGER,
+    target_reps_max INTEGER,
+    target_time_seconds INTEGER,
+    target_weight_kg REAL,
+    target_distance_m REAL,
+    rest_seconds INTEGER NOT NULL DEFAULT 120,
+    notes TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (schedule_day_id) REFERENCES schedule_days(id) ON DELETE CASCADE,
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE RESTRICT
+  );
+  CREATE INDEX IF NOT EXISTS idx_sched_day_ex_order ON schedule_day_exercises (schedule_day_id, order_index);
+
+  CREATE TABLE IF NOT EXISTS schedule_events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    schedule_id TEXT NOT NULL,
+    event_date TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK (
+      event_type IN ('skip', 'postpone', 'reset', 'jolly_extra', 'jolly_instead')
+    ),
+    shift_days INTEGER,
+    jolly_label TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_sched_events_user_date ON schedule_events (user_id, schedule_id, event_date);
+
+  CREATE TABLE IF NOT EXISTS workout_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    session_date TEXT NOT NULL,
+    schedule_id TEXT,
+    schedule_day_id TEXT,
+    is_jolly INTEGER NOT NULL DEFAULT 0 CHECK (is_jolly IN (0, 1)),
+    jolly_mode TEXT CHECK (jolly_mode IN ('extra', 'instead')),
+    title TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    duration_minutes INTEGER,
+    user_weight_kg REAL,
+    notes TEXT NOT NULL DEFAULT '',
+    apple_watch_kcal INTEGER,
+    apple_watch_avg_hr INTEGER,
+    apple_watch_max_hr INTEGER,
+    cid TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE SET NULL,
+    FOREIGN KEY (schedule_day_id) REFERENCES schedule_days(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sessions_user_date ON workout_sessions (user_id, session_date DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_user_cid ON workout_sessions (user_id, cid) WHERE cid IS NOT NULL;
+
+  CREATE TABLE IF NOT EXISTS workout_exercises (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    exercise_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (session_id) REFERENCES workout_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE RESTRICT
+  );
+  CREATE INDEX IF NOT EXISTS idx_workout_ex_order ON workout_exercises (session_id, order_index);
+
+  CREATE TABLE IF NOT EXISTS workout_sets (
+    id TEXT PRIMARY KEY,
+    workout_exercise_id TEXT NOT NULL,
+    set_number INTEGER NOT NULL,
+    weight_kg REAL,
+    reps INTEGER,
+    time_seconds INTEGER,
+    distance_m REAL,
+    rest_seconds INTEGER,
+    execution_quality_pct INTEGER CHECK (execution_quality_pct BETWEEN 0 AND 100),
+    is_completed INTEGER NOT NULL DEFAULT 1 CHECK (is_completed IN (0, 1)),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_workout_sets_ex ON workout_sets (workout_exercise_id, set_number);
+
+  CREATE TABLE IF NOT EXISTS workout_set_rep_qualities (
+    id TEXT PRIMARY KEY,
+    workout_set_id TEXT NOT NULL,
+    rep_index INTEGER NOT NULL,
+    quality_pct INTEGER NOT NULL CHECK (quality_pct BETWEEN 0 AND 100),
+    FOREIGN KEY (workout_set_id) REFERENCES workout_sets(id) ON DELETE CASCADE,
+    UNIQUE (workout_set_id, rep_index)
+  );
+
+  CREATE TABLE IF NOT EXISTS apple_health_workouts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    workout_type TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    active_calories INTEGER NOT NULL,
+    avg_heart_rate INTEGER,
+    max_heart_rate INTEGER,
+    bodyweight_kg REAL,
+    linked_session_id TEXT,
+    source TEXT NOT NULL DEFAULT 'shortcut_webhook',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (linked_session_id) REFERENCES workout_sessions(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_apple_health_user ON apple_health_workouts (user_id, started_at DESC);
+
+  CREATE TABLE IF NOT EXISTS session_swaps (
+    user_id TEXT NOT NULL,
+    date_key TEXT NOT NULL,
+    schedule_day_exercise_id TEXT NOT NULL,
+    exercise_id TEXT NOT NULL,
+    PRIMARY KEY (user_id, date_key, schedule_day_exercise_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+  );
+`;
+
+function defaultRestForCategory(category: string): number {
+  if (category === 'core' || category === 'cardio') return 60;
+  return 120;
+}
+
+/**
+ * Idempotently syncs EXERCISE_CATALOG into the `exercises` table (is_custom = 0).
+ */
+export function syncExerciseCatalog(db: DatabaseSync): void {
+  const now = new Date().toISOString();
+  const upsert = db.prepare(`
+    INSERT INTO exercises (
+      id, user_id, slug, name, tracking_type, equipment, category,
+      default_rest_seconds, is_custom, aliases_json, created_at
+    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      slug = excluded.slug,
+      name = excluded.name,
+      tracking_type = excluded.tracking_type,
+      equipment = excluded.equipment,
+      category = excluded.category,
+      aliases_json = excluded.aliases_json
+    WHERE exercises.is_custom = 0
+  `);
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const ex of EXERCISE_CATALOG) {
+      upsert.run(
+        ex.id,
+        ex.id,
+        ex.name,
+        ex.trackingType,
+        ex.equipment,
+        ex.category,
+        defaultRestForCategory(ex.category),
+        JSON.stringify(ex.aliases ?? []),
+        now,
+      );
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+/**
+ * Applies schema v2 DDL, records schema_version = 2, and syncs EXERCISE_CATALOG.
+ * Does NOT seed any real or demo users.
+ */
+export function initSchema(db: DatabaseSync): void {
+  db.exec(SCHEMA_V2_DDL);
+  const now = new Date().toISOString();
+  db.prepare(
+    'INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)',
+  ).run(SCHEMA_VERSION, now);
+  syncExerciseCatalog(db);
+}
