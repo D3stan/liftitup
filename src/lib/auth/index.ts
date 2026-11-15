@@ -12,3 +12,4 @@ export {
   clearSessionCookie,
   type AuthContext,
 } from './session';
+export { createGuestSandbox, purgeExpiredGuestsIfDue } from './sandbox';

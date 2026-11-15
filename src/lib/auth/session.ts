@@ -11,6 +11,7 @@ import {
   touchAuthSession,
 } from '@/lib/db/sessions';
 import { getUserById, touchUserLastActive } from '@/lib/db/users';
+import { purgeExpiredGuestsIfDue } from './sandbox';
 
 export const SESSION_COOKIE_NAME = 'liftitup_session';
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -65,6 +66,8 @@ function resolveFromApiKey(rawKey: string): AuthContext | null {
  * or `liftitup_session` cookie. Never falls back to a default user.
  */
 export function optionalAuth(req: NextRequest): AuthContext | null {
+  purgeExpiredGuestsIfDue();
+
   const authHeader = req.headers.get('authorization');
   if (authHeader !== null) {
     const bearer = extractBearerToken(req);
