@@ -102,7 +102,11 @@ export default function WorkoutDayPage() {
     try {
       await apiFetch('/api/schedule/events', {
         method: 'POST',
-        body: JSON.stringify({ eventDate: date, eventType: 'skip' }),
+        body: JSON.stringify({
+          eventDate: date,
+          eventType: 'skip',
+          today: localTodayYmd(),
+        }),
       });
       toast.success('Day skipped');
       await loadDay();
@@ -153,13 +157,15 @@ export default function WorkoutDayPage() {
   const canStartPlanned =
     Boolean(plannedDay && !plannedDay.isRestDay) &&
     !hasCompletedPlannedSession &&
-    calendarDay.status !== 'jolly_instead' &&
-    calendarDay.status !== 'postponed' &&
+    calendarDay.status === 'planned' &&
     isFutureOrToday;
   const canOfferJollyInstead =
     Boolean(plannedDay && !plannedDay.isRestDay) &&
     !hasCompletedPlannedSession &&
     calendarDay.status === 'planned';
+  const jollyEvent = calendarDay.events.find(
+    (e) => e.eventType === 'jolly_instead' || e.eventType === 'jolly_extra',
+  );
 
   return (
     <main className="mx-auto max-w-xl space-y-4 px-4 pb-28 pt-4">
@@ -284,16 +290,11 @@ export default function WorkoutDayPage() {
         </section>
       ))}
 
-      {/* Planned Workout Card (when applicable and not already logged) */}
-      {plannedDay && !plannedDay.isRestDay && !hasCompletedPlannedSession && calendarDay.status !== 'jolly_instead' && (
+      {/* Planned Workout Card (only when day status is planned) */}
+      {plannedDay && !plannedDay.isRestDay && !hasCompletedPlannedSession && calendarDay.status === 'planned' && (
         <section className="card space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div>
-              {calendarDay.skippedLabel && calendarDay.status === 'skipped' && (
-                <span className="pill red mb-1 text-xs">
-                  Missed: {calendarDay.skippedLabel}
-                </span>
-              )}
               <h1 className="font-marker text-2xl text-[#1d1a16]">
                 {plannedDay.label}
               </h1>
@@ -367,12 +368,10 @@ export default function WorkoutDayPage() {
         </section>
       )}
 
-      {/* Rest / Postponed / Open / Extra Jolly Option */}
+      {/* Rest / Postponed / Skipped / Jolly / Open Fallback Card */}
       {(!plannedDay ||
         plannedDay.isRestDay ||
-        calendarDay.status === 'postponed' ||
-        calendarDay.status === 'unscheduled' ||
-        calendarDay.status === 'idle') &&
+        calendarDay.status !== 'planned') &&
         sessions.length === 0 && (
           <section className="card space-y-3 text-center">
             <h1 className="font-marker text-2xl text-[#1d1a16]">
@@ -380,10 +379,20 @@ export default function WorkoutDayPage() {
                 ? 'Rest Day'
                 : calendarDay.status === 'postponed'
                   ? 'Postponed'
-                  : 'No Planned Workout'}
+                  : calendarDay.status === 'skipped'
+                    ? calendarDay.skippedLabel
+                      ? `Skipped: ${calendarDay.skippedLabel}`
+                      : 'Skipped'
+                    : calendarDay.status === 'jolly_instead'
+                      ? jollyEvent?.jollyLabel?.trim() || 'Jolly Day'
+                      : calendarDay.status === 'jolly_extra'
+                        ? jollyEvent?.jollyLabel?.trim() || 'Jolly Extra'
+                        : 'No Planned Workout'}
             </h1>
             <Link
-              href={`/workout/${encodeURIComponent(date)}/log?jolly=extra`}
+              href={`/workout/${encodeURIComponent(date)}/log?jolly=${
+                calendarDay.status === 'jolly_instead' ? 'instead' : 'extra'
+              }`}
               className="btn w-full"
             >
               <Sparkles className="h-4 w-4" />

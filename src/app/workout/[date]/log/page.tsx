@@ -108,19 +108,40 @@ function buildInitialDraft(params: {
   }
 
   const plannedDay = dayView.calendarDay.plannedDay;
+  const status = dayView.calendarDay.status;
+  const statusIsJollyOrSkipped =
+    status === 'jolly_instead' ||
+    status === 'jolly_extra' ||
+    status === 'skipped';
   const forceJolly =
     jollyParam === 'extra' ||
     jollyParam === 'instead' ||
     !plannedDay ||
-    plannedDay.isRestDay;
+    plannedDay.isRestDay ||
+    statusIsJollyOrSkipped;
 
   if (forceJolly) {
+    const mode: 'extra' | 'instead' =
+      jollyParam === 'instead' || (!jollyParam && status === 'jolly_instead')
+        ? 'instead'
+        : 'extra';
+    const jollyEvent =
+      dayView.calendarDay.events.find(
+        (e) =>
+          e.eventType === (mode === 'instead' ? 'jolly_instead' : 'jolly_extra'),
+      ) ??
+      dayView.calendarDay.events.find(
+        (e) =>
+          e.eventType === 'jolly_instead' || e.eventType === 'jolly_extra',
+      );
+    const title = jollyEvent?.jollyLabel?.trim() || 'Jolly Workout';
+
     return {
       cid: generateCid(),
-      title: 'Jolly Workout',
+      title,
       notes: '',
       isJolly: true,
-      jollyMode: jollyParam === 'instead' ? 'instead' : 'extra',
+      jollyMode: mode,
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       exercises: [],
