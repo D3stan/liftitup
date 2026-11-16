@@ -16,12 +16,17 @@ import {
   shouldFireRestAlert,
   type DraftRestClock,
 } from '@/lib/workouts/clock';
+import {
+  formatRestSeconds,
+  type LastTimeRestMatch,
+} from '@/lib/workouts/rest';
 import { ensureAlertServiceWorker, fireRestAlert } from '@/lib/workouts/restAlerts';
 import type { RestClockMode } from '@/types/domain';
 
 export interface FloatingRestTimerProps {
   restClock: DraftRestClock | null | undefined;
   preferredMode: RestClockMode;
+  lastTimeRest?: LastTimeRestMatch | null;
   isExpandedPicker?: boolean;
   onAdjustTarget: (deltaSeconds: number) => void;
   onStartPreset: (seconds: number, label?: string) => void;
@@ -33,6 +38,7 @@ export interface FloatingRestTimerProps {
 export default function FloatingRestTimer({
   restClock,
   preferredMode,
+  lastTimeRest = null,
   isExpandedPicker = false,
   onAdjustTarget,
   onStartPreset,
@@ -248,6 +254,15 @@ export default function FloatingRestTimer({
                           ? 'Ready'
                           : `${state.targetSeconds}s`}
                     </span>
+                    {lastTimeRest && (
+                      <span className="pill px-2 py-0.5 text-xs">
+                        last time:{' '}
+                        {formatRestSeconds(
+                          lastTimeRest.actualRestSeconds,
+                          lastTimeRest.restApproximate,
+                        )}
+                      </span>
+                    )}
                   </div>
                   {clockLabel && (
                     <p className="truncate text-sm font-bold text-[var(--muted)]">

@@ -22,6 +22,14 @@ export interface LoggerSet {
   timeSeconds: string;
   distanceM: string;
   restSeconds: number | null;
+  /** Edit-mode string input for planned rest (seconds or M:SS). */
+  restSecondsDisplay?: string;
+  /** Persisted actual rest in seconds (populated in edit mode or when manually edited). */
+  actualRestSeconds?: number | null;
+  /** Whether actual rest is approximate (~). Cleared when user edits actual rest. */
+  restApproximate?: boolean;
+  /** Edit-mode string input for actual rest (seconds or M:SS). */
+  actualRestDisplay?: string;
   executionQualityPct: number | null;
   repQualities: LoggerRepQuality[];
   isCompleted: boolean;
@@ -29,6 +37,12 @@ export interface LoggerSet {
   completedAt?: string | null;
   /** ISO timestamp when user explicitly stopped the rest clock after this set (consumed by Phase 3). */
   restEndedAt?: string | null;
+  /** Monotonic completion order counter assigned on individual set check, cleared on uncheck. */
+  completionSeq?: number | null;
+  /** True if this set was ever unchecked after being completed (disqualifies measured rest on re-tick). */
+  wasUnchecked?: boolean;
+  /** True if this set was completed via "Check all" (disqualifies measured rest). */
+  completedViaCheckAll?: boolean;
 }
 
 export interface LoggerExercise {
@@ -48,10 +62,16 @@ export interface WorkoutDraft {
   notes: string;
   isJolly: boolean;
   jollyMode: 'extra' | 'instead' | null;
+  /** Editable session date (YYYY-MM-DD), used in edit mode. */
+  sessionDate?: string;
+  /** Editable duration in minutes (string input), used in edit mode. */
+  durationMinutes?: string;
   /** ISO timestamp when user started the session (Start button or first completed set), or null before starting. */
   startedAt: string | null;
   /** How the session clock started, if started. */
   sessionStartSource?: 'manual' | 'first_set' | null;
+  /** Monotonic counter for individual set completion order across reloads. */
+  completionSeqCounter?: number;
   /** Persisted rest clock state (stopwatch or countdown) so reloads preserve elapsed/target/stop state. */
   restClock?: DraftRestClock | null;
   exercises: LoggerExercise[];
@@ -272,6 +292,8 @@ export function formatPrefillSummary(
     timeSeconds: first.timeSeconds,
     distanceM: first.distanceM,
     restSeconds: first.restSeconds,
+    actualRestSeconds: first.actualRestSeconds ?? null,
+    restApproximate: first.restApproximate ?? false,
     executionQualityPct: null,
     isCompleted: true,
     createdAt: '',
@@ -358,11 +380,18 @@ export function buildPrefilledSets(params: {
       timeSeconds: timeVal !== null ? String(timeVal) : '',
       distanceM: distVal !== null ? String(distVal) : '',
       restSeconds: restVal,
+      restSecondsDisplay: restVal !== null ? String(restVal) : '',
+      actualRestSeconds: null,
+      restApproximate: false,
+      actualRestDisplay: '',
       executionQualityPct: null,
       repQualities: [],
       isCompleted: false,
       completedAt: null,
       restEndedAt: null,
+      completionSeq: null,
+      wasUnchecked: false,
+      completedViaCheckAll: false,
     });
   }
 

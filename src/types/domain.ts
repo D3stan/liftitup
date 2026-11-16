@@ -164,6 +164,8 @@ export interface WorkoutSet {
   timeSeconds: number | null;
   distanceM: number | null;
   restSeconds: number | null;
+  actualRestSeconds: number | null;
+  restApproximate: boolean;
   executionQualityPct: number | null;
   isCompleted: boolean;
   createdAt: string;
@@ -235,5 +237,7 @@ export interface ExercisePrefill {
     timeSeconds: number | null;
     distanceM: number | null;
     restSeconds: number | null;
+    actualRestSeconds: number | null;
+    restApproximate: boolean;
   }>;
 }

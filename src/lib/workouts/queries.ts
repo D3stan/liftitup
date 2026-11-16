@@ -19,6 +19,7 @@ import {
 } from '@/lib/db/workouts';
 import { getExerciseById } from '@/lib/exercises/repository';
 import { projectCalendar } from '@/lib/schedule/queue';
+import { MAX_MEASURED_REST_SECONDS } from './rest';
 import type {
   SaveWorkoutExerciseInput,
   SaveWorkoutSessionInput,
@@ -233,6 +234,8 @@ interface NormalizedExercisePayload {
     timeSeconds: number | null;
     distanceM: number | null;
     restSeconds: number | null;
+    actualRestSeconds: number | null;
+    restApproximate: boolean;
     executionQualityPct: number | null;
     isCompleted: boolean;
     repQualities: Array<{ repIndex: number; qualityPct: number }>;
@@ -326,6 +329,19 @@ async function validateAndNormalizeExercises(
         3600,
         true,
       );
+      const rawActualRest = parseNullableNumberRange(
+        s.actualRestSeconds,
+        `exercises[${i}].sets[${j}].actualRestSeconds`,
+        0,
+        86400,
+        true,
+      );
+      const actualRestSeconds =
+        rawActualRest !== null && rawActualRest <= MAX_MEASURED_REST_SECONDS
+          ? rawActualRest
+          : null;
+      const restApproximate =
+        actualRestSeconds !== null && Boolean(s.restApproximate);
       const executionQualityPct = parseNullableNumberRange(
         s.executionQualityPct,
         `exercises[${i}].sets[${j}].executionQualityPct`,
@@ -379,6 +395,8 @@ async function validateAndNormalizeExercises(
         timeSeconds,
         distanceM,
         restSeconds,
+        actualRestSeconds,
+        restApproximate,
         executionQualityPct,
         isCompleted,
         repQualities,
@@ -413,8 +431,9 @@ async function insertSessionExercises(
   const insertSetSql = `
     INSERT INTO workout_sets (
       id, workout_exercise_id, set_number, weight_kg, reps, time_seconds,
-      distance_m, rest_seconds, execution_quality_pct, is_completed, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      distance_m, rest_seconds, actual_rest_seconds, rest_approximate,
+      execution_quality_pct, is_completed, created_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
   `;
   const insertRepQSql = `
     INSERT INTO workout_set_rep_qualities (id, workout_set_id, rep_index, quality_pct)
@@ -438,6 +457,8 @@ async function insertSessionExercises(
         setRow.timeSeconds,
         setRow.distanceM,
         setRow.restSeconds,
+        setRow.actualRestSeconds,
+        setRow.restApproximate ? 1 : 0,
         setRow.executionQualityPct,
         setRow.isCompleted ? 1 : 0,
         nowIso,
@@ -674,8 +695,28 @@ export async function updateWorkoutSession(
     setClauses.push(`notes = $${params.length}`);
   }
 
+  if (input.startedAt !== undefined) {
+    if (
+      typeof input.startedAt !== 'string' ||
+      !input.startedAt.trim() ||
+      !Number.isFinite(Date.parse(input.startedAt))
+    ) {
+      throw ApiError.validation('startedAt must be a valid ISO timestamp');
+    }
+    params.push(input.startedAt.trim());
+    setClauses.push(`started_at = $${params.length}`);
+  }
+
   if (input.completedAt !== undefined) {
-    params.push(input.completedAt);
+    if (
+      input.completedAt !== null &&
+      (typeof input.completedAt !== 'string' ||
+        !input.completedAt.trim() ||
+        !Number.isFinite(Date.parse(input.completedAt)))
+    ) {
+      throw ApiError.validation('completedAt must be a valid ISO timestamp or null');
+    }
+    params.push(input.completedAt === null ? null : input.completedAt.trim());
     setClauses.push(`completed_at = $${params.length}`);
   }
 

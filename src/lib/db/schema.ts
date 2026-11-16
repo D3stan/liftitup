@@ -201,6 +201,8 @@ const SCHEMA_V2_DDL = `
     time_seconds INTEGER,
     distance_m DOUBLE PRECISION,
     rest_seconds INTEGER,
+    actual_rest_seconds INTEGER,
+    rest_approximate INTEGER NOT NULL DEFAULT 0 CHECK (rest_approximate IN (0, 1)),
     execution_quality_pct INTEGER CHECK (execution_quality_pct IS NULL OR (execution_quality_pct BETWEEN 0 AND 100)),
     is_completed INTEGER NOT NULL DEFAULT 1 CHECK (is_completed IN (0, 1)),
     created_at TEXT NOT NULL,
@@ -380,6 +382,12 @@ export async function initSchema(
     );
     await client.query(
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown'))",
+    );
+    await client.query(
+      'ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS actual_rest_seconds INTEGER',
+    );
+    await client.query(
+      'ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS rest_approximate INTEGER NOT NULL DEFAULT 0 CHECK (rest_approximate IN (0, 1))',
     );
 
     const now = new Date().toISOString();
