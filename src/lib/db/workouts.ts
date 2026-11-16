@@ -101,6 +101,8 @@ type DbWorkoutSetRow = {
   time_seconds: number | null;
   distance_m: number | null;
   rest_seconds: number | null;
+  actual_rest_seconds: number | null;
+  rest_approximate: number;
   execution_quality_pct: number | null;
   is_completed: number;
   created_at: string;
@@ -335,6 +337,11 @@ async function hydrateSessions(
         timeSeconds: s.time_seconds === null ? null : Number(s.time_seconds),
         distanceM: s.distance_m === null ? null : Number(s.distance_m),
         restSeconds: s.rest_seconds === null ? null : Number(s.rest_seconds),
+        actualRestSeconds:
+          s.actual_rest_seconds === null || s.actual_rest_seconds === undefined
+            ? null
+            : Number(s.actual_rest_seconds),
+        restApproximate: Boolean(s.rest_approximate),
         executionQualityPct:
           s.execution_quality_pct === null
             ? null
@@ -459,7 +466,8 @@ export async function getLastPerformanceByExerciseIds(
   `;
 
   const setsSql = `
-    SELECT set_number, weight_kg, reps, time_seconds, distance_m, rest_seconds
+    SELECT set_number, weight_kg, reps, time_seconds, distance_m, rest_seconds,
+           actual_rest_seconds, rest_approximate
     FROM workout_sets
     WHERE workout_exercise_id = $1 AND is_completed = 1
     ORDER BY set_number ASC
@@ -483,6 +491,8 @@ export async function getLastPerformanceByExerciseIds(
       time_seconds: number | null;
       distance_m: number | null;
       rest_seconds: number | null;
+      actual_rest_seconds: number | null;
+      rest_approximate: number;
     }>(setsSql, [match.workout_exercise_id]);
 
     result[exerciseId] = {
@@ -495,6 +505,11 @@ export async function getLastPerformanceByExerciseIds(
         timeSeconds: s.time_seconds === null ? null : Number(s.time_seconds),
         distanceM: s.distance_m === null ? null : Number(s.distance_m),
         restSeconds: s.rest_seconds === null ? null : Number(s.rest_seconds),
+        actualRestSeconds:
+          s.actual_rest_seconds === null || s.actual_rest_seconds === undefined
+            ? null
+            : Number(s.actual_rest_seconds),
+        restApproximate: Boolean(s.rest_approximate),
       })),
     };
   }

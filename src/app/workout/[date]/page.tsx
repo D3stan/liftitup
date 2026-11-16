@@ -28,6 +28,10 @@ import {
   getQualityRowColor,
   localTodayYmd,
 } from '@/components/workout/trackingFormat';
+import {
+  computeSessionRestSummary,
+  formatRestSeconds,
+} from '@/lib/workouts/rest';
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   planned: { label: 'Planned', className: 'gold' },
@@ -188,7 +192,12 @@ export default function WorkoutDayPage() {
       </div>
 
       {/* Logged Sessions (Read-Only) */}
-      {sessions.map((session) => (
+      {sessions.map((session) => {
+        const restSummary = computeSessionRestSummary(session);
+        const showRestSummary =
+          restSummary.measuredCount > 0 || restSummary.hasUnmeasuredRests;
+
+        return (
         <section key={session.id} className="card space-y-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1 space-y-1">
@@ -237,6 +246,52 @@ export default function WorkoutDayPage() {
             </div>
           )}
 
+          {showRestSummary && (
+            <div className="rounded-[10px] border-2 border-[var(--line)] bg-[var(--paper)]/60 px-3 py-2 text-sm font-bold space-y-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>
+                  Total rest:{' '}
+                  {restSummary.measuredCount > 0
+                    ? formatRestSeconds(
+                        restSummary.totalRestSeconds,
+                        restSummary.hasAnyApproximate,
+                      )
+                    : '—'}
+                </span>
+                <span>
+                  Avg rest:{' '}
+                  {restSummary.averageRestSeconds !== null
+                    ? formatRestSeconds(
+                        restSummary.averageRestSeconds,
+                        restSummary.hasAnyApproximate,
+                      )
+                    : '—'}
+                </span>
+              </div>
+              {restSummary.allRestsMeasured &&
+              restSummary.workingTimeSeconds !== null ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+                  <span>
+                    Working time: {formatRestSeconds(restSummary.workingTimeSeconds)}
+                  </span>
+                  <span>
+                    Rest time:{' '}
+                    {formatRestSeconds(
+                      restSummary.totalRestSeconds,
+                      restSummary.hasAnyApproximate,
+                    )}
+                  </span>
+                </div>
+              ) : (
+                restSummary.hasUnmeasuredRests && (
+                  <p className="text-xs text-[var(--muted)]">
+                    Some rests were not measured
+                  </p>
+                )
+              )}
+            </div>
+          )}
+
           <div className="space-y-2.5">
             {session.exercises.map((ex, idx) => {
               const t = ex.trackingType ?? 'weight_reps';
@@ -264,21 +319,41 @@ export default function WorkoutDayPage() {
                     {ex.sets.map((s) => {
                       const color = getQualityRowColor(
                         s.isCompleted,
-                        user.enableSetQuality,
+                        user.enableSetQuality || s.executionQualityPct !== null,
                         s.executionQualityPct,
                       );
+                      const restLabel =
+                        s.actualRestSeconds !== null
+                          ? formatRestSeconds(
+                              s.actualRestSeconds,
+                              s.restApproximate,
+                            )
+                          : null;
+                      const planDiffers =
+                        restLabel !== null &&
+                        s.restSeconds !== null &&
+                        s.restSeconds !== s.actualRestSeconds;
                       return (
                         <span
                           key={s.id}
-                          className={`inline-flex items-center gap-1.5 rounded-[6px] border-2 border-[var(--line)] px-2.5 py-1 text-sm font-bold ${color}`}
+                          className={`inline-flex flex-wrap items-center gap-1.5 rounded-[6px] border-2 border-[var(--line)] px-2.5 py-1 text-sm font-bold ${color}`}
                         >
                           <span>{formatLoggedSet(s, t, user.unit)}</span>
-                          {user.enableSetQuality &&
-                            s.executionQualityPct !== null && (
+                          {s.executionQualityPct !== null &&
+                            (user.enableSetQuality ||
+                              s.executionQualityPct !== 100) && (
                               <span className="text-xs opacity-80">
                                 ({s.executionQualityPct}%)
                               </span>
                             )}
+                          {restLabel && (
+                            <span className="text-xs opacity-85">
+                              · {restLabel}
+                              {planDiffers
+                                ? ` (plan ${formatRestSeconds(s.restSeconds)})`
+                                : ''}
+                            </span>
+                          )}
                         </span>
                       );
                     })}
@@ -288,7 +363,8 @@ export default function WorkoutDayPage() {
             })}
           </div>
         </section>
-      ))}
+        );
+      })}
 
       {/* Planned Workout Card (only when day status is planned) */}
       {plannedDay && !plannedDay.isRestDay && !hasCompletedPlannedSession && calendarDay.status === 'planned' && (

@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import type { WeightUnit } from '@/types/domain';
+import { parseRestInput } from '@/lib/workouts/rest';
 import SetQualityPopover from './SetQualityPopover';
 import {
   getQualityBadgeColor,
@@ -34,6 +35,7 @@ export interface ExerciseLoggerCardProps {
   totalCount: number;
   unit: WeightUnit;
   enableSetQuality: boolean;
+  isEditing?: boolean;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
   onDeleteExercise: (index: number) => void;
@@ -57,6 +59,7 @@ export default function ExerciseLoggerCard({
   totalCount,
   unit,
   enableSetQuality,
+  isEditing = false,
   onMoveUp,
   onMoveDown,
   onDeleteExercise,
@@ -97,7 +100,14 @@ export default function ExerciseLoggerCard({
   };
 
   const startLongPress = (setIdx: number) => {
-    if (!enableSetQuality) return;
+    const targetSet = exercise.sets[setIdx];
+    const allowQuality =
+      enableSetQuality ||
+      isEditing ||
+      (targetSet?.executionQualityPct !== null &&
+        targetSet?.executionQualityPct !== undefined) ||
+      (targetSet?.repQualities?.length ?? 0) > 0;
+    if (!allowQuality) return;
     cancelLongPress();
     longPressTimerRef.current = setTimeout(() => {
       setQualitySetIdx(setIdx);
@@ -205,9 +215,14 @@ export default function ExerciseLoggerCard({
       {/* Stacked Mobile Set Rows */}
       <div className="space-y-2.5">
         {exercise.sets.map((setRow, setIdx) => {
+          const hasQualityData =
+            setRow.executionQualityPct !== null ||
+            setRow.repQualities.length > 0;
+          const showQualityControl =
+            enableSetQuality || isEditing || hasQualityData;
           const rowColor = getQualityRowColor(
             setRow.isCompleted,
-            enableSetQuality,
+            enableSetQuality || hasQualityData,
             setRow.executionQualityPct,
           );
           const qualityValue = setRow.executionQualityPct ?? 100;
@@ -228,7 +243,7 @@ export default function ExerciseLoggerCard({
                 </span>
 
                 <div className="flex items-center gap-1.5">
-                  {enableSetQuality && (
+                  {showQualityControl && (
                     <button
                       type="button"
                       onClick={() => setQualitySetIdx(setIdx)}
@@ -353,6 +368,71 @@ export default function ExerciseLoggerCard({
                   </label>
                 )}
               </div>
+
+              {isEditing && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="block space-y-0.5">
+                    <span className="block text-xs font-bold uppercase text-[var(--muted)]">
+                      Plan rest (s)
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={
+                        setRow.restSecondsDisplay ??
+                        (setRow.restSeconds !== null
+                          ? String(setRow.restSeconds)
+                          : '')
+                      }
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        onUpdateSet(index, setIdx, {
+                          restSecondsDisplay: raw,
+                          restSeconds: parseRestInput(raw),
+                        });
+                      }}
+                      placeholder="—"
+                      aria-label={`Set ${setIdx + 1} planned rest seconds`}
+                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+                    />
+                  </label>
+
+                  <label className="block space-y-0.5">
+                    <span className="flex items-center gap-1 text-xs font-bold uppercase text-[var(--muted)]">
+                      <span>Actual rest (s)</span>
+                      {setRow.restApproximate &&
+                        setRow.actualRestSeconds !== null &&
+                        setRow.actualRestSeconds !== undefined && (
+                          <span className="rounded bg-[var(--gold-bg)] px-1 text-[10px] font-bold text-[var(--ink)]">
+                            ~
+                          </span>
+                        )}
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="text"
+                      value={
+                        setRow.actualRestDisplay ??
+                        (setRow.actualRestSeconds !== null &&
+                        setRow.actualRestSeconds !== undefined
+                          ? String(setRow.actualRestSeconds)
+                          : '')
+                      }
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        onUpdateSet(index, setIdx, {
+                          actualRestDisplay: raw,
+                          actualRestSeconds: parseRestInput(raw),
+                          restApproximate: false,
+                        });
+                      }}
+                      placeholder="—"
+                      aria-label={`Set ${setIdx + 1} actual rest seconds`}
+                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+                    />
+                  </label>
+                </div>
+              )}
             </div>
           );
         })}
@@ -393,7 +473,13 @@ export default function ExerciseLoggerCard({
         </button>
       </div>
 
-      {enableSetQuality && activeQualitySet && qualitySetIdx !== null && (
+      {(enableSetQuality ||
+        isEditing ||
+        (activeQualitySet &&
+          (activeQualitySet.executionQualityPct !== null ||
+            activeQualitySet.repQualities.length > 0))) &&
+        activeQualitySet &&
+        qualitySetIdx !== null && (
         <SetQualityPopover
           open={true}
           onClose={() => setQualitySetIdx(null)}

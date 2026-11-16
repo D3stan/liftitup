@@ -44,6 +44,8 @@ export interface SaveWorkoutSetInput {
   timeSeconds?: number | null;
   distanceM?: number | null;
   restSeconds?: number | null;
+  actualRestSeconds?: number | null;
+  restApproximate?: boolean;
   executionQualityPct?: number | null;
   isCompleted?: boolean;
   repQualities?: SaveWorkoutRepQualityInput[];
@@ -76,6 +78,7 @@ export interface UpdateWorkoutSessionInput {
   isJolly?: boolean;
   jollyMode?: JollyMode | null;
   title?: string;
+  startedAt?: string;
   completedAt?: string | null;
   durationMinutes?: number | null;
   userWeightKg?: number | null;

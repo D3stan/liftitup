@@ -52,6 +52,10 @@ import {
   stopRestClock,
 } from '@/lib/workouts/clock';
 import {
+  computeActualRestForWorkoutSets,
+  getLastTimeRestForCompletedSet,
+} from '@/lib/workouts/rest';
+import {
   buildPrefilledSets,
   displayToKg,
   formatDisplayDate,
@@ -65,6 +69,46 @@ import {
   type WorkoutDraft,
 } from '@/components/workout/trackingFormat';
 
+function isValidYmdString(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return false;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
+}
+
+function isoToLocalTimeInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '';
+  return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+}
+
+function combineDateAndLocalTimeToIso(
+  ymd: string,
+  hhmm: string,
+): string | null {
+  const dMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  const tMatch = /^(\d{2}):(\d{2})$/.exec(hhmm.trim());
+  if (!dMatch || !tMatch) return null;
+  const dt = new Date(
+    Number(dMatch[1]),
+    Number(dMatch[2]) - 1,
+    Number(dMatch[3]),
+    Number(tMatch[1]),
+    Number(tMatch[2]),
+    0,
+    0,
+  );
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
 function sessionToDraft(
   session: WorkoutSession,
   unit: WeightUnit,
@@ -75,8 +119,12 @@ function sessionToDraft(
     notes: session.notes,
     isJolly: session.isJolly,
     jollyMode: session.jollyMode,
+    sessionDate: session.sessionDate,
+    durationMinutes:
+      session.durationMinutes !== null ? String(session.durationMinutes) : '',
     startedAt: session.startedAt,
     sessionStartSource: null,
+    completionSeqCounter: 0,
     restClock: null,
     updatedAt: new Date().toISOString(),
     exercises: session.exercises.map((ex) => ({
@@ -97,6 +145,12 @@ function sessionToDraft(
           timeSeconds: s.timeSeconds !== null ? String(s.timeSeconds) : '',
           distanceM: s.distanceM !== null ? String(s.distanceM) : '',
           restSeconds: s.restSeconds,
+          restSecondsDisplay:
+            s.restSeconds !== null ? String(s.restSeconds) : '',
+          actualRestSeconds: s.actualRestSeconds,
+          restApproximate: s.restApproximate,
+          actualRestDisplay:
+            s.actualRestSeconds !== null ? String(s.actualRestSeconds) : '',
           executionQualityPct: s.executionQualityPct,
           repQualities:
             s.repQualities?.map((rq) => ({
@@ -106,6 +160,9 @@ function sessionToDraft(
           isCompleted: s.isCompleted,
           completedAt: null,
           restEndedAt: null,
+          completionSeq: null,
+          wasUnchecked: false,
+          completedViaCheckAll: false,
         };
       }),
     })),
@@ -159,8 +216,11 @@ function buildInitialDraft(params: {
       notes: '',
       isJolly: true,
       jollyMode: mode,
+      sessionDate: dayView.date,
+      durationMinutes: '',
       startedAt: null,
       sessionStartSource: null,
+      completionSeqCounter: 0,
       restClock: null,
       updatedAt: new Date().toISOString(),
       exercises: [],
@@ -173,8 +233,11 @@ function buildInitialDraft(params: {
     notes: '',
     isJolly: false,
     jollyMode: null,
+    sessionDate: dayView.date,
+    durationMinutes: '',
     startedAt: null,
     sessionStartSource: null,
+    completionSeqCounter: 0,
     restClock: null,
     updatedAt: new Date().toISOString(),
     exercises: plannedDay.exercises.map((slot) => {
@@ -233,6 +296,9 @@ function WorkoutLoggerInner() {
 
   const [timerPickerOpen, setTimerPickerOpen] = useState(false);
   const [sessionNowMs, setSessionNowMs] = useState<number>(() => Date.now());
+  const [extraPrefills, setExtraPrefills] = useState<
+    Record<string, ExercisePrefill>
+  >({});
 
   const loadData = useCallback(
     async (ignoreSavedDraft = false) => {
@@ -269,6 +335,19 @@ function WorkoutLoggerInner() {
         if (existingDraft && Array.isArray(existingDraft.exercises)) {
           const normalizedDraft: WorkoutDraft = {
             ...existingDraft,
+            sessionDate:
+              typeof existingDraft.sessionDate === 'string' &&
+              existingDraft.sessionDate.trim()
+                ? existingDraft.sessionDate
+                : editSession
+                  ? editSession.sessionDate
+                  : dayRes.date,
+            durationMinutes:
+              typeof existingDraft.durationMinutes === 'string'
+                ? existingDraft.durationMinutes
+                : editSession && editSession.durationMinutes !== null
+                  ? String(editSession.durationMinutes)
+                  : '',
             startedAt:
               typeof existingDraft.startedAt === 'string' &&
               existingDraft.startedAt.trim()
@@ -277,6 +356,10 @@ function WorkoutLoggerInner() {
                   ? editSession.startedAt
                   : null,
             sessionStartSource: existingDraft.sessionStartSource ?? null,
+            completionSeqCounter:
+              typeof existingDraft.completionSeqCounter === 'number'
+                ? existingDraft.completionSeqCounter
+                : 0,
             restClock: existingDraft.restClock ?? null,
           };
           setDraft(normalizedDraft);
@@ -421,6 +504,7 @@ function WorkoutLoggerInner() {
       if (!ex || !setRow) return prev;
 
       const nextDone = !setRow.isCompleted;
+      const nextSeq = nextDone ? (prev.completionSeqCounter ?? 0) + 1 : null;
       const nextExercises = prev.exercises.map((item, i) => {
         if (i !== exIndex) return item;
         return {
@@ -432,6 +516,9 @@ function WorkoutLoggerInner() {
                   isCompleted: nextDone,
                   completedAt: nextDone ? nowIso : null,
                   restEndedAt: null,
+                  completedViaCheckAll: false,
+                  completionSeq: nextSeq,
+                  wasUnchecked: nextDone ? Boolean(s.wasUnchecked) : true,
                 }
               : s,
           ),
@@ -469,6 +556,8 @@ function WorkoutLoggerInner() {
         ...prev,
         startedAt: nextStartedAt,
         sessionStartSource: nextStartSource,
+        completionSeqCounter:
+          nextSeq !== null ? nextSeq : prev.completionSeqCounter ?? 0,
         restClock: nextRestClock,
         exercises: nextExercises,
       };
@@ -489,11 +578,21 @@ function WorkoutLoggerInner() {
           timeSeconds: last?.timeSeconds ?? '',
           distanceM: last?.distanceM ?? '',
           restSeconds: last?.restSeconds ?? ex.defaultRestSeconds,
+          restSecondsDisplay:
+            (last?.restSeconds ?? ex.defaultRestSeconds) !== null
+              ? String(last?.restSeconds ?? ex.defaultRestSeconds)
+              : '',
+          actualRestSeconds: null,
+          restApproximate: false,
+          actualRestDisplay: '',
           executionQualityPct: null,
           repQualities: [],
           isCompleted: false,
           completedAt: null,
           restEndedAt: null,
+          completionSeq: null,
+          wasUnchecked: false,
+          completedViaCheckAll: false,
         };
         return { ...ex, sets: [...ex.sets, nextSet] };
       }),
@@ -544,7 +643,18 @@ function WorkoutLoggerInner() {
           i === exIndex
             ? {
                 ...item,
-                sets: item.sets.map((s) => ({ ...s, isCompleted: true })),
+                sets: item.sets.map((s) =>
+                  s.isCompleted
+                    ? s
+                    : {
+                        ...s,
+                        isCompleted: true,
+                        completedAt: null,
+                        restEndedAt: null,
+                        completedViaCheckAll: true,
+                        completionSeq: null,
+                      },
+                ),
               }
             : item,
         ),
@@ -565,6 +675,10 @@ function WorkoutLoggerInner() {
           `/api/workouts/prefill?exerciseIds=${encodeURIComponent(ex.id)}&beforeDate=${encodeURIComponent(date)}`,
         );
         prefill = res.prefillByExerciseId[ex.id] ?? null;
+        if (prefill) {
+          const loadedPrefill = prefill;
+          setExtraPrefills((prev) => ({ ...prev, [ex.id]: loadedPrefill }));
+        }
       } catch {
         // Fallback to empty prefill
       }
@@ -598,6 +712,9 @@ function WorkoutLoggerInner() {
   ) => {
     if (swapTargetIdx === null || !dayView) return;
     const targetIdx = swapTargetIdx;
+    if (prefill) {
+      setExtraPrefills((prev) => ({ ...prev, [toExercise.id]: prefill }));
+    }
 
     updateDraft((prev) => ({
       ...prev,
@@ -716,26 +833,50 @@ function WorkoutLoggerInner() {
     }
 
     const unit = dayView.user.unit;
+    const isEditing = Boolean(sessionId);
+    const computedRestMatrix = isEditing
+      ? null
+      : computeActualRestForWorkoutSets(draft.exercises);
+
     const exercisesPayload = draft.exercises
       .map((ex, exIdx) => {
-        const completedSets = ex.sets.filter((s) => s.isCompleted);
+        const completedEntries = ex.sets
+          .map((s, origSetIdx) => ({ s, origSetIdx }))
+          .filter(({ s }) => s.isCompleted);
         return {
           exerciseId: ex.exerciseId,
           orderIndex: exIdx,
           notes: ex.notes.trim(),
-          sets: completedSets.map((s, sIdx) => ({
-            setNumber: sIdx + 1,
-            weightKg: displayToKg(parseOptionalNum(s.weightDisplay), unit),
-            reps: parseOptionalInt(s.reps),
-            timeSeconds: parseOptionalInt(s.timeSeconds),
-            distanceM: parseOptionalNum(s.distanceM),
-            restSeconds: s.restSeconds ?? ex.defaultRestSeconds,
-            executionQualityPct: dayView.user.enableSetQuality
-              ? s.executionQualityPct
-              : null,
-            isCompleted: true,
-            repQualities: dayView.user.enableSetQuality ? s.repQualities : [],
-          })),
+          sets: completedEntries.map(({ s, origSetIdx }, sIdx) => {
+            const restEntry = computedRestMatrix?.[exIdx]?.[origSetIdx];
+            const actualRestSeconds = isEditing
+              ? s.actualRestSeconds ?? null
+              : restEntry?.actualRestSeconds ?? null;
+            const restApproximate = isEditing
+              ? actualRestSeconds !== null && Boolean(s.restApproximate)
+              : restEntry?.restApproximate ?? false;
+            const keepQuality =
+              isEditing ||
+              dayView.user.enableSetQuality ||
+              s.executionQualityPct !== null ||
+              s.repQualities.length > 0;
+
+            return {
+              setNumber: sIdx + 1,
+              weightKg: displayToKg(parseOptionalNum(s.weightDisplay), unit),
+              reps: parseOptionalInt(s.reps),
+              timeSeconds: parseOptionalInt(s.timeSeconds),
+              distanceM: parseOptionalNum(s.distanceM),
+              restSeconds: isEditing
+                ? s.restSeconds ?? null
+                : s.restSeconds ?? ex.defaultRestSeconds,
+              actualRestSeconds,
+              restApproximate,
+              executionQualityPct: keepQuality ? s.executionQualityPct : null,
+              isCompleted: true,
+              repQualities: keepQuality ? s.repQualities : [],
+            };
+          }),
         };
       })
       .filter((ex) => ex.sets.length > 0);
@@ -745,16 +886,40 @@ function WorkoutLoggerInner() {
       return;
     }
 
+    let targetDate = date;
+    let parsedDurationMinutes: number | null | undefined;
+    if (isEditing) {
+      const candidateDate = (draft.sessionDate ?? date).trim();
+      if (!isValidYmdString(candidateDate)) {
+        toast.error('Enter a valid workout date');
+        return;
+      }
+      targetDate = candidateDate;
+      const rawDur = (draft.durationMinutes ?? '').trim();
+      if (!rawDur) {
+        parsedDurationMinutes = null;
+      } else {
+        const dur = parseOptionalInt(rawDur);
+        if (dur === null || dur < 0 || dur > 600) {
+          toast.error('Duration must be between 0 and 600 minutes');
+          return;
+        }
+        parsedDurationMinutes = dur;
+      }
+    }
+
     setSaving(true);
     try {
       if (sessionId) {
         await apiFetch(`/api/workouts/sessions/${encodeURIComponent(sessionId)}`, {
           method: 'PATCH',
           body: JSON.stringify({
-            sessionDate: date,
+            sessionDate: targetDate,
             isJolly: draft.isJolly,
             jollyMode: draft.isJolly ? draft.jollyMode ?? 'extra' : null,
             title,
+            ...(draft.startedAt ? { startedAt: draft.startedAt } : {}),
+            durationMinutes: parsedDurationMinutes,
             notes: draft.notes.trim(),
             exercises: exercisesPayload,
           }),
@@ -794,7 +959,7 @@ function WorkoutLoggerInner() {
       }
 
       clearUserWorkoutDraft(dayView.user.id, draftKey);
-      router.push(`/workout/${encodeURIComponent(date)}`);
+      router.push(`/workout/${encodeURIComponent(targetDate)}`);
     } catch (err) {
       // Never swallow errors into an outbox loop: surface exact server message
       toast.error(err instanceof Error ? err.message : 'Failed to save');
@@ -842,6 +1007,24 @@ function WorkoutLoggerInner() {
   );
 
   const restClockActive = Boolean(draft.restClock?.isActive);
+  const restClockExId = draft.restClock?.exerciseLocalId ?? null;
+  const restClockSetId = draft.restClock?.setLocalId ?? null;
+  let lastTimeRest = null;
+  if (restClockActive && restClockExId && restClockSetId) {
+    const clockEx = draft.exercises.find((e) => e.localId === restClockExId);
+    if (clockEx) {
+      const completedPos = clockEx.sets
+        .filter((s) => s.isCompleted)
+        .findIndex((s) => s.localId === restClockSetId);
+      if (completedPos >= 0) {
+        const prefill =
+          extraPrefills[clockEx.exerciseId] ??
+          dayView.prefillByExerciseId[clockEx.exerciseId] ??
+          null;
+        lastTimeRest = getLastTimeRestForCompletedSet(prefill, completedPos);
+      }
+    }
+  }
 
   return (
     <main
@@ -878,8 +1061,8 @@ function WorkoutLoggerInner() {
         </div>
       </div>
 
-      {/* User-Driven Session Clock (new workouts only) */}
-      {!sessionId && (
+      {/* User-Driven Session Clock (new workouts) or Editable Session Details (edit mode) */}
+      {!sessionId ? (
         <section
           aria-label="Session clock"
           className="card-sm flex items-center justify-between gap-3"
@@ -927,6 +1110,66 @@ function WorkoutLoggerInner() {
               <span>Start</span>
             </button>
           )}
+        </section>
+      ) : (
+        <section aria-label="Session details" className="card-sm space-y-2.5">
+          <label className="block space-y-0.5">
+            <span className="block text-xs font-bold uppercase text-[var(--muted)]">
+              Date
+            </span>
+            <input
+              type="date"
+              value={draft.sessionDate ?? date}
+              onChange={(e) =>
+                updateDraft((prev) => ({
+                  ...prev,
+                  sessionDate: e.target.value,
+                }))
+              }
+              aria-label="Workout date"
+              className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--paper)]/60 px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block space-y-0.5">
+              <span className="block text-xs font-bold uppercase text-[var(--muted)]">
+                Start time
+              </span>
+              <input
+                type="time"
+                value={isoToLocalTimeInput(draft.startedAt)}
+                onChange={(e) => {
+                  const hhmm = e.target.value;
+                  updateDraft((prev) => {
+                    const ymd = prev.sessionDate ?? date;
+                    const nextIso = combineDateAndLocalTimeToIso(ymd, hhmm);
+                    return nextIso ? { ...prev, startedAt: nextIso } : prev;
+                  });
+                }}
+                aria-label="Start time"
+                className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--paper)]/60 px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+              />
+            </label>
+            <label className="block space-y-0.5">
+              <span className="block text-xs font-bold uppercase text-[var(--muted)]">
+                Duration (min)
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={draft.durationMinutes ?? ''}
+                onChange={(e) =>
+                  updateDraft((prev) => ({
+                    ...prev,
+                    durationMinutes: e.target.value,
+                  }))
+                }
+                placeholder="—"
+                aria-label="Duration minutes"
+                className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--paper)]/60 px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+              />
+            </label>
+          </div>
         </section>
       )}
 
@@ -1046,6 +1289,7 @@ function WorkoutLoggerInner() {
             totalCount={draft.exercises.length}
             unit={dayView.user.unit}
             enableSetQuality={dayView.user.enableSetQuality}
+            isEditing={Boolean(sessionId)}
             onMoveUp={handleMoveUp}
             onMoveDown={handleMoveDown}
             onDeleteExercise={handleDeleteExercise}
@@ -1124,7 +1368,10 @@ function WorkoutLoggerInner() {
           scheduleDayExerciseId={swapExercise.scheduleDayExerciseId}
           allowScheduleScope={!sessionId && Boolean(swapExercise.scheduleDayExerciseId)}
           exercises={exercisesCatalog}
-          prefillByExerciseId={dayView.prefillByExerciseId}
+          prefillByExerciseId={{
+            ...dayView.prefillByExerciseId,
+            ...extraPrefills,
+          }}
           onSwapComplete={handleSwapComplete}
         />
       )}
@@ -1132,6 +1379,7 @@ function WorkoutLoggerInner() {
       <FloatingRestTimer
         restClock={draft.restClock}
         preferredMode={dayView.user.restClockMode}
+        lastTimeRest={lastTimeRest}
         isExpandedPicker={timerPickerOpen}
         onAdjustTarget={adjustRestTimer}
         onStartPreset={startRestTimer}

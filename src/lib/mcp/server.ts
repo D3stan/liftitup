@@ -20,6 +20,7 @@ import {
 } from '@/lib/exercises/repository';
 import { buildUserExportJson } from '@/lib/export';
 import { projectCalendar } from '@/lib/schedule/queue';
+import { MAX_MEASURED_REST_SECONDS } from '@/lib/workouts/rest';
 
 export interface JsonRpcRequest {
   jsonrpc?: string;
@@ -78,7 +79,7 @@ export const MCP_TOOLS_DEFINITIONS = [
   {
     name: 'get_workout_history',
     description:
-      'Returns logged workout sessions with exercises, sets, executionQualityPct, repQualities, and workout/exercise notes.',
+      'Returns logged workout sessions with exercises, sets (including restSeconds, actualRestSeconds, restApproximate), executionQualityPct, repQualities, and workout/exercise notes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -215,6 +216,8 @@ export const MCP_TOOLS_DEFINITIONS = [
                     timeSeconds: { type: ['integer', 'null'], minimum: 0 },
                     distanceM: { type: ['number', 'null'], minimum: 0 },
                     restSeconds: { type: ['integer', 'null'], minimum: 0 },
+                    actualRestSeconds: { type: ['integer', 'null'], minimum: 0, maximum: 900 },
+                    restApproximate: { type: 'boolean' },
                     executionQualityPct: {
                       type: ['integer', 'null'],
                       minimum: 0,
@@ -682,6 +685,8 @@ async function handleLogWorkoutSession(
       timeSeconds: number | null;
       distanceM: number | null;
       restSeconds: number | null;
+      actualRestSeconds: number | null;
+      restApproximate: boolean;
       executionQualityPct: number | null;
       isCompleted: boolean;
       repQualities: Array<{ repIndex: number; qualityPct: number }>;
@@ -756,6 +761,19 @@ async function handleLogWorkoutSession(
         3600,
         true,
       );
+      const rawActualRest = asNullableNumber(
+        s.actualRestSeconds,
+        `exercises[${i}].sets[${sIdx}].actualRestSeconds`,
+        0,
+        86400,
+        true,
+      );
+      const actualRestSeconds =
+        rawActualRest !== null && rawActualRest <= MAX_MEASURED_REST_SECONDS
+          ? rawActualRest
+          : null;
+      const restApproximate =
+        actualRestSeconds !== null && Boolean(s.restApproximate);
 
       let repQualities: Array<{ repIndex: number; qualityPct: number }> = [];
       if (Array.isArray(s.repQualities)) {
@@ -804,6 +822,8 @@ async function handleLogWorkoutSession(
         timeSeconds,
         distanceM,
         restSeconds,
+        actualRestSeconds,
+        restApproximate,
         executionQualityPct,
         isCompleted,
         repQualities,
@@ -856,9 +876,9 @@ async function handleLogWorkoutSession(
     const insertSetSql = `
       INSERT INTO workout_sets (
         id, workout_exercise_id, set_number, weight_kg, reps,
-        time_seconds, distance_m, rest_seconds, execution_quality_pct,
-        is_completed, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        time_seconds, distance_m, rest_seconds, actual_rest_seconds,
+        rest_approximate, execution_quality_pct, is_completed, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     `;
     const insertRepQSql = `
       INSERT INTO workout_set_rep_qualities (id, workout_set_id, rep_index, quality_pct)
@@ -881,6 +901,8 @@ async function handleLogWorkoutSession(
           s.timeSeconds,
           s.distanceM,
           s.restSeconds,
+          s.actualRestSeconds,
+          s.restApproximate ? 1 : 0,
           s.executionQualityPct,
           s.isCompleted ? 1 : 0,
           now,

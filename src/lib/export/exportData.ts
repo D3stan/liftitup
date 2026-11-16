@@ -82,6 +82,8 @@ export interface ExportJsonPayload {
         timeSeconds: number | null;
         distanceM: number | null;
         restSeconds: number | null;
+        actualRestSeconds: number | null;
+        restApproximate: boolean;
         executionQualityPct: number | null;
         isCompleted: boolean;
         repQualities: Array<{
@@ -113,6 +115,8 @@ export const CSV_HEADERS = [
   'time_seconds',
   'distance_m',
   'rest_seconds',
+  'actual_rest_seconds',
+  'rest_approximate',
   'execution_quality_pct',
   'rep_qualities',
   'is_completed',
@@ -203,6 +207,8 @@ function mapExportSession(
         timeSeconds: s.timeSeconds,
         distanceM: s.distanceM,
         restSeconds: s.restSeconds,
+        actualRestSeconds: s.actualRestSeconds,
+        restApproximate: s.restApproximate,
         executionQualityPct: s.executionQualityPct,
         isCompleted: s.isCompleted,
         repQualities: (s.repQualities ?? []).map((rq) => ({
@@ -266,6 +272,8 @@ export async function buildUserExportCsv(user: UserProfile): Promise<string> {
           set.timeSeconds ?? '',
           set.distanceM ?? '',
           set.restSeconds ?? '',
+          set.actualRestSeconds ?? '',
+          set.restApproximate ? 1 : 0,
           set.executionQualityPct ?? '',
           formatRepQualitiesCsv(set.repQualities),
           set.isCompleted ? 1 : 0,
