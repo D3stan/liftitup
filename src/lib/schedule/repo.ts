@@ -99,7 +99,9 @@ function toQueueEvents(events: readonly ScheduleEvent[]): QueueEvent[] {
   }));
 }
 
-function toQueueSessions(sessions: readonly WorkoutSession[]): QueueSession[] {
+export function toQueueSessions(
+  sessions: readonly WorkoutSession[],
+): QueueSession[] {
   return sessions.map((s) => ({
     id: s.id,
     sessionDate: s.sessionDate,
@@ -108,6 +110,8 @@ function toQueueSessions(sessions: readonly WorkoutSession[]): QueueSession[] {
     jollyMode: s.jollyMode,
     title: s.title,
     completedAt: s.completedAt,
+    cid: s.cid,
+    isImported: Boolean(s.cid?.startsWith('import:')),
   }));
 }
 

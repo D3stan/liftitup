@@ -62,7 +62,7 @@ function formatExerciseTarget(ex: AiPreviewExercise, unit: 'kg' | 'lb'): string 
   return parts.join(' · ');
 }
 
-export function AiImportView() {
+export function AiImportView({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const router = useRouter();
   const [rawText, setRawText] = useState('');
   const [editPrompt, setEditPrompt] = useState<string | null>(null);
@@ -203,10 +203,12 @@ export function AiImportView() {
   return (
     <div className="space-y-4">
       <section className="card space-y-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-[var(--ink)]" />
-          <h1 className="font-marker text-2xl text-[var(--ink)]">AI Import</h1>
-        </div>
+        {!hideHeader && (
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-[var(--ink)]" />
+            <h1 className="font-marker text-2xl text-[var(--ink)]">AI Import</h1>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Button

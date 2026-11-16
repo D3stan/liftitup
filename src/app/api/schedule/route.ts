@@ -314,6 +314,8 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
           jollyMode: s.jollyMode,
           title: s.title,
           completedAt: s.completedAt,
+          cid: s.cid,
+          isImported: Boolean(s.cid?.startsWith('import:')),
         })),
         today: todayStr,
         targetDate: todayStr,

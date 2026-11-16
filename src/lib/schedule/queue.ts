@@ -42,6 +42,14 @@ export interface QueueSession {
   jollyMode: JollyMode | null;
   title: string;
   completedAt: string | null;
+  cid?: string | null;
+  isImported?: boolean;
+}
+
+export function isImportedQueueSession(
+  session: Pick<QueueSession, 'cid' | 'isImported'>,
+): boolean {
+  return Boolean(session.isImported) || Boolean(session.cid?.startsWith('import:'));
 }
 
 export interface CalendarDay {
@@ -142,7 +150,7 @@ function findLastCompletedPlannedSession(
 ): QueueSession | null {
   let latest: QueueSession | null = null;
   for (const s of daySessions) {
-    if (!s.isJolly && s.completedAt !== null) {
+    if (!s.isJolly && !isImportedQueueSession(s) && s.completedAt !== null) {
       if (
         latest === null ||
         (latest.completedAt !== null && s.completedAt >= latest.completedAt)
@@ -162,10 +170,14 @@ function buildUnscheduledEntry(
   const completedSession = findLastCompletedPlannedSession(daySessions);
   const hasJollyInstead =
     dayEvents.some((e) => e.eventType === 'jolly_instead') ||
-    daySessions.some((s) => s.isJolly && s.jollyMode === 'instead');
+    daySessions.some(
+      (s) => !isImportedQueueSession(s) && s.isJolly && s.jollyMode === 'instead'
+    );
   const hasJollyExtra =
     dayEvents.some((e) => e.eventType === 'jolly_extra') ||
-    daySessions.some((s) => s.isJolly && s.jollyMode === 'extra');
+    daySessions.some(
+      (s) => !isImportedQueueSession(s) && s.isJolly && s.jollyMode === 'extra'
+    );
   const hasSkip = dayEvents.some((e) => e.eventType === 'skip');
 
   let status: CalendarDayStatus = 'unscheduled';
@@ -232,10 +244,14 @@ function stepDay(
   const completedSession = findLastCompletedPlannedSession(daySessions);
   const hasJollyInstead =
     dayEvents.some((e) => e.eventType === 'jolly_instead') ||
-    daySessions.some((s) => s.isJolly && s.jollyMode === 'instead');
+    daySessions.some(
+      (s) => !isImportedQueueSession(s) && s.isJolly && s.jollyMode === 'instead'
+    );
   const hasJollyExtra =
     dayEvents.some((e) => e.eventType === 'jolly_extra') ||
-    daySessions.some((s) => s.isJolly && s.jollyMode === 'extra');
+    daySessions.some(
+      (s) => !isImportedQueueSession(s) && s.isJolly && s.jollyMode === 'extra'
+    );
   const hasSkip = dayEvents.some((e) => e.eventType === 'skip');
 
   // If user actually completed a planned session on this day, honor it even if

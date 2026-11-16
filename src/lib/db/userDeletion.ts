@@ -138,21 +138,35 @@ export async function deleteUserSplitData(userId: string): Promise<void> {
 }
 
 /**
+ * Deletes all user-owned workout history, splits, body metrics, hidden exercise flags,
+ * exercise step overrides, and custom exercises in explicit child-to-parent order for
+ * Replace-mode restore. Preserves `users`, `auth_sessions`, `api_keys`,
+ * `apple_health_workouts` (session links already cleared by `deleteUserWorkoutHistoryInTx`),
+ * and shared catalog exercises (`user_id IS NULL`).
+ * Must be called inside an active transaction.
+ */
+export async function resetUserAccountDataForRestoreInTx(
+  userId: string,
+): Promise<void> {
+  await deleteUserWorkoutHistoryInTx(userId);
+  await deleteUserSplitDataInTx(userId);
+  await deleteUserBodyDataInTx(userId);
+  await query('DELETE FROM hidden_exercises WHERE user_id = $1', [userId]);
+  await query('DELETE FROM user_exercise_prefs WHERE user_id = $1', [userId]);
+  await query('DELETE FROM exercises WHERE user_id = $1 AND is_custom = 1', [
+    userId,
+  ]);
+}
+
+/**
  * Deletes all rows belonging to `userId` in explicit child-to-parent order,
  * avoiding ON DELETE RESTRICT collisions on custom exercises used in sessions
  * or splits. Never touches shared catalog exercises (`user_id IS NULL`).
  * Must be called inside an active transaction.
  */
 export async function deleteUserAccountInTx(userId: string): Promise<boolean> {
-  await deleteUserWorkoutHistoryInTx(userId);
-  await deleteUserSplitDataInTx(userId);
+  await resetUserAccountDataForRestoreInTx(userId);
   await query('DELETE FROM apple_health_workouts WHERE user_id = $1', [userId]);
-  await query('DELETE FROM body_metrics WHERE user_id = $1', [userId]);
-  await query('DELETE FROM hidden_exercises WHERE user_id = $1', [userId]);
-  await query('DELETE FROM user_exercise_prefs WHERE user_id = $1', [userId]);
-  await query('DELETE FROM exercises WHERE user_id = $1 AND is_custom = 1', [
-    userId,
-  ]);
   await query('DELETE FROM api_keys WHERE user_id = $1', [userId]);
   await query('DELETE FROM auth_sessions WHERE user_id = $1', [userId]);
   const res = await query('DELETE FROM users WHERE id = $1', [userId]);
