@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import module from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Register @/* -> src/* resolution so Node 26 runs TS modules directly without a bundler.
 const srcRoot = path.resolve(process.cwd(), 'src');
@@ -23,7 +24,7 @@ module.registerHooks({
       !specifier.endsWith('.ts') &&
       !specifier.endsWith('.tsx')
     ) {
-      const parentDir = path.dirname(new URL(context.parentURL).pathname);
+      const parentDir = path.dirname(fileURLToPath(context.parentURL));
       target = path.resolve(parentDir, specifier);
     }
 
@@ -35,7 +36,7 @@ module.registerHooks({
         path.join(target, 'index.ts'),
       ]) {
         if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-          return nextResolve(new URL(`file://${candidate}`).href, context);
+          return nextResolve(pathToFileURL(candidate).href, context);
         }
       }
     }

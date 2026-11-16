@@ -13,3 +13,11 @@ A notebook-styled, multi-user workout tracker PWA built on a **rotation queue** 
 - **[Quickstart (`docs/QUICKSTART.md`)](docs/QUICKSTART.md)** — run locally or with Docker, first visit, two-way onboarding, logging a workout, and connecting an MCP client.
 - **[User Guide (`docs/GUIDE.md`)](docs/GUIDE.md)** — full reference for every screen, button, rotation-queue rule, tracking type, set-quality colour, AI JSON schema, MCP tools, export formats, Apple Health, and troubleshooting.
 - **[Architecture Plan (`docs/ARCHITECTURE_PLAN.md`)](docs/ARCHITECTURE_PLAN.md)** — technical architecture and database schema.
+
+## Development
+
+Run the test suite with:
+
+```bash
+npm test
+```

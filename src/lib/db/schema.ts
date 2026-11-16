@@ -1,6 +1,11 @@
 import type { Pool, PoolClient } from 'pg';
 import { EXERCISE_CATALOG } from '@/lib/exercises/catalog';
 
+/**
+ * Informational schema revision recorded in `schema_version` on initSchema().
+ * Not read at runtime or used as a migration runner; schema changes are applied
+ * idempotently via `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`.
+ */
 export const SCHEMA_VERSION = 2;
 
 const SCHEMA_V2_DDL = `

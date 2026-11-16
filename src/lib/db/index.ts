@@ -9,7 +9,7 @@
  * - Users (`@/lib/db/users`): `getUserById`, `getUserByUsername`, `createUser`, `updateUserSettings`,
  *   `touchUserLastActive`, `deleteExpiredGuests`, `localDateForTimezone`, `sanitizeTimezone`.
  * - Sessions & API Keys (`@/lib/db/sessions`): `createAuthSession`, `getAuthSessionByTokenHash`,
- *   `touchAuthSession`, `deleteAuthSession`, `deleteUserAuthSessions`, `getApiKeyByUserId`,
+ *   `touchAuthSession`, `deleteAuthSession`, `getApiKeyByUserId`,
  *   `upsertApiKey`, `getUserByApiKeyHash`, `touchApiKeyLastUsed`.
  * - Body Metrics (`@/lib/db/bodyMetrics`): `recordBodyMetric`, `listBodyMetrics`.
  * - Exercises (`@/lib/exercises/repository` & `@/lib/db/exercises`): `listExercises`, `getExerciseById`,
