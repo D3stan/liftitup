@@ -1,21 +1,13 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { LogOut } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronRight, LogOut, Scale } from 'lucide-react';
 import { Button, apiFetch, toast } from '@/components/ui';
+import { kgToBodyDisplay } from '@/lib/body/weight';
 import type { UserProfile, WeightUnit } from '@/types/domain';
 import { SettingsSubpageShell } from './SettingsSubpageShell';
 import { type SettingsPayload, useSettingsData } from './useSettingsData';
-
-function kgToDisplay(kg: number, unit: WeightUnit): string {
-  const val = unit === 'lb' ? kg * 2.20462 : kg;
-  return String(Math.round(val * 10) / 10);
-}
-
-function displayToKg(val: number, unit: WeightUnit): number {
-  const kg = unit === 'lb' ? val / 2.20462 : val;
-  return Math.round(kg * 10) / 10;
-}
 
 export function SettingsProfileView() {
   const { user, setUser, setApiKeyInfo, loading, loggingOut, handleLogout } =
@@ -24,7 +16,6 @@ export function SettingsProfileView() {
 
   const [displayName, setDisplayName] = useState('');
   const [heightCm, setHeightCm] = useState('');
-  const [weightInput, setWeightInput] = useState('');
   const [age, setAge] = useState('');
   const [trainingYears, setTrainingYears] = useState('');
   const [unit, setUnit] = useState<WeightUnit>('kg');
@@ -33,7 +24,6 @@ export function SettingsProfileView() {
   const syncForm = useCallback((u: UserProfile) => {
     setDisplayName(u.displayName);
     setHeightCm(u.heightCm !== null ? String(u.heightCm) : '');
-    setWeightInput(kgToDisplay(u.weightKg, u.unit));
     setAge(u.age !== null ? String(u.age) : '');
     setTrainingYears(u.trainingYears !== null ? String(u.trainingYears) : '');
     setUnit(u.unit);
@@ -48,22 +38,12 @@ export function SettingsProfileView() {
 
   function handleUnitChange(nextUnit: WeightUnit) {
     if (nextUnit === unit) return;
-    const parsed = Number(weightInput);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      const kg = displayToKg(parsed, unit);
-      setWeightInput(kgToDisplay(kg, nextUnit));
-    }
     setUnit(nextUnit);
   }
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
-    const parsedWeight = Number(weightInput);
-    if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
-      toast.error('Invalid weight');
-      return;
-    }
 
     setSaving(true);
     try {
@@ -72,7 +52,6 @@ export function SettingsProfileView() {
         body: JSON.stringify({
           displayName: displayName.trim(),
           heightCm: heightCm.trim() ? Number(heightCm) : null,
-          weightKg: displayToKg(parsedWeight, unit),
           age: age.trim() ? Number(age) : null,
           trainingYears: trainingYears.trim() ? Number(trainingYears) : null,
           unit,
@@ -95,6 +74,29 @@ export function SettingsProfileView() {
     <SettingsSubpageShell title="Profile" user={user} loading={loading}>
       {user && (
         <>
+          <Link
+            href="/body"
+            className="card flex min-h-[56px] items-center justify-between gap-3 no-underline transition-transform active:translate-y-0.5"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-[var(--line)] bg-[var(--gold-bg)] text-[var(--ink)]">
+                <Scale className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <div className="font-marker text-base text-[var(--ink)]">
+                  Body Weight ({kgToBodyDisplay(user.weightKg, unit)} {unit})
+                </div>
+                <div className="text-xs text-[var(--muted)]">
+                  Log weight, view trend &amp; manage history on Body tab
+                </div>
+              </div>
+            </div>
+            <ChevronRight
+              className="h-5 w-5 shrink-0 text-[var(--muted)]"
+              aria-hidden="true"
+            />
+          </Link>
+
           <form onSubmit={handleSaveProfile} className="card flex flex-col gap-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-marker text-lg text-[var(--ink)]">
@@ -119,21 +121,6 @@ export function SettingsProfileView() {
             </label>
 
             <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
-                  Weight ({unit})
-                </span>
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  value={weightInput}
-                  onChange={(e) => setWeightInput(e.target.value)}
-                  required
-                  className="min-h-[44px] rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
-                />
-              </label>
-
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
                   Height (cm)
@@ -161,7 +148,7 @@ export function SettingsProfileView() {
                 />
               </label>
 
-              <label className="flex flex-col gap-1">
+              <label className="col-span-2 flex flex-col gap-1">
                 <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
                   Training Years
                 </span>

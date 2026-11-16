@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
 import { requireAuth } from '@/lib/auth/session';
-import { listBodyMetrics } from '@/lib/db/bodyMetrics';
+import {
+  listBodyMetrics,
+  resolveDailyBodyWeights,
+} from '@/lib/db/bodyMetrics';
 import { query } from '@/lib/db/connection';
 import { localDateForTimezone } from '@/lib/db/users';
 import type { TrackingType, WeightUnit } from '@/types/domain';
@@ -321,11 +324,12 @@ export const GET = withApiHandler(
     const weeklySessions = buildWeekBuckets(fromDate, today, sessionsByWeek);
     const weeklySets = buildWeekBuckets(fromDate, today, setsByWeek);
 
-    // 3. Body weight history
+    // 3. Body weight history (one resolved value per day)
     const bodyMetrics = await listBodyMetrics(user.id, {
       from: fromDate ?? undefined,
     });
-    const bodyWeightSeries: BodyWeightPoint[] = bodyMetrics.map((m) => ({
+    const resolvedDaily = resolveDailyBodyWeights(bodyMetrics);
+    const bodyWeightSeries: BodyWeightPoint[] = resolvedDaily.map((m) => ({
       date: m.measuredOn,
       weightKg: m.weightKg,
       source: m.source,

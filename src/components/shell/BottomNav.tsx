@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   CalendarDays,
-  Cpu,
   Dumbbell,
   Layers,
+  Scale,
   TrendingUp,
 } from 'lucide-react';
 
@@ -44,10 +44,10 @@ const NAV_ITEMS: NavItem[] = [
     match: (p) => p.startsWith('/progress'),
   },
   {
-    href: '/ai',
-    label: 'AI',
-    icon: Cpu,
-    match: (p) => p.startsWith('/ai'),
+    href: '/body',
+    label: 'Body',
+    icon: Scale,
+    match: (p) => p.startsWith('/body'),
   },
 ];
 

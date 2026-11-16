@@ -30,7 +30,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryMeta[] = [
   {
     id: 'profile',
     title: 'Profile',
-    description: 'Name, body weight, height, age, unit, and timezone.',
+    description: 'Name, height, age, unit, and timezone.',
     href: '/settings/profile',
   },
   {
@@ -89,11 +89,12 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   {
     id: 'profile-weight',
     title: 'Body Weight',
-    description: 'Current weight used for bodyweight exercises.',
+    description:
+      'Log daily weight, view 7-day average, and manage history on the Body tab.',
     categoryId: 'profile',
-    categoryTitle: 'Profile',
-    href: '/settings/profile',
-    keywords: ['weight', 'body weight', 'kg', 'lb', 'profile'],
+    categoryTitle: 'Body tab',
+    href: '/body',
+    keywords: ['weight', 'body weight', 'body', 'kg', 'lb', 'scale', 'trend'],
   },
   {
     id: 'profile-height',

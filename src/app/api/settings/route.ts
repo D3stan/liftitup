@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
 import { requireAuth } from '@/lib/auth/session';
-import { recordBodyMetric } from '@/lib/db/bodyMetrics';
+import {
+  syncUserProfileWeightFromBodyMetrics,
+  upsertManualBodyMetricInTx,
+} from '@/lib/db/bodyMetrics';
 import { withTransaction } from '@/lib/db/connection';
 import { getApiKeyByUserId } from '@/lib/db/sessions';
 import {
@@ -175,12 +178,16 @@ export const PATCH = withApiHandler(
         throw ApiError.notFound('User not found');
       }
       if (patch.weightKg !== undefined) {
-        await recordBodyMetric({
+        await upsertManualBodyMetricInTx({
           userId: user.id,
           measuredOn: localDateForTimezone(nextUser.timezone),
           weightKg: patch.weightKg,
           source: 'settings',
         });
+        const syncedWeightKg = await syncUserProfileWeightFromBodyMetrics(
+          user.id,
+        );
+        return { ...nextUser, weightKg: syncedWeightKg };
       }
       return nextUser;
     });

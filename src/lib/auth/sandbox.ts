@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
 import type { TrackingType, UserProfile } from '@/types/domain';
 import { query, withTransaction } from '@/lib/db/connection';
-import { recordBodyMetric } from '@/lib/db/bodyMetrics';
+import {
+  recordBodyMetric,
+  syncUserProfileWeightFromBodyMetrics,
+} from '@/lib/db/bodyMetrics';
 import {
   createUser,
   deleteExpiredGuests,
@@ -500,6 +503,7 @@ export async function createGuestSandbox(rawTimezone?: string): Promise<UserProf
       });
     }
 
-    return user;
+    const syncedWeightKg = await syncUserProfileWeightFromBodyMetrics(user.id);
+    return { ...user, weightKg: syncedWeightKg };
   });
 }
