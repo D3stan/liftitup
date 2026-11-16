@@ -7,9 +7,9 @@ import type { SaveWorkoutSessionInput } from '@/lib/workouts/types';
 export const POST = withApiHandler(
   'workouts.sessions.create',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const body = await parseJsonBody<SaveWorkoutSessionInput>(req);
-    const { session, created } = saveWorkoutSession(user.id, body);
+    const { session, created } = await saveWorkoutSession(user.id, body);
     ctx.log.info('workout session saved', {
       sessionId: session.id,
       sessionDate: session.sessionDate,

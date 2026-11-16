@@ -7,7 +7,7 @@ import type {
   WorkoutSession,
 } from '@/types/domain';
 import { ApiError } from '@/lib/api/handler';
-import { withTransaction, getDb } from '@/lib/db/connection';
+import { query, queryOne, withTransaction } from '@/lib/db/connection';
 import { getUserById, localDateForTimezone } from '@/lib/db/users';
 import {
   getActiveSchedule,
@@ -52,21 +52,20 @@ export function addDaysYmd(ymd: string, deltaDays: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
-interface SessionSwapRow {
+type SessionSwapRow = {
   schedule_day_exercise_id: string;
   exercise_id: string;
   exercise_name: string;
   tracking_type: TrackingType;
   default_rest_seconds: number;
-}
+};
 
-function getSessionSwapsForDate(
+async function getSessionSwapsForDate(
   userId: string,
   dateKey: string,
-): Map<string, SessionSwapRow> {
-  const db = getDb();
-  const rows = db
-    .prepare(`
+): Promise<Map<string, SessionSwapRow>> {
+  const { rows } = await query<SessionSwapRow>(
+    `
       SELECT
         ss.schedule_day_exercise_id,
         ss.exercise_id,
@@ -75,9 +74,10 @@ function getSessionSwapsForDate(
         e.default_rest_seconds
       FROM session_swaps ss
       JOIN exercises e ON e.id = ss.exercise_id
-      WHERE ss.user_id = ? AND ss.date_key = ?
-    `)
-    .all(userId, dateKey) as unknown as SessionSwapRow[];
+      WHERE ss.user_id = $1 AND ss.date_key = $2
+    `,
+    [userId, dateKey],
+  );
 
   const map = new Map<string, SessionSwapRow>();
   for (const row of rows) {
@@ -86,16 +86,16 @@ function getSessionSwapsForDate(
   return map;
 }
 
-export function getWorkoutDayView(
+export async function getWorkoutDayView(
   userId: string,
   date: string,
   clientToday?: string,
-): WorkoutDayViewResponse {
+): Promise<WorkoutDayViewResponse> {
   if (!isValidYmd(date)) {
     throw ApiError.validation('date must be YYYY-MM-DD');
   }
 
-  const user = getUserById(userId);
+  const user = await getUserById(userId);
   if (!user) {
     throw ApiError.unauthorized();
   }
@@ -105,7 +105,7 @@ export function getWorkoutDayView(
       ? clientToday
       : localDateForTimezone(user.timezone);
 
-  const schedule = getActiveSchedule(userId);
+  const schedule = await getActiveSchedule(userId);
   let plannedDay: ScheduleDay | null = null;
   let calendarStatus: WorkoutDayViewResponse['calendarDay']['status'] =
     'unscheduled';
@@ -116,8 +116,8 @@ export function getWorkoutDayView(
     const simFrom =
       schedule.rotationAnchorDate < date ? schedule.rotationAnchorDate : date;
     const simTo = date > today ? date : today;
-    const events = listScheduleEvents(userId, schedule.id, { to: simTo });
-    const simSessions = listWorkoutSessions(userId, {
+    const events = await listScheduleEvents(userId, schedule.id, { to: simTo });
+    const simSessions = await listWorkoutSessions(userId, {
       from: simFrom,
       to: simTo,
       includeExercises: false,
@@ -143,7 +143,7 @@ export function getWorkoutDayView(
         const fullDay =
           schedule.days.find((d) => d.id === entry.plannedDay!.id) ?? null;
         if (fullDay) {
-          const swaps = getSessionSwapsForDate(userId, date);
+          const swaps = await getSessionSwapsForDate(userId, date);
           plannedDay = {
             ...fullDay,
             exercises: fullDay.exercises.map((ex) => {
@@ -162,7 +162,7 @@ export function getWorkoutDayView(
     }
   }
 
-  const sessions = getWorkoutSessionsByDate(userId, date);
+  const sessions = await getWorkoutSessionsByDate(userId, date);
 
   const exerciseIds = new Set<string>();
   if (plannedDay) {
@@ -176,7 +176,7 @@ export function getWorkoutDayView(
     }
   }
 
-  const prefillByExerciseId = getLastPerformanceByExerciseIds(
+  const prefillByExerciseId = await getLastPerformanceByExerciseIds(
     userId,
     Array.from(exerciseIds),
     addDaysYmd(date, -1),
@@ -238,10 +238,10 @@ interface NormalizedExercisePayload {
   }>;
 }
 
-function validateAndNormalizeExercises(
+async function validateAndNormalizeExercises(
   userId: string,
   exercises: unknown,
-): NormalizedExercisePayload[] {
+): Promise<NormalizedExercisePayload[]> {
   if (!Array.isArray(exercises) || exercises.length === 0) {
     throw ApiError.validation('exercises must contain at least 1 exercise');
   }
@@ -260,7 +260,7 @@ function validateAndNormalizeExercises(
     const exerciseId = raw.exerciseId.trim();
 
     if (!checkedExerciseIds.has(exerciseId)) {
-      const found = getExerciseById(userId, exerciseId);
+      const found = await getExerciseById(userId, exerciseId);
       if (!found) {
         throw ApiError.validation(
           `exercises[${i}].exerciseId "${exerciseId}" does not exist`,
@@ -400,34 +400,35 @@ function validateAndNormalizeExercises(
   return normalized;
 }
 
-function insertSessionExercises(
-  db: ReturnType<typeof getDb>,
+async function insertSessionExercises(
   sessionId: string,
   exercises: NormalizedExercisePayload[],
   nowIso: string,
-): void {
-  const insertEx = db.prepare(`
+): Promise<void> {
+  const insertExSql = `
     INSERT INTO workout_exercises (id, session_id, exercise_id, order_index, notes)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  const insertSet = db.prepare(`
+    VALUES ($1, $2, $3, $4, $5)
+  `;
+  const insertSetSql = `
     INSERT INTO workout_sets (
       id, workout_exercise_id, set_number, weight_kg, reps, time_seconds,
       distance_m, rest_seconds, execution_quality_pct, is_completed, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertRepQ = db.prepare(`
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  `;
+  const insertRepQSql = `
     INSERT INTO workout_set_rep_qualities (id, workout_set_id, rep_index, quality_pct)
-    VALUES (?, ?, ?, ?)
-  `);
+    VALUES ($1, $2, $3, $4)
+  `;
 
-  exercises.forEach((ex, idx) => {
+  for (let idx = 0; idx < exercises.length; idx += 1) {
+    const ex = exercises[idx];
     const workoutExerciseId = `wex_${crypto.randomUUID()}`;
-    insertEx.run(workoutExerciseId, sessionId, ex.exerciseId, idx, ex.notes);
+    await query(insertExSql, [workoutExerciseId, sessionId, ex.exerciseId, idx, ex.notes]);
 
-    ex.sets.forEach((setRow, sIdx) => {
+    for (let sIdx = 0; sIdx < ex.sets.length; sIdx += 1) {
+      const setRow = ex.sets[sIdx];
       const setId = `ws_${crypto.randomUUID()}`;
-      insertSet.run(
+      await query(insertSetSql, [
         setId,
         workoutExerciseId,
         sIdx + 1,
@@ -439,35 +440,33 @@ function insertSessionExercises(
         setRow.executionQualityPct,
         setRow.isCompleted ? 1 : 0,
         nowIso,
-      );
+      ]);
 
       for (const rq of setRow.repQualities) {
-        insertRepQ.run(
+        await query(insertRepQSql, [
           `wrq_${crypto.randomUUID()}`,
           setId,
           rq.repIndex,
           rq.qualityPct,
-        );
+        ]);
       }
-    });
-  });
+    }
+  }
 }
 
-function resolveScheduleForDayId(
+async function resolveScheduleForDayId(
   userId: string,
   scheduleDayId: string,
-): { scheduleId: string; scheduleDayId: string } {
-  const db = getDb();
-  const row = db
-    .prepare(`
+): Promise<{ scheduleId: string; scheduleDayId: string }> {
+  const row = await queryOne<{ schedule_day_id: string; schedule_id: string }>(
+    `
       SELECT sd.id AS schedule_day_id, s.id AS schedule_id
       FROM schedule_days sd
       JOIN schedules s ON s.id = sd.schedule_id
-      WHERE sd.id = ? AND s.user_id = ?
-    `)
-    .get(scheduleDayId, userId) as
-    | { schedule_day_id: string; schedule_id: string }
-    | undefined;
+      WHERE sd.id = $1 AND s.user_id = $2
+    `,
+    [scheduleDayId, userId],
+  );
 
   if (!row) {
     throw ApiError.validation('scheduleDayId does not belong to current user');
@@ -475,10 +474,10 @@ function resolveScheduleForDayId(
   return { scheduleId: row.schedule_id, scheduleDayId: row.schedule_day_id };
 }
 
-export function saveWorkoutSession(
+export async function saveWorkoutSession(
   userId: string,
   input: SaveWorkoutSessionInput,
-): { session: WorkoutSession; created: boolean } {
+): Promise<{ session: WorkoutSession; created: boolean }> {
   if (!isValidYmd(input.sessionDate)) {
     throw ApiError.validation('sessionDate must be YYYY-MM-DD');
   }
@@ -507,12 +506,12 @@ export function saveWorkoutSession(
       : null;
 
   if (cid) {
-    const db = getDb();
-    const existing = db
-      .prepare('SELECT id FROM workout_sessions WHERE user_id = ? AND cid = ?')
-      .get(userId, cid) as { id: string } | undefined;
+    const existing = await queryOne<{ id: string }>(
+      'SELECT id FROM workout_sessions WHERE user_id = $1 AND cid = $2',
+      [userId, cid],
+    );
     if (existing) {
-      const session = getWorkoutSessionById(userId, existing.id);
+      const session = await getWorkoutSessionById(userId, existing.id);
       if (session) {
         return { session, created: false };
       }
@@ -538,12 +537,12 @@ export function saveWorkoutSession(
   let scheduleId: string | null = null;
   let scheduleDayId: string | null = null;
   if (!isJolly && input.scheduleDayId) {
-    const resolved = resolveScheduleForDayId(userId, input.scheduleDayId);
+    const resolved = await resolveScheduleForDayId(userId, input.scheduleDayId);
     scheduleId = resolved.scheduleId;
     scheduleDayId = resolved.scheduleDayId;
   }
 
-  const exercises = validateAndNormalizeExercises(userId, input.exercises);
+  const exercises = await validateAndNormalizeExercises(userId, input.exercises);
   const nowIso = new Date().toISOString();
   const startedAt =
     typeof input.startedAt === 'string' && input.startedAt.trim()
@@ -554,46 +553,49 @@ export function saveWorkoutSession(
 
   const sessionId = `sess_${crypto.randomUUID()}`;
 
-  withTransaction((db) => {
-    db.prepare(`
+  await withTransaction(async () => {
+    await query(
+      `
       INSERT INTO workout_sessions (
         id, user_id, session_date, schedule_id, schedule_day_id,
         is_jolly, jolly_mode, title, started_at, completed_at,
         duration_minutes, user_weight_kg, notes, cid
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      sessionId,
-      userId,
-      input.sessionDate,
-      scheduleId,
-      scheduleDayId,
-      isJolly ? 1 : 0,
-      jollyMode,
-      title,
-      startedAt,
-      completedAt,
-      durationMinutes,
-      userWeightKg,
-      notes,
-      cid,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    `,
+      [
+        sessionId,
+        userId,
+        input.sessionDate,
+        scheduleId,
+        scheduleDayId,
+        isJolly ? 1 : 0,
+        jollyMode,
+        title,
+        startedAt,
+        completedAt,
+        durationMinutes,
+        userWeightKg,
+        notes,
+        cid,
+      ],
     );
 
-    insertSessionExercises(db, sessionId, exercises, nowIso);
+    await insertSessionExercises(sessionId, exercises, nowIso);
   });
 
-  const saved = getWorkoutSessionById(userId, sessionId);
+  const saved = await getWorkoutSessionById(userId, sessionId);
   if (!saved) {
     throw ApiError.internal('Failed to load saved workout session');
   }
   return { session: saved, created: true };
 }
 
-export function updateWorkoutSession(
+export async function updateWorkoutSession(
   userId: string,
   sessionId: string,
   input: UpdateWorkoutSessionInput,
-): WorkoutSession {
-  const existing = getWorkoutSessionById(userId, sessionId);
+): Promise<WorkoutSession> {
+  const existing = await getWorkoutSessionById(userId, sessionId);
   if (!existing) {
     throw ApiError.notFound('Workout session not found');
   }
@@ -605,16 +607,16 @@ export function updateWorkoutSession(
     if (!isValidYmd(input.sessionDate)) {
       throw ApiError.validation('sessionDate must be YYYY-MM-DD');
     }
-    setClauses.push('session_date = ?');
     params.push(input.sessionDate);
+    setClauses.push(`session_date = $${params.length}`);
   }
 
   if (input.title !== undefined) {
     if (typeof input.title !== 'string' || !input.title.trim()) {
       throw ApiError.validation('title must be a non-empty string');
     }
-    setClauses.push('title = ?');
     params.push(input.title.trim().slice(0, 120));
+    setClauses.push(`title = $${params.length}`);
   }
 
   const nextIsJolly =
@@ -631,8 +633,10 @@ export function updateWorkoutSession(
       }
       nextJollyMode = candidate ?? 'extra';
     }
-    setClauses.push('is_jolly = ?', 'jolly_mode = ?');
-    params.push(nextIsJolly ? 1 : 0, nextJollyMode);
+    params.push(nextIsJolly ? 1 : 0);
+    setClauses.push(`is_jolly = $${params.length}`);
+    params.push(nextJollyMode);
+    setClauses.push(`jolly_mode = $${params.length}`);
     if (nextIsJolly) {
       setClauses.push('schedule_id = NULL', 'schedule_day_id = NULL');
     }
@@ -646,8 +650,8 @@ export function updateWorkoutSession(
       600,
       true,
     );
-    setClauses.push('duration_minutes = ?');
     params.push(durationMinutes);
+    setClauses.push(`duration_minutes = $${params.length}`);
   }
 
   if (input.userWeightKg !== undefined) {
@@ -657,68 +661,73 @@ export function updateWorkoutSession(
       20,
       400,
     );
-    setClauses.push('user_weight_kg = ?');
     params.push(userWeightKg);
+    setClauses.push(`user_weight_kg = $${params.length}`);
   }
 
   if (input.notes !== undefined) {
     if (typeof input.notes !== 'string') {
       throw ApiError.validation('notes must be a string');
     }
-    setClauses.push('notes = ?');
     params.push(input.notes.trim().slice(0, 4000));
+    setClauses.push(`notes = $${params.length}`);
   }
 
   if (input.completedAt !== undefined) {
-    setClauses.push('completed_at = ?');
     params.push(input.completedAt);
+    setClauses.push(`completed_at = $${params.length}`);
   }
 
   const normalizedExercises =
     input.exercises !== undefined
-      ? validateAndNormalizeExercises(userId, input.exercises)
+      ? await validateAndNormalizeExercises(userId, input.exercises)
       : null;
 
   const nowIso = new Date().toISOString();
 
-  withTransaction((db) => {
+  await withTransaction(async () => {
     if (setClauses.length > 0) {
       params.push(sessionId, userId);
-      db.prepare(
-        `UPDATE workout_sessions SET ${setClauses.join(', ')} WHERE id = ? AND user_id = ?`,
-      ).run(...params);
+      await query(
+        `UPDATE workout_sessions SET ${setClauses.join(', ')} WHERE id = $${params.length - 1} AND user_id = $${params.length}`,
+        params,
+      );
     }
 
     if (normalizedExercises) {
-      db.prepare('DELETE FROM workout_exercises WHERE session_id = ?').run(
+      await query('DELETE FROM workout_exercises WHERE session_id = $1', [
         sessionId,
-      );
-      insertSessionExercises(db, sessionId, normalizedExercises, nowIso);
+      ]);
+      await insertSessionExercises(sessionId, normalizedExercises, nowIso);
     }
   });
 
-  const updated = getWorkoutSessionById(userId, sessionId);
+  const updated = await getWorkoutSessionById(userId, sessionId);
   if (!updated) {
     throw ApiError.notFound('Workout session not found');
   }
   return updated;
 }
 
-export function deleteWorkoutSession(userId: string, sessionId: string): void {
-  const result = withTransaction((db) =>
-    db
-      .prepare('DELETE FROM workout_sessions WHERE id = ? AND user_id = ?')
-      .run(sessionId, userId),
+export async function deleteWorkoutSession(
+  userId: string,
+  sessionId: string,
+): Promise<void> {
+  const result = await withTransaction(async () =>
+    query('DELETE FROM workout_sessions WHERE id = $1 AND user_id = $2', [
+      sessionId,
+      userId,
+    ]),
   );
-  if (result.changes === 0) {
+  if (result.rowCount === 0) {
     throw ApiError.notFound('Workout session not found');
   }
 }
 
-export function applyExerciseSwap(
+export async function applyExerciseSwap(
   userId: string,
   input: SwapExerciseInput,
-): SwapExerciseResult {
+): Promise<SwapExerciseResult> {
   if (!isValidYmd(input.dateKey)) {
     throw ApiError.validation('dateKey must be YYYY-MM-DD');
   }
@@ -738,45 +747,50 @@ export function applyExerciseSwap(
   const scheduleDayExerciseId = input.scheduleDayExerciseId.trim();
   const toExerciseId = input.toExerciseId.trim();
 
-  const toExercise: Exercise | null = getExerciseById(userId, toExerciseId);
+  const toExercise: Exercise | null = await getExerciseById(userId, toExerciseId);
   if (!toExercise) {
     throw ApiError.validation('Target exercise not found');
   }
 
-  const db = getDb();
-  const slotRow = db
-    .prepare(`
+  const slotRow = await queryOne<{ id: string }>(
+    `
       SELECT sde.id
       FROM schedule_day_exercises sde
       JOIN schedule_days sd ON sd.id = sde.schedule_day_id
       JOIN schedules s ON s.id = sd.schedule_id
-      WHERE sde.id = ? AND s.user_id = ?
-    `)
-    .get(scheduleDayExerciseId, userId) as { id: string } | undefined;
+      WHERE sde.id = $1 AND s.user_id = $2
+    `,
+    [scheduleDayExerciseId, userId],
+  );
 
   if (!slotRow) {
     throw ApiError.notFound('Planned exercise slot not found');
   }
 
-  withTransaction((tx) => {
+  await withTransaction(async () => {
     if (input.scope === 'session') {
-      tx.prepare(`
+      await query(
+        `
         INSERT INTO session_swaps (user_id, date_key, schedule_day_exercise_id, exercise_id)
-        VALUES (?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT(user_id, date_key, schedule_day_exercise_id) DO UPDATE SET
-          exercise_id = excluded.exercise_id
-      `).run(userId, input.dateKey, scheduleDayExerciseId, toExerciseId);
+          exercise_id = EXCLUDED.exercise_id
+      `,
+        [userId, input.dateKey, scheduleDayExerciseId, toExerciseId],
+      );
     } else {
-      tx.prepare(
-        'UPDATE schedule_day_exercises SET exercise_id = ? WHERE id = ?',
-      ).run(toExerciseId, scheduleDayExerciseId);
-      tx.prepare(
-        'DELETE FROM session_swaps WHERE user_id = ? AND date_key = ? AND schedule_day_exercise_id = ?',
-      ).run(userId, input.dateKey, scheduleDayExerciseId);
+      await query(
+        'UPDATE schedule_day_exercises SET exercise_id = $1 WHERE id = $2',
+        [toExerciseId, scheduleDayExerciseId],
+      );
+      await query(
+        'DELETE FROM session_swaps WHERE user_id = $1 AND date_key = $2 AND schedule_day_exercise_id = $3',
+        [userId, input.dateKey, scheduleDayExerciseId],
+      );
     }
   });
 
-  const prefillMap = getLastPerformanceByExerciseIds(
+  const prefillMap = await getLastPerformanceByExerciseIds(
     userId,
     [toExerciseId],
     addDaysYmd(input.dateKey, -1),

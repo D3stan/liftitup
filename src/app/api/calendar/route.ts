@@ -12,8 +12,8 @@ import {
 
 const MAX_RANGE_DAYS = 93;
 
-export const GET = withApiHandler('calendar.get', (req: NextRequest, ctx) => {
-  const { user } = requireAuth(req, ctx);
+export const GET = withApiHandler('calendar.get', async (req: NextRequest, ctx) => {
+  const { user } = await requireAuth(req, ctx);
 
   const sp = req.nextUrl.searchParams;
   const rawToday = sp.get('today');
@@ -42,7 +42,7 @@ export const GET = withApiHandler('calendar.get', (req: NextRequest, ctx) => {
     throw ApiError.validation(`Range cannot exceed ${MAX_RANGE_DAYS} days`);
   }
 
-  const projected = projectUserCalendar({
+  const projected = await projectUserCalendar({
     userId: user.id,
     today,
     rangeStart,

@@ -26,8 +26,8 @@ export const POST = withApiHandler('auth.guest', async (req: NextRequest, ctx) =
     }
   }
 
-  const user = createGuestSandbox(timezone);
+  const user = await createGuestSandbox(timezone);
   ctx.setUserId(user.id);
   const res = NextResponse.json({ user }, { status: 201 });
-  return createSessionCookieForUser(res, user.id);
+  return await createSessionCookieForUser(res, user.id);
 });

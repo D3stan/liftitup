@@ -116,16 +116,16 @@ export const CSV_HEADERS = [
   'is_completed',
 ] as const;
 
-export function buildUserExportJson(user: UserProfile): ExportJsonPayload {
-  const activeSchedule = getActiveSchedule(user.id);
-  const allExercises = listExercises(user.id, { includeHidden: true });
+export async function buildUserExportJson(user: UserProfile): Promise<ExportJsonPayload> {
+  const activeSchedule = await getActiveSchedule(user.id);
+  const allExercises = await listExercises(user.id, { includeHidden: true });
   const customExercises = allExercises.filter((ex) => ex.isCustom);
   const hiddenIds = allExercises.filter((ex) => ex.isHidden).map((ex) => ex.id);
   const scheduleEvents = activeSchedule
-    ? listScheduleEvents(user.id, activeSchedule.id)
+    ? await listScheduleEvents(user.id, activeSchedule.id)
     : [];
-  const bodyMetrics = listBodyMetrics(user.id);
-  const sessions = listWorkoutSessions(user.id);
+  const bodyMetrics = await listBodyMetrics(user.id);
+  const sessions = await listWorkoutSessions(user.id);
 
   return {
     schemaVersion: 2,
@@ -230,8 +230,8 @@ export function escapeCsvCell(value: unknown): string {
   return str;
 }
 
-export function buildUserExportCsv(user: UserProfile): string {
-  const sessions = listWorkoutSessions(user.id);
+export async function buildUserExportCsv(user: UserProfile): Promise<string> {
+  const sessions = await listWorkoutSessions(user.id);
   const chronological = [...sessions].sort((a, b) => {
     const cmp = a.sessionDate.localeCompare(b.sessionDate);
     if (cmp !== 0) return cmp;

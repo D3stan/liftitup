@@ -30,7 +30,7 @@ const ALLOWED_TYPES = new Set<ScheduleEventType>([
 export const POST = withApiHandler(
   'schedule.events.create',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const body = await parseJsonBody<CreateEventBody>(req);
 
     const today =
@@ -75,13 +75,13 @@ export const POST = withApiHandler(
       jollyLabel = trimmed || null;
     }
 
-    const schedule = getActiveSchedule(user.id);
+    const schedule = await getActiveSchedule(user.id);
     if (!schedule) {
       throw ApiError.badRequest('No active rotation schedule');
     }
 
     if (eventType === 'jolly_instead') {
-      const projected = projectUserCalendar({
+      const projected = await projectUserCalendar({
         userId: user.id,
         today,
         rangeStart: eventDate,
@@ -93,7 +93,7 @@ export const POST = withApiHandler(
       }
     }
 
-    const event = createScheduleEvent({
+    const event = await createScheduleEvent({
       userId: user.id,
       scheduleId: schedule.id,
       eventDate,
@@ -108,9 +108,9 @@ export const POST = withApiHandler(
 
 export const DELETE = withApiHandler(
   'schedule.events.delete',
-  (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
-    const schedule = getActiveSchedule(user.id);
+  async (req: NextRequest, ctx) => {
+    const { user } = await requireAuth(req, ctx);
+    const schedule = await getActiveSchedule(user.id);
     if (!schedule) {
       throw ApiError.badRequest('No active rotation schedule');
     }
@@ -125,7 +125,7 @@ export const DELETE = withApiHandler(
       throw ApiError.validation('date must be YYYY-MM-DD');
     }
 
-    const deleted = deleteScheduleEventsByDateOrId({
+    const deleted = await deleteScheduleEventsByDateOrId({
       userId: user.id,
       scheduleId: schedule.id,
       id,

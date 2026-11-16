@@ -7,7 +7,7 @@ import type {
   ScheduleEventType,
   WorkoutSession,
 } from '@/types/domain';
-import { getDb, withTransaction } from '@/lib/db/connection';
+import { query, withTransaction } from '@/lib/db/connection';
 import {
   getActiveSchedule,
   listScheduleEvents,
@@ -116,17 +116,17 @@ function toQueueSessions(sessions: readonly WorkoutSession[]): QueueSession[] {
  * Projects a user's active rotation schedule across [rangeStart .. rangeEnd].
  * When the user has no active schedule, still returns any logged sessions in range.
  */
-export function projectUserCalendar(opts: {
+export async function projectUserCalendar(opts: {
   userId: string;
   today: string;
   rangeStart: string;
   rangeEnd: string;
-}): ProjectUserCalendarResult {
+}): Promise<ProjectUserCalendarResult> {
   const { userId, today, rangeStart, rangeEnd } = opts;
-  const schedule = getActiveSchedule(userId);
+  const schedule = await getActiveSchedule(userId);
 
   if (!schedule) {
-    const sessions = listWorkoutSessions(userId, {
+    const sessions = await listWorkoutSessions(userId, {
       from: rangeStart,
       to: rangeEnd,
       includeExercises: false,
@@ -176,11 +176,11 @@ export function projectUserCalendar(opts: {
     rangeStart < schedule.rotationAnchorDate
       ? rangeStart
       : schedule.rotationAnchorDate;
-  const events = listScheduleEvents(userId, schedule.id, {
+  const events = await listScheduleEvents(userId, schedule.id, {
     from: simFrom,
     to: rangeEnd,
   });
-  const sessions = listWorkoutSessions(userId, {
+  const sessions = await listWorkoutSessions(userId, {
     from: simFrom,
     to: rangeEnd,
     includeExercises: false,
@@ -220,19 +220,19 @@ export function projectUserCalendar(opts: {
 /**
  * Computes the queue pointer entering `targetDate` for a user's active schedule.
  */
-export function getUserPointerForDate(opts: {
+export async function getUserPointerForDate(opts: {
   userId: string;
   today: string;
   targetDate: string;
 }) {
-  const schedule = getActiveSchedule(opts.userId);
+  const schedule = await getActiveSchedule(opts.userId);
   if (!schedule) return null;
 
-  const events = listScheduleEvents(opts.userId, schedule.id, {
+  const events = await listScheduleEvents(opts.userId, schedule.id, {
     from: schedule.rotationAnchorDate,
     to: opts.targetDate,
   });
-  const sessions = listWorkoutSessions(opts.userId, {
+  const sessions = await listWorkoutSessions(opts.userId, {
     from: schedule.rotationAnchorDate,
     to: opts.targetDate,
     includeExercises: false,
@@ -258,9 +258,9 @@ export interface CreateScheduleEventInput {
   jollyLabel?: string | null;
 }
 
-export function createScheduleEvent(
+export async function createScheduleEvent(
   input: CreateScheduleEventInput,
-): ScheduleEvent {
+): Promise<ScheduleEvent> {
   const id = `se_${crypto.randomUUID()}`;
   const createdAt = new Date().toISOString();
   const shiftDays =
@@ -270,7 +270,7 @@ export function createScheduleEvent(
       ? (input.jollyLabel?.trim() || null)
       : null;
 
-  withTransaction((db) => {
+  await withTransaction(async () => {
     // Replace conflicting same-date planning overrides cleanly so changing mind
     // on today's action doesn't leave stale overlapping events on that same date.
     if (
@@ -279,25 +279,27 @@ export function createScheduleEvent(
       input.eventType === 'skip' ||
       input.eventType === 'jolly_instead'
     ) {
-      db.prepare(
+      await query(
         `DELETE FROM schedule_events
-         WHERE user_id = ? AND schedule_id = ? AND event_date = ?
+         WHERE user_id = $1 AND schedule_id = $2 AND event_date = $3
            AND event_type IN ('postpone', 'skip', 'jolly_instead')`,
-      ).run(input.userId, input.scheduleId, input.eventDate);
+        [input.userId, input.scheduleId, input.eventDate],
+      );
     }
 
-    db.prepare(
+    await query(
       `INSERT INTO schedule_events (id, user_id, schedule_id, event_date, event_type, shift_days, jolly_label, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      input.userId,
-      input.scheduleId,
-      input.eventDate,
-      input.eventType,
-      shiftDays,
-      jollyLabel,
-      createdAt,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        id,
+        input.userId,
+        input.scheduleId,
+        input.eventDate,
+        input.eventType,
+        shiftDays,
+        jollyLabel,
+        createdAt,
+      ],
     );
   });
 
@@ -313,28 +315,25 @@ export function createScheduleEvent(
   };
 }
 
-export function deleteScheduleEventsByDateOrId(opts: {
+export async function deleteScheduleEventsByDateOrId(opts: {
   userId: string;
   scheduleId: string;
   id?: string;
   eventDate?: string;
-}): number {
-  const db = getDb();
+}): Promise<number> {
   if (opts.id) {
-    const info = db
-      .prepare(
-        'DELETE FROM schedule_events WHERE id = ? AND user_id = ? AND schedule_id = ?',
-      )
-      .run(opts.id, opts.userId, opts.scheduleId);
-    return Number(info.changes);
+    const info = await query(
+      'DELETE FROM schedule_events WHERE id = $1 AND user_id = $2 AND schedule_id = $3',
+      [opts.id, opts.userId, opts.scheduleId],
+    );
+    return Number(info.rowCount);
   }
   if (opts.eventDate) {
-    const info = db
-      .prepare(
-        'DELETE FROM schedule_events WHERE event_date = ? AND user_id = ? AND schedule_id = ?',
-      )
-      .run(opts.eventDate, opts.userId, opts.scheduleId);
-    return Number(info.changes);
+    const info = await query(
+      'DELETE FROM schedule_events WHERE event_date = $1 AND user_id = $2 AND schedule_id = $3',
+      [opts.eventDate, opts.userId, opts.scheduleId],
+    );
+    return Number(info.rowCount);
   }
   return 0;
 }

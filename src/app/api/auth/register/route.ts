@@ -93,12 +93,12 @@ export const POST = withApiHandler(
 
     const passwordHash = await hashPassword(body.password);
 
-    const user = withTransaction(() => {
-      if (getUserByUsername(username)) {
+    const user = await withTransaction(async () => {
+      if (await getUserByUsername(username)) {
         throw ApiError.conflict('Username is already taken');
       }
 
-      const created = createUser({
+      const created = await createUser({
         username,
         displayName,
         passwordHash,
@@ -112,7 +112,7 @@ export const POST = withApiHandler(
       });
 
       if (weightKg !== undefined) {
-        recordBodyMetric({
+        await recordBodyMetric({
           userId: created.id,
           measuredOn: localDateForTimezone(created.timezone),
           weightKg,
@@ -125,6 +125,6 @@ export const POST = withApiHandler(
 
     ctx.setUserId(user.id);
     const res = NextResponse.json({ user }, { status: 201 });
-    return createSessionCookieForUser(res, user.id);
+    return await createSessionCookieForUser(res, user.id);
   },
 );

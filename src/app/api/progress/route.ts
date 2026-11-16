@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
 import { requireAuth } from '@/lib/auth/session';
 import { listBodyMetrics } from '@/lib/db/bodyMetrics';
-import { getDb } from '@/lib/db/connection';
+import { query } from '@/lib/db/connection';
 import { localDateForTimezone } from '@/lib/db/users';
 import type { TrackingType, WeightUnit } from '@/types/domain';
 
@@ -90,13 +90,13 @@ function buildWeekBuckets(
   return result;
 }
 
-interface RawSetRow {
+type RawSetRow = {
   session_date: string;
   weight_kg: number | null;
   reps: number | null;
   time_seconds: number | null;
   distance_m: number | null;
-}
+};
 
 function computePrimaryValue(
   trackingType: TrackingType,
@@ -146,7 +146,7 @@ function computePrimaryValue(
 export const GET = withApiHandler(
   'progress.get',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const sp = req.nextUrl.searchParams;
 
     const rawRange = sp.get('range') || '12w';
@@ -168,31 +168,28 @@ export const GET = withApiHandler(
           ? addDaysIso(today, -83)
           : null;
 
-    const db = getDb();
-
-    const exerciseRows = db
-      .prepare(
-        `
-        SELECT
-          e.id AS id,
-          e.name AS name,
-          e.tracking_type AS tracking_type,
-          COUNT(DISTINCT ws.id) AS session_count
-        FROM workout_sessions ws
-        JOIN workout_exercises we ON we.session_id = ws.id
-        JOIN exercises e ON e.id = we.exercise_id
-        JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
-        WHERE ws.user_id = ?
-        GROUP BY e.id, e.name, e.tracking_type
-        ORDER BY session_count DESC, e.name ASC
-      `,
-      )
-      .all(user.id) as unknown as Array<{
+    const { rows: exerciseRows } = await query<{
       id: string;
       name: string;
       tracking_type: TrackingType;
       session_count: number;
-    }>;
+    }>(
+      `
+      SELECT
+        e.id AS id,
+        e.name AS name,
+        e.tracking_type AS tracking_type,
+        COUNT(DISTINCT ws.id)::int AS session_count
+      FROM workout_sessions ws
+      JOIN workout_exercises we ON we.session_id = ws.id
+      JOIN exercises e ON e.id = we.exercise_id
+      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+      WHERE ws.user_id = $1
+      GROUP BY e.id, e.name, e.tracking_type
+      ORDER BY session_count DESC, e.name ASC
+      `,
+      [user.id],
+    );
 
     const exercises: ProgressExerciseOption[] = exerciseRows.map((r) => ({
       id: r.id,
@@ -212,28 +209,27 @@ export const GET = withApiHandler(
     // 1. Per-exercise progression series
     const exerciseSeries: ExerciseProgressPoint[] = [];
     if (selectedExercise) {
-      const dateClause = fromDate ? 'AND ws.session_date >= ?' : '';
+      const dateClause = fromDate ? 'AND ws.session_date >= $3' : '';
       const params: Array<string> = fromDate
         ? [user.id, selectedExercise.id, fromDate]
         : [user.id, selectedExercise.id];
 
-      const setRows = db
-        .prepare(
-          `
-          SELECT
-            ws.session_date AS session_date,
-            wset.weight_kg AS weight_kg,
-            wset.reps AS reps,
-            wset.time_seconds AS time_seconds,
-            wset.distance_m AS distance_m
-          FROM workout_sessions ws
-          JOIN workout_exercises we ON we.session_id = ws.id
-          JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
-          WHERE ws.user_id = ? AND we.exercise_id = ? ${dateClause}
-          ORDER BY ws.session_date ASC, wset.set_number ASC
+      const { rows: setRows } = await query<RawSetRow>(
+        `
+        SELECT
+          ws.session_date AS session_date,
+          wset.weight_kg AS weight_kg,
+          wset.reps AS reps,
+          wset.time_seconds AS time_seconds,
+          wset.distance_m AS distance_m
+        FROM workout_sessions ws
+        JOIN workout_exercises we ON we.session_id = ws.id
+        JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+        WHERE ws.user_id = $1 AND we.exercise_id = $2 ${dateClause}
+        ORDER BY ws.session_date ASC, wset.set_number ASC
         `,
-        )
-        .all(...params) as unknown as RawSetRow[];
+        params,
+      );
 
       const byDate = new Map<string, RawSetRow[]>();
       for (const row of setRows) {
@@ -288,31 +284,30 @@ export const GET = withApiHandler(
     }
 
     // 2. Weekly sessions & weekly sets
-    const sessionDateClause = fromDate ? 'AND ws.session_date >= ?' : '';
+    const sessionDateClause = fromDate ? 'AND ws.session_date >= $2' : '';
     const sessionParams: Array<string> = fromDate
       ? [user.id, fromDate]
       : [user.id];
 
-    const sessionRows = db
-      .prepare(
-        `
-        SELECT
-          ws.id AS id,
-          ws.session_date AS session_date,
-          COUNT(wset.id) AS completed_sets
-        FROM workout_sessions ws
-        LEFT JOIN workout_exercises we ON we.session_id = ws.id
-        LEFT JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
-        WHERE ws.user_id = ? ${sessionDateClause}
-        GROUP BY ws.id, ws.session_date
-        ORDER BY ws.session_date ASC
-      `,
-      )
-      .all(...sessionParams) as unknown as Array<{
+    const { rows: sessionRows } = await query<{
       id: string;
       session_date: string;
       completed_sets: number;
-    }>;
+    }>(
+      `
+      SELECT
+        ws.id AS id,
+        ws.session_date AS session_date,
+        COUNT(wset.id)::int AS completed_sets
+      FROM workout_sessions ws
+      LEFT JOIN workout_exercises we ON we.session_id = ws.id
+      LEFT JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+      WHERE ws.user_id = $1 ${sessionDateClause}
+      GROUP BY ws.id, ws.session_date
+      ORDER BY ws.session_date ASC
+      `,
+      sessionParams,
+    );
 
     const sessionsByWeek = new Map<string, number>();
     const setsByWeek = new Map<string, number>();
@@ -327,7 +322,7 @@ export const GET = withApiHandler(
     const weeklySets = buildWeekBuckets(fromDate, today, setsByWeek);
 
     // 3. Body weight history
-    const bodyMetrics = listBodyMetrics(user.id, {
+    const bodyMetrics = await listBodyMetrics(user.id, {
       from: fromDate ?? undefined,
     });
     const bodyWeightSeries: BodyWeightPoint[] = bodyMetrics.map((m) => ({

@@ -1,24 +1,24 @@
 import crypto from 'node:crypto';
 import type { ApiKeyInfo, UserProfile } from '@/types/domain';
-import { getDb } from './connection';
+import { query, queryOne } from './connection';
 import { mapUserRow } from './users';
 
-interface DbAuthSessionRow {
+type DbAuthSessionRow = {
   token_hash: string;
   user_id: string;
   created_at: string;
   expires_at: string;
   last_seen_at: string;
-}
+};
 
-interface DbApiKeyRow {
+type DbApiKeyRow = {
   id: string;
   user_id: string;
   key_hash: string;
   key_prefix: string;
   created_at: string;
   last_used_at: string | null;
-}
+};
 
 export interface AuthSessionRecord {
   tokenHash: string;
@@ -38,17 +38,19 @@ function mapApiKeyRow(row: DbApiKeyRow): ApiKeyInfo {
   };
 }
 
-export function createAuthSession(
+export async function createAuthSession(
   userId: string,
   tokenHash: string,
   expiresAt: string,
-): AuthSessionRecord {
-  const db = getDb();
+): Promise<AuthSessionRecord> {
   const now = new Date().toISOString();
-  db.prepare(`
+  await query(
+    `
     INSERT INTO auth_sessions (token_hash, user_id, created_at, expires_at, last_seen_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(tokenHash, userId, now, expiresAt, now);
+    VALUES ($1, $2, $3, $4, $5)
+    `,
+    [tokenHash, userId, now, expiresAt, now],
+  );
 
   return {
     tokenHash,
@@ -59,13 +61,13 @@ export function createAuthSession(
   };
 }
 
-export function getAuthSessionByTokenHash(
+export async function getAuthSessionByTokenHash(
   tokenHash: string,
-): AuthSessionRecord | null {
-  const db = getDb();
-  const row = db
-    .prepare('SELECT * FROM auth_sessions WHERE token_hash = ?')
-    .get(tokenHash) as DbAuthSessionRow | undefined;
+): Promise<AuthSessionRecord | null> {
+  const row = await queryOne<DbAuthSessionRow>(
+    'SELECT * FROM auth_sessions WHERE token_hash = $1',
+    [tokenHash],
+  );
   if (!row) return null;
   return {
     tokenHash: row.token_hash,
@@ -76,67 +78,75 @@ export function getAuthSessionByTokenHash(
   };
 }
 
-export function touchAuthSession(tokenHash: string, newExpiresAt: string): void {
-  const db = getDb();
+export async function touchAuthSession(
+  tokenHash: string,
+  newExpiresAt: string,
+): Promise<void> {
   const now = new Date().toISOString();
-  db.prepare(
-    'UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?',
-  ).run(now, newExpiresAt, tokenHash);
+  await query(
+    'UPDATE auth_sessions SET last_seen_at = $1, expires_at = $2 WHERE token_hash = $3',
+    [now, newExpiresAt, tokenHash],
+  );
 }
 
-export function deleteAuthSession(tokenHash: string): void {
-  const db = getDb();
-  db.prepare('DELETE FROM auth_sessions WHERE token_hash = ?').run(tokenHash);
+export async function deleteAuthSession(tokenHash: string): Promise<void> {
+  await query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
 }
 
-export function deleteUserAuthSessions(userId: string): void {
-  const db = getDb();
-  db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(userId);
+export async function deleteUserAuthSessions(userId: string): Promise<void> {
+  await query('DELETE FROM auth_sessions WHERE user_id = $1', [userId]);
 }
 
-export function getApiKeyByUserId(userId: string): ApiKeyInfo | null {
-  const db = getDb();
-  const row = db
-    .prepare('SELECT * FROM api_keys WHERE user_id = ?')
-    .get(userId) as DbApiKeyRow | undefined;
+export async function getApiKeyByUserId(
+  userId: string,
+): Promise<ApiKeyInfo | null> {
+  const row = await queryOne<DbApiKeyRow>(
+    'SELECT * FROM api_keys WHERE user_id = $1',
+    [userId],
+  );
   return row ? mapApiKeyRow(row) : null;
 }
 
-export function upsertApiKey(
+export async function upsertApiKey(
   userId: string,
   keyHash: string,
   keyPrefix: string,
-): ApiKeyInfo {
-  const db = getDb();
+): Promise<ApiKeyInfo> {
   const id = `key_${crypto.randomUUID()}`;
   const now = new Date().toISOString();
 
-  db.prepare(`
+  const row = await queryOne<DbApiKeyRow>(
+    `
     INSERT INTO api_keys (id, user_id, key_hash, key_prefix, created_at, last_used_at)
-    VALUES (?, ?, ?, ?, ?, NULL)
-    ON CONFLICT(user_id) DO UPDATE SET
-      id = excluded.id,
-      key_hash = excluded.key_hash,
-      key_prefix = excluded.key_prefix,
-      created_at = excluded.created_at,
+    VALUES ($1, $2, $3, $4, $5, NULL)
+    ON CONFLICT (user_id) DO UPDATE SET
+      id = EXCLUDED.id,
+      key_hash = EXCLUDED.key_hash,
+      key_prefix = EXCLUDED.key_prefix,
+      created_at = EXCLUDED.created_at,
       last_used_at = NULL
-  `).run(id, userId, keyHash, keyPrefix, now);
+    RETURNING *
+    `,
+    [id, userId, keyHash, keyPrefix, now],
+  );
 
-  return getApiKeyByUserId(userId)!;
+  return mapApiKeyRow(row!);
 }
 
-export function getUserByApiKeyHash(
+export async function getUserByApiKeyHash(
   keyHash: string,
-): { user: UserProfile; apiKeyId: string } | null {
-  const db = getDb();
-  const row = db
-    .prepare(`
-      SELECT u.*, k.id AS _api_key_id
-      FROM api_keys k
-      JOIN users u ON u.id = k.user_id
-      WHERE k.key_hash = ?
-    `)
-    .get(keyHash) as (Parameters<typeof mapUserRow>[0] & { _api_key_id: string }) | undefined;
+): Promise<{ user: UserProfile; apiKeyId: string } | null> {
+  const row = await queryOne<
+    Parameters<typeof mapUserRow>[0] & { _api_key_id: string }
+  >(
+    `
+    SELECT u.*, k.id AS _api_key_id
+    FROM api_keys k
+    JOIN users u ON u.id = k.user_id
+    WHERE k.key_hash = $1
+    `,
+    [keyHash],
+  );
 
   if (!row) return null;
   const apiKeyId = row._api_key_id;
@@ -146,12 +156,12 @@ export function getUserByApiKeyHash(
   };
 }
 
-export function touchApiKeyLastUsed(apiKeyId: string): void {
-  const db = getDb();
+export async function touchApiKeyLastUsed(apiKeyId: string): Promise<void> {
   const now = new Date();
   const nowIso = now.toISOString();
   const thresholdIso = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
-  db.prepare(
-    'UPDATE api_keys SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)',
-  ).run(nowIso, apiKeyId, thresholdIso);
+  await query(
+    'UPDATE api_keys SET last_used_at = $1 WHERE id = $2 AND (last_used_at IS NULL OR last_used_at < $3)',
+    [nowIso, apiKeyId, thresholdIso],
+  );
 }

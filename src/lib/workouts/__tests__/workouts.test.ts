@@ -43,7 +43,7 @@ module.registerHooks({
   },
 });
 
-const { closeDb, getDb } = await import('@/lib/db/connection');
+const { closeDb, queryOne, setTestPool } = await import('@/lib/db/connection');
 const { createGuestSandbox } = await import('@/lib/auth/sandbox');
 const { createUser, localDateForTimezone } = await import('@/lib/db/users');
 const {
@@ -56,33 +56,34 @@ const {
 } = await import('@/lib/workouts/queries');
 const { ApiError } = await import('@/lib/api/handler');
 
-test('workouts query lifecycle: day view, transactional save, cid idempotency, edit, delete, swap, isolation', () => {
-  process.env.DATABASE_PATH = ':memory:';
-  closeDb();
+test('workouts query lifecycle: day view, transactional save, cid idempotency, edit, delete, swap, isolation', async () => {
+  const { newDb } = await import('pg-mem');
+  const pg = newDb().adapters.createPg();
+  setTestPool(new pg.Pool());
 
   try {
-    const guest = createGuestSandbox('UTC');
+    const guest = await createGuestSandbox('UTC');
     const today = localDateForTimezone('UTC');
-    const otherUser = createUser({
+    const otherUser = await createUser({
       username: 'other_lifter',
       displayName: 'Other',
       passwordHash: 'hash',
       timezone: 'UTC',
     });
 
-    const db = getDb();
-    const schedRow = db
-      .prepare('SELECT rotation_anchor_date FROM schedules WHERE user_id = ?')
-      .get(guest.id) as { rotation_anchor_date: string };
+    const schedRow = await queryOne<{ rotation_anchor_date: string }>(
+      'SELECT rotation_anchor_date FROM schedules WHERE user_id = $1',
+      [guest.id],
+    );
     assert.ok(schedRow?.rotation_anchor_date);
 
-    const initialView = getWorkoutDayView(guest.id, today, today);
+    const initialView = await getWorkoutDayView(guest.id, today, today);
     assert.equal(initialView.date, today);
     assert.equal(initialView.user.enableSetQuality, false);
 
     // Save a session on today with notes, set quality, rep qualities, and cid
     const cid = 'test-cid-123';
-    const { session, created } = saveWorkoutSession(guest.id, {
+    const { session, created } = await saveWorkoutSession(guest.id, {
       sessionDate: today,
       title: 'Push Custom',
       isJolly: true,
@@ -122,7 +123,7 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
     );
 
     // Idempotent cid returns existing session without creating duplicate
-    const dup = saveWorkoutSession(guest.id, {
+    const dup = await saveWorkoutSession(guest.id, {
       sessionDate: today,
       title: 'Push Custom',
       cid,
@@ -141,7 +142,7 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
     let pushView = null;
     for (let offset = 1; offset <= 10; offset += 1) {
       const candidate = addDaysYmd(today, offset);
-      const view = getWorkoutDayView(guest.id, candidate, today);
+      const view = await getWorkoutDayView(guest.id, candidate, today);
       if (
         view.calendarDay.plannedDay?.exercises.some(
           (e) => e.exerciseId === 'barbell-bench-press',
@@ -158,17 +159,17 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
     assert.equal(benchPrefill.sets[0].reps, 6);
 
     // User isolation: otherUser cannot update or delete guest's session
-    assert.throws(
+    await assert.rejects(
       () => updateWorkoutSession(otherUser.id, session.id, { title: 'Hacked' }),
       (err: unknown) => err instanceof ApiError && err.status === 404,
     );
-    assert.throws(
+    await assert.rejects(
       () => deleteWorkoutSession(otherUser.id, session.id),
       (err: unknown) => err instanceof ApiError && err.status === 404,
     );
 
     // Validation error on invalid exerciseId -> 400 ApiError
-    assert.throws(
+    await assert.rejects(
       () =>
         saveWorkoutSession(guest.id, {
           sessionDate: today,
@@ -184,7 +185,7 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
     );
 
     // Update session
-    const updated = updateWorkoutSession(guest.id, session.id, {
+    const updated = await updateWorkoutSession(guest.id, session.id, {
       title: 'Push Edited',
       notes: 'Updated note',
       exercises: [
@@ -200,20 +201,22 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
     assert.equal(updated.exercises[0].sets[0].timeSeconds, 75);
 
     // Swap session scope & schedule scope
-    const firstSlot = db
-      .prepare(`
+    const firstSlot = await queryOne<{ id: string; exercise_id: string }>(
+      `
         SELECT sde.id, sde.exercise_id
         FROM schedule_day_exercises sde
         JOIN schedule_days sd ON sd.id = sde.schedule_day_id
         JOIN schedules s ON s.id = sd.schedule_id
-        WHERE s.user_id = ?
+        WHERE s.user_id = $1
         ORDER BY sd.position ASC, sde.order_index ASC
         LIMIT 1
-      `)
-      .get(guest.id) as { id: string; exercise_id: string };
+      `,
+      [guest.id],
+    );
+    assert.ok(firstSlot);
 
     const futureDate = addDaysYmd(today, 5);
-    const swapSessionRes = applyExerciseSwap(guest.id, {
+    const swapSessionRes = await applyExerciseSwap(guest.id, {
       dateKey: futureDate,
       scheduleDayExerciseId: firstSlot.id,
       toExerciseId: 'flat-dumbbell-bench-press',
@@ -221,7 +224,7 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
     });
     assert.equal(swapSessionRes.toExercise.id, 'flat-dumbbell-bench-press');
 
-    const swapSchedRes = applyExerciseSwap(guest.id, {
+    const swapSchedRes = await applyExerciseSwap(guest.id, {
       dateKey: futureDate,
       scheduleDayExerciseId: firstSlot.id,
       toExerciseId: 'incline-barbell-bench-press',
@@ -230,12 +233,12 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
     assert.equal(swapSchedRes.toExercise.id, 'incline-barbell-bench-press');
 
     // Delete session
-    deleteWorkoutSession(guest.id, session.id);
-    assert.throws(
+    await deleteWorkoutSession(guest.id, session.id);
+    await assert.rejects(
       () => updateWorkoutSession(guest.id, session.id, { title: 'Gone' }),
       (err: unknown) => err instanceof ApiError && err.status === 404,
     );
   } finally {
-    closeDb();
+    await closeDb();
   }
 });

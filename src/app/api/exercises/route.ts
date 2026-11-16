@@ -17,7 +17,7 @@ interface CreateExerciseBody {
 }
 
 export const GET = withApiHandler('exercises.list', async (req: NextRequest, ctx) => {
-  const { user } = requireAuth(req, ctx);
+  const { user } = await requireAuth(req, ctx);
   const { searchParams } = req.nextUrl;
 
   const query = searchParams.get('q') ?? undefined;
@@ -33,7 +33,7 @@ export const GET = withApiHandler('exercises.list', async (req: NextRequest, ctx
     trackingType = trackingTypeParam;
   }
 
-  const exercises = listExercises(user.id, {
+  const exercises = await listExercises(user.id, {
     query,
     category,
     trackingType,
@@ -44,7 +44,7 @@ export const GET = withApiHandler('exercises.list', async (req: NextRequest, ctx
 });
 
 export const POST = withApiHandler('exercises.create', async (req: NextRequest, ctx) => {
-  const { user } = requireAuth(req, ctx);
+  const { user } = await requireAuth(req, ctx);
   const body = await parseJsonBody<CreateExerciseBody>(req);
 
   if (typeof body.name !== 'string' || !body.name.trim()) {
@@ -88,7 +88,7 @@ export const POST = withApiHandler('exercises.create', async (req: NextRequest, 
     defaultRestSeconds = body.defaultRestSeconds;
   }
 
-  const exercise = createCustomExercise(user.id, {
+  const exercise = await createCustomExercise(user.id, {
     name,
     trackingType: body.trackingType,
     equipment,

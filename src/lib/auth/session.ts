@@ -51,13 +51,13 @@ function extractBearerToken(req: NextRequest): string | null {
   return match ? match[1].trim() : null;
 }
 
-function resolveFromApiKey(rawKey: string): AuthContext | null {
+async function resolveFromApiKey(rawKey: string): Promise<AuthContext | null> {
   if (!rawKey) return null;
-  const match = getUserByApiKeyHash(hashToken(rawKey));
+  const match = await getUserByApiKeyHash(hashToken(rawKey));
   if (!match) return null;
 
-  touchApiKeyLastUsed(match.apiKeyId);
-  touchUserLastActive(match.user.id);
+  await touchApiKeyLastUsed(match.apiKeyId);
+  await touchUserLastActive(match.user.id);
   return { user: match.user, authMethod: 'api_key' };
 }
 
@@ -65,45 +65,45 @@ function resolveFromApiKey(rawKey: string): AuthContext | null {
  * Resolves the authenticated user from Bearer token, x-api-key header,
  * or `liftitup_session` cookie. Never falls back to a default user.
  */
-export function optionalAuth(req: NextRequest): AuthContext | null {
-  purgeExpiredGuestsIfDue();
+export async function optionalAuth(req: NextRequest): Promise<AuthContext | null> {
+  await purgeExpiredGuestsIfDue();
 
   const authHeader = req.headers.get('authorization');
   if (authHeader !== null) {
     const bearer = extractBearerToken(req);
-    return bearer ? resolveFromApiKey(bearer) : null;
+    return bearer ? await resolveFromApiKey(bearer) : null;
   }
 
   const headerKey = req.headers.get('x-api-key');
   if (headerKey !== null) {
-    return resolveFromApiKey(headerKey.trim());
+    return await resolveFromApiKey(headerKey.trim());
   }
 
   const rawCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!rawCookie) return null;
 
   const tokenHash = hashToken(rawCookie);
-  const session = getAuthSessionByTokenHash(tokenHash);
+  const session = await getAuthSessionByTokenHash(tokenHash);
   if (!session) return null;
 
   const now = Date.now();
   if (Date.parse(session.expiresAt) <= now) {
-    deleteAuthSession(tokenHash);
+    await deleteAuthSession(tokenHash);
     return null;
   }
 
-  const user = getUserById(session.userId);
+  const user = await getUserById(session.userId);
   if (!user) {
-    deleteAuthSession(tokenHash);
+    await deleteAuthSession(tokenHash);
     return null;
   }
 
   const lastSeenMs = Date.parse(session.lastSeenAt);
   if (!Number.isFinite(lastSeenMs) || now - lastSeenMs > SESSION_TOUCH_INTERVAL_MS) {
     const newExpiresAt = new Date(now + SESSION_TTL_MS).toISOString();
-    touchAuthSession(tokenHash, newExpiresAt);
+    await touchAuthSession(tokenHash, newExpiresAt);
   }
-  touchUserLastActive(user.id);
+  await touchUserLastActive(user.id);
 
   return {
     user,
@@ -115,11 +115,11 @@ export function optionalAuth(req: NextRequest): AuthContext | null {
 /**
  * Enforces authentication via cookie session or API key; throws 401 ApiError otherwise.
  */
-export function requireAuth(
+export async function requireAuth(
   req: NextRequest,
   ctx?: { setUserId?: (id: string | null) => void },
-): AuthContext {
-  const auth = optionalAuth(req);
+): Promise<AuthContext> {
+  const auth = await optionalAuth(req);
   if (!auth) {
     throw ApiError.unauthorized('Authentication required');
   }
@@ -130,15 +130,15 @@ export function requireAuth(
 /**
  * Enforces Bearer API-key authentication only (for `/api/mcp`). Throws 401 otherwise.
  */
-export function requireApiKeyAuth(
+export async function requireApiKeyAuth(
   req: NextRequest,
   ctx?: { setUserId?: (id: string | null) => void },
-): AuthContext {
+): Promise<AuthContext> {
   const bearer = extractBearerToken(req);
   if (!bearer) {
     throw ApiError.unauthorized('Bearer API key required');
   }
-  const auth = resolveFromApiKey(bearer);
+  const auth = await resolveFromApiKey(bearer);
   if (!auth) {
     throw ApiError.unauthorized('Invalid API key');
   }
@@ -146,14 +146,14 @@ export function requireApiKeyAuth(
   return auth;
 }
 
-export function createSessionCookieForUser(
+export async function createSessionCookieForUser(
   res: NextResponse,
   userId: string,
-): NextResponse {
+): Promise<NextResponse> {
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-  createAuthSession(userId, tokenHash, expiresAt);
+  await createAuthSession(userId, tokenHash, expiresAt);
 
   res.cookies.set(SESSION_COOKIE_NAME, rawToken, {
     httpOnly: true,

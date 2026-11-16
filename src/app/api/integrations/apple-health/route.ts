@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
 import { requireAuth } from '@/lib/auth/session';
 import { recordBodyMetric } from '@/lib/db/bodyMetrics';
-import { getDb, withTransaction } from '@/lib/db/connection';
+import { query, queryOne, withTransaction } from '@/lib/db/connection';
 import { localDateForTimezone, updateUserSettings } from '@/lib/db/users';
 import type { AppleHealthWorkout } from '@/types/domain';
 
@@ -13,7 +13,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key',
 };
 
-interface DbAppleHealthRow {
+type DbAppleHealthRow = {
   id: string;
   user_id: string;
   workout_type: string;
@@ -26,7 +26,7 @@ interface DbAppleHealthRow {
   linked_session_id: string | null;
   source: string;
   created_at: string;
-}
+};
 
 function mapRow(row: DbAppleHealthRow): AppleHealthWorkout {
   return {
@@ -45,13 +45,11 @@ function mapRow(row: DbAppleHealthRow): AppleHealthWorkout {
   };
 }
 
-function listAppleHealthWorkouts(userId: string): AppleHealthWorkout[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      'SELECT * FROM apple_health_workouts WHERE user_id = ? ORDER BY started_at DESC, created_at DESC LIMIT 25',
-    )
-    .all(userId) as unknown as DbAppleHealthRow[];
+async function listAppleHealthWorkouts(userId: string): Promise<AppleHealthWorkout[]> {
+  const { rows } = await query<DbAppleHealthRow>(
+    'SELECT * FROM apple_health_workouts WHERE user_id = $1 ORDER BY started_at DESC, created_at DESC LIMIT 25',
+    [userId],
+  );
   return rows.map(mapRow);
 }
 
@@ -86,8 +84,8 @@ export async function OPTIONS() {
 export const GET = withApiHandler(
   'integrations.appleHealth.get',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
-    const workouts = listAppleHealthWorkouts(user.id);
+    const { user } = await requireAuth(req, ctx);
+    const workouts = await listAppleHealthWorkouts(user.id);
     return NextResponse.json(
       {
         enabled: user.appleFitnessEnabled,
@@ -101,14 +99,14 @@ export const GET = withApiHandler(
 export const POST = withApiHandler(
   'integrations.appleHealth.post',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const body = await parseJsonBody<Record<string, unknown> | unknown[]>(req);
 
     if (
       !Array.isArray(body) &&
       (body.action === 'toggle' || typeof body.enabled === 'boolean')
     ) {
-      const updatedUser = updateUserSettings(user.id, {
+      const updatedUser = await updateUserSettings(user.id, {
         appleFitnessEnabled: Boolean(body.enabled),
       });
       if (!updatedUser) {
@@ -119,7 +117,7 @@ export const POST = withApiHandler(
           ok: true,
           enabled: updatedUser.appleFitnessEnabled,
           user: updatedUser,
-          workouts: listAppleHealthWorkouts(user.id),
+          workouts: await listAppleHealthWorkouts(user.id),
         },
         { headers: CORS_HEADERS },
       );
@@ -143,30 +141,7 @@ export const POST = withApiHandler(
     const savedWorkouts: AppleHealthWorkout[] = [];
     let latestUser = user;
 
-    withTransaction((db) => {
-      const insertStmt = db.prepare(`
-        INSERT INTO apple_health_workouts (
-          id, user_id, workout_type, started_at, duration_minutes,
-          active_calories, avg_heart_rate, max_heart_rate, bodyweight_kg,
-          linked_session_id, source, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      const findSessionStmt = db.prepare(`
-        SELECT id FROM workout_sessions
-        WHERE user_id = ? AND session_date = ?
-        ORDER BY started_at DESC
-        LIMIT 1
-      `);
-
-      const updateSessionWatchStmt = db.prepare(`
-        UPDATE workout_sessions
-        SET apple_watch_kcal = COALESCE(?, apple_watch_kcal),
-            apple_watch_avg_hr = COALESCE(?, apple_watch_avg_hr),
-            apple_watch_max_hr = COALESCE(?, apple_watch_max_hr)
-        WHERE id = ? AND user_id = ?
-      `);
-
+    await withTransaction(async () => {
       for (const item of incomingList.slice(0, 25)) {
         const workoutType =
           typeof item.workoutType === 'string' && item.workoutType.trim()
@@ -208,47 +183,59 @@ export const POST = withApiHandler(
           item.source === 'file_import' ? 'file_import' : defaultSource;
         const measuredDate = measuredDateFromIso(startedAt, user.timezone);
 
-        const linked = findSessionStmt.get(user.id, measuredDate) as
-          | { id: string }
-          | undefined;
+        const linked = await queryOne<{ id: string }>(
+          `SELECT id FROM workout_sessions
+           WHERE user_id = $1 AND session_date = $2
+           ORDER BY started_at DESC
+           LIMIT 1`,
+          [user.id, measuredDate],
+        );
         const linkedSessionId = linked?.id ?? null;
 
         if (linkedSessionId) {
-          updateSessionWatchStmt.run(
-            activeCalories,
-            avgHeartRate,
-            maxHeartRate,
-            linkedSessionId,
-            user.id,
+          await query(
+            `UPDATE workout_sessions
+             SET apple_watch_kcal = COALESCE($1, apple_watch_kcal),
+                 apple_watch_avg_hr = COALESCE($2, apple_watch_avg_hr),
+                 apple_watch_max_hr = COALESCE($3, apple_watch_max_hr)
+             WHERE id = $4 AND user_id = $5`,
+            [activeCalories, avgHeartRate, maxHeartRate, linkedSessionId, user.id],
           );
         }
 
         const id = `ah_${crypto.randomUUID()}`;
         const createdAt = new Date().toISOString();
 
-        insertStmt.run(
-          id,
-          user.id,
-          workoutType,
-          startedAt,
-          durationMinutes,
-          activeCalories,
-          avgHeartRate,
-          maxHeartRate,
-          bodyweightKg,
-          linkedSessionId,
-          source,
-          createdAt,
+        await query(
+          `INSERT INTO apple_health_workouts (
+             id, user_id, workout_type, started_at, duration_minutes,
+             active_calories, avg_heart_rate, max_heart_rate, bodyweight_kg,
+             linked_session_id, source, created_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [
+            id,
+            user.id,
+            workoutType,
+            startedAt,
+            durationMinutes,
+            activeCalories,
+            avgHeartRate,
+            maxHeartRate,
+            bodyweightKg,
+            linkedSessionId,
+            source,
+            createdAt,
+          ],
         );
 
         if (bodyweightKg !== null) {
-          recordBodyMetric({
+          await recordBodyMetric({
             userId: user.id,
             measuredOn: measuredDate,
             weightKg: bodyweightKg,
             source: 'apple_health',
           });
-          const updated = updateUserSettings(user.id, {
+          const updated = await updateUserSettings(user.id, {
             weightKg: bodyweightKg,
           });
           if (updated) {
@@ -273,7 +260,7 @@ export const POST = withApiHandler(
       }
     });
 
-    const workouts = listAppleHealthWorkouts(user.id);
+    const workouts = await listAppleHealthWorkouts(user.id);
     return NextResponse.json(
       {
         ok: true,

@@ -1,13 +1,9 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { Pool, PoolClient } from 'pg';
 import { EXERCISE_CATALOG } from '@/lib/exercises/catalog';
 
 export const SCHEMA_VERSION = 2;
 
 const SCHEMA_V2_DDL = `
-  PRAGMA journal_mode = WAL;
-  PRAGMA synchronous = NORMAL;
-  PRAGMA foreign_keys = ON;
-
   CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
@@ -18,10 +14,10 @@ const SCHEMA_V2_DDL = `
     username TEXT UNIQUE NOT NULL,
     display_name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
-    height_cm REAL,
-    weight_kg REAL NOT NULL DEFAULT 75,
+    height_cm DOUBLE PRECISION,
+    weight_kg DOUBLE PRECISION NOT NULL DEFAULT 75,
     age INTEGER,
-    training_years REAL,
+    training_years DOUBLE PRECISION,
     unit TEXT NOT NULL DEFAULT 'kg' CHECK (unit IN ('kg', 'lb')),
     timezone TEXT NOT NULL DEFAULT 'UTC',
     theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art')),
@@ -38,7 +34,7 @@ const SCHEMA_V2_DDL = `
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     measured_on TEXT NOT NULL,
-    weight_kg REAL NOT NULL,
+    weight_kg DOUBLE PRECISION NOT NULL,
     source TEXT NOT NULL DEFAULT 'settings',
     created_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -129,8 +125,8 @@ const SCHEMA_V2_DDL = `
     target_reps_min INTEGER,
     target_reps_max INTEGER,
     target_time_seconds INTEGER,
-    target_weight_kg REAL,
-    target_distance_m REAL,
+    target_weight_kg DOUBLE PRECISION,
+    target_distance_m DOUBLE PRECISION,
     rest_seconds INTEGER NOT NULL DEFAULT 120,
     notes TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (schedule_day_id) REFERENCES schedule_days(id) ON DELETE CASCADE,
@@ -161,12 +157,12 @@ const SCHEMA_V2_DDL = `
     schedule_id TEXT,
     schedule_day_id TEXT,
     is_jolly INTEGER NOT NULL DEFAULT 0 CHECK (is_jolly IN (0, 1)),
-    jolly_mode TEXT CHECK (jolly_mode IN ('extra', 'instead')),
+    jolly_mode TEXT CHECK (jolly_mode IS NULL OR jolly_mode IN ('extra', 'instead')),
     title TEXT NOT NULL,
     started_at TEXT NOT NULL,
     completed_at TEXT,
     duration_minutes INTEGER,
-    user_weight_kg REAL,
+    user_weight_kg DOUBLE PRECISION,
     notes TEXT NOT NULL DEFAULT '',
     apple_watch_kcal INTEGER,
     apple_watch_avg_hr INTEGER,
@@ -194,12 +190,12 @@ const SCHEMA_V2_DDL = `
     id TEXT PRIMARY KEY,
     workout_exercise_id TEXT NOT NULL,
     set_number INTEGER NOT NULL,
-    weight_kg REAL,
+    weight_kg DOUBLE PRECISION,
     reps INTEGER,
     time_seconds INTEGER,
-    distance_m REAL,
+    distance_m DOUBLE PRECISION,
     rest_seconds INTEGER,
-    execution_quality_pct INTEGER CHECK (execution_quality_pct BETWEEN 0 AND 100),
+    execution_quality_pct INTEGER CHECK (execution_quality_pct IS NULL OR (execution_quality_pct BETWEEN 0 AND 100)),
     is_completed INTEGER NOT NULL DEFAULT 1 CHECK (is_completed IN (0, 1)),
     created_at TEXT NOT NULL,
     FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises(id) ON DELETE CASCADE
@@ -224,7 +220,7 @@ const SCHEMA_V2_DDL = `
     active_calories INTEGER NOT NULL,
     avg_heart_rate INTEGER,
     max_heart_rate INTEGER,
-    bodyweight_kg REAL,
+    bodyweight_kg DOUBLE PRECISION,
     linked_session_id TEXT,
     source TEXT NOT NULL DEFAULT 'shortcut_webhook',
     created_at TEXT NOT NULL,
@@ -249,71 +245,137 @@ function defaultRestForCategory(category: string): number {
   return 120;
 }
 
-/**
- * Idempotently syncs EXERCISE_CATALOG into the `exercises` table (is_custom = 0).
- */
-export function syncExerciseCatalog(db: DatabaseSync): void {
-  const now = new Date().toISOString();
-  const upsert = db.prepare(`
-    INSERT INTO exercises (
-      id, user_id, slug, name, tracking_type, equipment, category,
-      default_rest_seconds, is_custom, aliases_json, created_at
-    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      slug = excluded.slug,
-      name = excluded.name,
-      tracking_type = excluded.tracking_type,
-      equipment = excluded.equipment,
-      category = excluded.category,
-      aliases_json = excluded.aliases_json
-    WHERE exercises.is_custom = 0
-  `);
+function isPool(client: Pool | PoolClient): client is Pool {
+  return typeof (client as Pool).connect === 'function';
+}
 
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    for (const ex of EXERCISE_CATALOG) {
-      upsert.run(
-        ex.id,
-        ex.id,
-        ex.name,
-        ex.trackingType,
-        ex.equipment,
-        ex.category,
-        defaultRestForCategory(ex.category),
-        JSON.stringify(ex.aliases ?? []),
-        now,
-      );
+async function withDirectClient<T>(
+  clientOrPool: Pool | PoolClient,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (isPool(clientOrPool)) {
+    const conn = await clientOrPool.connect();
+    try {
+      return await fn(conn);
+    } finally {
+      conn.release();
     }
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
   }
+  return fn(clientOrPool);
 }
 
 /**
- * Applies schema v2 DDL, records schema_version = 2, and syncs EXERCISE_CATALOG.
+ * Idempotently syncs EXERCISE_CATALOG into the `exercises` table (is_custom = 0).
+ */
+export async function syncExerciseCatalog(
+  clientOrPool: Pool | PoolClient,
+): Promise<void> {
+  if (EXERCISE_CATALOG.length === 0) return;
+
+  const now = new Date().toISOString();
+  const batchSize = 100;
+
+  await withDirectClient(clientOrPool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      for (let i = 0; i < EXERCISE_CATALOG.length; i += batchSize) {
+        const chunk = EXERCISE_CATALOG.slice(i, i + batchSize);
+        const params: unknown[] = [];
+        const valuesSql: string[] = [];
+
+        for (const ex of chunk) {
+          const base = params.length;
+          valuesSql.push(
+            `($${base + 1}, NULL, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, 0, $${base + 8}, $${base + 9})`,
+          );
+          params.push(
+            ex.id,
+            ex.id,
+            ex.name,
+            ex.trackingType,
+            ex.equipment,
+            ex.category,
+            defaultRestForCategory(ex.category),
+            JSON.stringify(ex.aliases ?? []),
+            now,
+          );
+        }
+
+        await client.query(
+          `
+          INSERT INTO exercises (
+            id, user_id, slug, name, tracking_type, equipment, category,
+            default_rest_seconds, is_custom, aliases_json, created_at
+          ) VALUES ${valuesSql.join(', ')}
+          ON CONFLICT (id) DO UPDATE SET
+            slug = EXCLUDED.slug,
+            name = EXCLUDED.name,
+            tracking_type = EXCLUDED.tracking_type,
+            equipment = EXCLUDED.equipment,
+            category = EXCLUDED.category,
+            aliases_json = EXCLUDED.aliases_json
+          WHERE exercises.is_custom = 0
+          `,
+          params,
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // ignore rollback error if connection closed
+      }
+      throw err;
+    }
+  });
+}
+
+/**
+ * Applies schema v2 DDL, runs forward-only additive migrations,
+ * records schema_version = 2, and syncs EXERCISE_CATALOG.
+ * Executes directly against the passed Pool/PoolClient to avoid recursive ensureSchema() calls.
  * Does NOT seed any real or demo users.
  */
-export function initSchema(db: DatabaseSync): void {
-  db.exec(SCHEMA_V2_DDL);
-  const userCols = db
-    .prepare('PRAGMA table_info(users)')
-    .all() as Array<{ name: string }>;
-  const colNames = new Set(userCols.map((c) => c.name));
-  if (!colNames.has('theme')) {
-    db.exec(
-      "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art'))",
+export async function initSchema(
+  clientOrPool: Pool | PoolClient,
+): Promise<void> {
+  await withDirectClient(clientOrPool, async (client) => {
+    const existingRes = await client.query<{ table_name: string }>(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
     );
-  }
-  if (!colNames.has('theme_variant')) {
-    db.exec(
-      "ALTER TABLE users ADD COLUMN theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark'))",
+    const existingTables = new Set(
+      existingRes.rows.map((r) => r.table_name.toLowerCase()),
     );
-  }
-  const now = new Date().toISOString();
-  db.prepare(
-    'INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)',
-  ).run(SCHEMA_VERSION, now);
-  syncExerciseCatalog(db);
+
+    if (existingTables.size === 0) {
+      await client.query(SCHEMA_V2_DDL);
+    } else {
+      const statements = SCHEMA_V2_DDL.split(';')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      for (const stmt of statements) {
+        const match = /^CREATE TABLE IF NOT EXISTS ([a-z_]+)\b/i.exec(stmt);
+        if (match && existingTables.has(match[1].toLowerCase())) {
+          continue;
+        }
+        await client.query(stmt);
+      }
+    }
+
+    await client.query(
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art'))",
+    );
+    await client.query(
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark'))",
+    );
+
+    const now = new Date().toISOString();
+    await client.query(
+      'INSERT INTO schema_version (version, applied_at) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [SCHEMA_VERSION, now],
+    );
+
+    await syncExerciseCatalog(client);
+  });
 }

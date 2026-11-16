@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import type { Exercise, TrackingType } from '@/types/domain';
-import { getDb } from '@/lib/db/connection';
+import { query, queryOne } from '@/lib/db/connection';
 
-interface DbExerciseRow {
+type DbExerciseRow = {
   id: string;
   user_id: string | null;
   slug: string;
@@ -15,7 +15,7 @@ interface DbExerciseRow {
   aliases_json: string;
   created_at: string;
   is_hidden?: number;
-}
+};
 
 export interface ExerciseFilter {
   query?: string;
@@ -79,36 +79,36 @@ function slugifyName(name: string): string {
   return base || 'custom-exercise';
 }
 
-export function listExercises(
+export async function listExercises(
   userId: string,
   filter: ExerciseFilter = {},
-): Exercise[] {
-  const db = getDb();
-  const clauses = ['(e.user_id IS NULL OR e.user_id = ?)'];
+): Promise<Exercise[]> {
   const params: Array<string | number> = [userId, userId];
+  const clauses = ['(e.user_id IS NULL OR e.user_id = $2)'];
 
   if (!filter.includeHidden) {
     clauses.push('he.exercise_id IS NULL');
   }
   if (filter.category) {
-    clauses.push('e.category = ?');
     params.push(filter.category);
+    clauses.push(`e.category = $${params.length}`);
   }
   if (filter.trackingType) {
-    clauses.push('e.tracking_type = ?');
     params.push(filter.trackingType);
+    clauses.push(`e.tracking_type = $${params.length}`);
   }
 
-  const rows = db
-    .prepare(`
+  const { rows } = await query<DbExerciseRow>(
+    `
       SELECT e.*, CASE WHEN he.exercise_id IS NOT NULL THEN 1 ELSE 0 END AS is_hidden
       FROM exercises e
       LEFT JOIN hidden_exercises he
-        ON he.exercise_id = e.id AND he.user_id = ?
+        ON he.exercise_id = e.id AND he.user_id = $1
       WHERE ${clauses.join(' AND ')}
       ORDER BY e.is_custom DESC, e.name ASC
-    `)
-    .all(...params) as unknown as DbExerciseRow[];
+    `,
+    params,
+  );
 
   const mapped = rows.map(mapExerciseRow);
   const q = filter.query?.trim().toLowerCase();
@@ -121,20 +121,20 @@ export function listExercises(
   );
 }
 
-export function getExerciseById(
+export async function getExerciseById(
   userId: string,
   exerciseId: string,
-): Exercise | null {
-  const db = getDb();
-  const row = db
-    .prepare(`
+): Promise<Exercise | null> {
+  const row = await queryOne<DbExerciseRow>(
+    `
       SELECT e.*, CASE WHEN he.exercise_id IS NOT NULL THEN 1 ELSE 0 END AS is_hidden
       FROM exercises e
       LEFT JOIN hidden_exercises he
-        ON he.exercise_id = e.id AND he.user_id = ?
-      WHERE e.id = ? AND (e.user_id IS NULL OR e.user_id = ?)
-    `)
-    .get(userId, exerciseId, userId) as DbExerciseRow | undefined;
+        ON he.exercise_id = e.id AND he.user_id = $1
+      WHERE e.id = $2 AND (e.user_id IS NULL OR e.user_id = $3)
+    `,
+    [userId, exerciseId, userId],
+  );
 
   return row ? mapExerciseRow(row) : null;
 }
@@ -142,14 +142,14 @@ export function getExerciseById(
 /**
  * Case-insensitive exact match on exercise name or aliases, preferring user's custom exercises.
  */
-export function findExerciseByNameOrAlias(
+export async function findExerciseByNameOrAlias(
   userId: string,
   name: string,
-): Exercise | null {
+): Promise<Exercise | null> {
   const normalized = name.trim().toLowerCase();
   if (!normalized) return null;
 
-  const all = listExercises(userId, { includeHidden: true });
+  const all = await listExercises(userId, { includeHidden: true });
   // Prefer exact name match (custom first because listExercises orders is_custom DESC)
   const exactName = all.find((ex) => ex.name.toLowerCase() === normalized);
   if (exactName) return exactName;
@@ -160,49 +160,53 @@ export function findExerciseByNameOrAlias(
   return exactAlias ?? null;
 }
 
-export function createCustomExercise(
+export async function createCustomExercise(
   userId: string,
   input: CreateCustomExerciseInput,
-): Exercise {
-  const db = getDb();
+): Promise<Exercise> {
   const id = `ex_${crypto.randomUUID()}`;
   const baseSlug = slugifyName(input.name);
   const uniqueSuffix = crypto.randomBytes(3).toString('hex');
   const slug = `${baseSlug}-${uniqueSuffix}`;
   const now = new Date().toISOString();
 
-  db.prepare(`
+  await query(
+    `
     INSERT INTO exercises (
       id, user_id, slug, name, tracking_type, equipment, category,
       default_rest_seconds, is_custom, aliases_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-  `).run(
-    id,
-    userId,
-    slug,
-    input.name.trim(),
-    input.trackingType,
-    input.equipment?.trim() || 'other',
-    input.category?.trim() || 'other',
-    input.defaultRestSeconds ?? 120,
-    JSON.stringify(input.aliases ?? []),
-    now,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $10)
+  `,
+    [
+      id,
+      userId,
+      slug,
+      input.name.trim(),
+      input.trackingType,
+      input.equipment?.trim() || 'other',
+      input.category?.trim() || 'other',
+      input.defaultRestSeconds ?? 120,
+      JSON.stringify(input.aliases ?? []),
+      now,
+    ],
   );
 
-  return getExerciseById(userId, id)!;
+  const created = await getExerciseById(userId, id);
+  if (!created) {
+    throw new Error('Failed to load created custom exercise');
+  }
+  return created;
 }
 
-export function updateCustomExercise(
+export async function updateCustomExercise(
   userId: string,
   exerciseId: string,
   patch: UpdateCustomExerciseInput,
-): Exercise | null {
-  const db = getDb();
-  const existing = db
-    .prepare(
-      'SELECT id FROM exercises WHERE id = ? AND user_id = ? AND is_custom = 1',
-    )
-    .get(exerciseId, userId) as { id: string } | undefined;
+): Promise<Exercise | null> {
+  const existing = await queryOne<{ id: string }>(
+    'SELECT id FROM exercises WHERE id = $1 AND user_id = $2 AND is_custom = 1',
+    [exerciseId, userId],
+  );
 
   if (!existing) return null;
 
@@ -210,52 +214,53 @@ export function updateCustomExercise(
   const params: Array<string | number> = [];
 
   if (patch.name !== undefined) {
-    setClauses.push('name = ?');
     params.push(patch.name.trim());
+    setClauses.push(`name = $${params.length}`);
   }
   if (patch.trackingType !== undefined) {
-    setClauses.push('tracking_type = ?');
     params.push(patch.trackingType);
+    setClauses.push(`tracking_type = $${params.length}`);
   }
   if (patch.equipment !== undefined) {
-    setClauses.push('equipment = ?');
     params.push(patch.equipment.trim() || 'other');
+    setClauses.push(`equipment = $${params.length}`);
   }
   if (patch.category !== undefined) {
-    setClauses.push('category = ?');
     params.push(patch.category.trim() || 'other');
+    setClauses.push(`category = $${params.length}`);
   }
   if (patch.defaultRestSeconds !== undefined) {
-    setClauses.push('default_rest_seconds = ?');
     params.push(patch.defaultRestSeconds);
+    setClauses.push(`default_rest_seconds = $${params.length}`);
   }
   if (patch.aliases !== undefined) {
-    setClauses.push('aliases_json = ?');
     params.push(JSON.stringify(patch.aliases));
+    setClauses.push(`aliases_json = $${params.length}`);
   }
 
   if (setClauses.length > 0) {
     params.push(exerciseId, userId);
-    db.prepare(
-      `UPDATE exercises SET ${setClauses.join(', ')} WHERE id = ? AND user_id = ? AND is_custom = 1`,
-    ).run(...params);
+    await query(
+      `UPDATE exercises SET ${setClauses.join(', ')} WHERE id = $${params.length - 1} AND user_id = $${params.length} AND is_custom = 1`,
+      params,
+    );
   }
 
   return getExerciseById(userId, exerciseId);
 }
 
-export function deleteCustomExercise(
+export async function deleteCustomExercise(
   userId: string,
   exerciseId: string,
-): { deleted: boolean; reason?: 'not_found' | 'not_custom' | 'referenced' } {
-  const db = getDb();
-  const existing = db
-    .prepare(
-      'SELECT id, user_id, is_custom FROM exercises WHERE id = ? AND (user_id IS NULL OR user_id = ?)',
-    )
-    .get(exerciseId, userId) as
-    | { id: string; user_id: string | null; is_custom: number }
-    | undefined;
+): Promise<{ deleted: boolean; reason?: 'not_found' | 'not_custom' | 'referenced' }> {
+  const existing = await queryOne<{
+    id: string;
+    user_id: string | null;
+    is_custom: number;
+  }>(
+    'SELECT id, user_id, is_custom FROM exercises WHERE id = $1 AND (user_id IS NULL OR user_id = $2)',
+    [exerciseId, userId],
+  );
 
   if (!existing) {
     return { deleted: false, reason: 'not_found' };
@@ -264,47 +269,48 @@ export function deleteCustomExercise(
     return { deleted: false, reason: 'not_custom' };
   }
 
-  const refWorkout = db
-    .prepare('SELECT 1 FROM workout_exercises WHERE exercise_id = ? LIMIT 1')
-    .get(exerciseId);
-  const refSchedule = db
-    .prepare(
-      'SELECT 1 FROM schedule_day_exercises WHERE exercise_id = ? LIMIT 1',
-    )
-    .get(exerciseId);
+  const refWorkout = await queryOne(
+    'SELECT 1 AS found FROM workout_exercises WHERE exercise_id = $1 LIMIT 1',
+    [exerciseId],
+  );
+  const refSchedule = await queryOne(
+    'SELECT 1 AS found FROM schedule_day_exercises WHERE exercise_id = $1 LIMIT 1',
+    [exerciseId],
+  );
 
   if (refWorkout || refSchedule) {
     return { deleted: false, reason: 'referenced' };
   }
 
-  db.prepare(
-    'DELETE FROM exercises WHERE id = ? AND user_id = ? AND is_custom = 1',
-  ).run(exerciseId, userId);
+  await query(
+    'DELETE FROM exercises WHERE id = $1 AND user_id = $2 AND is_custom = 1',
+    [exerciseId, userId],
+  );
   return { deleted: true };
 }
 
-export function setExerciseHidden(
+export async function setExerciseHidden(
   userId: string,
   exerciseId: string,
   hidden: boolean,
-): boolean {
-  const db = getDb();
-  const exists = db
-    .prepare(
-      'SELECT id FROM exercises WHERE id = ? AND (user_id IS NULL OR user_id = ?)',
-    )
-    .get(exerciseId, userId);
+): Promise<boolean> {
+  const exists = await queryOne<{ id: string }>(
+    'SELECT id FROM exercises WHERE id = $1 AND (user_id IS NULL OR user_id = $2)',
+    [exerciseId, userId],
+  );
 
   if (!exists) return false;
 
   if (hidden) {
-    db.prepare(
-      'INSERT OR IGNORE INTO hidden_exercises (user_id, exercise_id, hidden_at) VALUES (?, ?, ?)',
-    ).run(userId, exerciseId, new Date().toISOString());
+    await query(
+      'INSERT INTO hidden_exercises (user_id, exercise_id, hidden_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+      [userId, exerciseId, new Date().toISOString()],
+    );
   } else {
-    db.prepare(
-      'DELETE FROM hidden_exercises WHERE user_id = ? AND exercise_id = ?',
-    ).run(userId, exerciseId);
+    await query(
+      'DELETE FROM hidden_exercises WHERE user_id = $1 AND exercise_id = $2',
+      [userId, exerciseId],
+    );
   }
   return true;
 }

@@ -2,9 +2,10 @@
  * LiftItUp v2 Foundation — Public API Reference
  *
  * Database (`@/lib/db`):
- * - `getDb()`: Singleton SQLite `DatabaseSync` (schema v2 + idempotent `EXERCISE_CATALOG` sync; zero real-user seeding).
- * - `withTransaction(fn)`: Runs `fn(db)` inside `BEGIN IMMEDIATE` / `COMMIT` (rolls back on throw).
- * - `closeDb()`: Closes singleton handle (tests).
+ * - `query(sql, params?)`, `queryOne(sql, params?)`, `exec(sql)`: Async PostgreSQL helpers using `pg` Pool + `AsyncLocalStorage` transaction context.
+ * - `withTransaction(fn)`: Runs async `fn()` inside `BEGIN` / `COMMIT` (or `SAVEPOINT` when nested; rolls back on throw).
+ * - `pingDb()`: Initializes schema if needed and runs `SELECT 1`.
+ * - `closeDb()`, `setTestPool(pool)`: Pool lifecycle and test injection (`pg-mem`).
  * - Users (`@/lib/db/users`): `getUserById`, `getUserByUsername`, `createUser`, `updateUserSettings`,
  *   `touchUserLastActive`, `deleteExpiredGuests`, `localDateForTimezone`, `sanitizeTimezone`.
  * - Sessions & API Keys (`@/lib/db/sessions`): `createAuthSession`, `getAuthSessionByTokenHash`,
@@ -30,7 +31,16 @@
  * - `ApiError`, `parseJsonBody(req)`, `logger`.
  */
 
-export { getDb, closeDb, withTransaction } from './connection';
+export {
+  query,
+  queryOne,
+  exec,
+  pingDb,
+  closeDb,
+  withTransaction,
+  setTestPool,
+  type QueryResultLike,
+} from './connection';
 export { initSchema, syncExerciseCatalog, SCHEMA_VERSION } from './schema';
 export * from './users';
 export * from './sessions';

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { JollyMode, TrackingType, UserProfile } from '@/types/domain';
 import { applyAiImport, TRACKING_TYPES } from '@/lib/ai';
 import { listBodyMetrics } from '@/lib/db/bodyMetrics';
-import { withTransaction } from '@/lib/db/connection';
+import { query, withTransaction } from '@/lib/db/connection';
 import { localDateForTimezone } from '@/lib/db/users';
 import {
   getActiveSchedule,
@@ -307,14 +307,14 @@ function asNullableNumber(
   return val;
 }
 
-function executeToolCall(
+async function executeToolCall(
   user: UserProfile,
   name: string,
   args: Record<string, unknown>,
 ) {
   switch (name) {
     case 'get_profile': {
-      const recentBodyMetrics = listBodyMetrics(user.id, { limit: 15 });
+      const recentBodyMetrics = await listBodyMetrics(user.id, { limit: 15 });
       return wrapToolResult({
         profile: {
           id: user.id,
@@ -352,14 +352,14 @@ function executeToolCall(
       }
 
       const today = localDateForTimezone(user.timezone);
-      const schedule = getActiveSchedule(user.id);
+      const schedule = await getActiveSchedule(user.id);
       if (!schedule) {
         return wrapToolResult({ today, schedule: null, projectedCalendar: [] });
       }
 
       const rangeEnd = addDaysYmd(today, daysAhead - 1);
-      const events = listScheduleEvents(user.id, schedule.id, { to: rangeEnd });
-      const sessions = listWorkoutSessions(user.id, {
+      const events = await listScheduleEvents(user.id, schedule.id, { to: rangeEnd });
+      const sessions = await listWorkoutSessions(user.id, {
         from: schedule.rotationAnchorDate,
         to: rangeEnd,
         includeExercises: false,
@@ -430,7 +430,7 @@ function executeToolCall(
         limit = args.limit;
       }
 
-      let sessions = listWorkoutSessions(user.id, {
+      let sessions = await listWorkoutSessions(user.id, {
         from,
         to,
         limit: exerciseId ? undefined : limit,
@@ -446,7 +446,7 @@ function executeToolCall(
     }
 
     case 'list_exercises': {
-      const query = typeof args.query === 'string' ? args.query : undefined;
+      const queryStr = typeof args.query === 'string' ? args.query : undefined;
       const category =
         typeof args.category === 'string' ? args.category : undefined;
       const includeHidden =
@@ -463,8 +463,8 @@ function executeToolCall(
         trackingType = args.trackingType;
       }
 
-      const exercises = listExercises(user.id, {
-        query,
+      const exercises = await listExercises(user.id, {
+        query: queryStr,
         category,
         trackingType,
         includeHidden,
@@ -473,7 +473,7 @@ function executeToolCall(
     }
 
     case 'export_data': {
-      return wrapToolResult(buildUserExportJson(user));
+      return wrapToolResult(await buildUserExportJson(user));
     }
 
     case 'upsert_custom_exercise': {
@@ -510,7 +510,7 @@ function executeToolCall(
         : undefined;
 
       if (typeof args.id === 'string' && args.id.trim()) {
-        const updated = updateCustomExercise(user.id, args.id.trim(), {
+        const updated = await updateCustomExercise(user.id, args.id.trim(), {
           name: rawName,
           trackingType: args.trackingType,
           equipment,
@@ -527,9 +527,9 @@ function executeToolCall(
         return wrapToolResult({ created: false, exercise: updated });
       }
 
-      const existing = findExerciseByNameOrAlias(user.id, rawName);
+      const existing = await findExerciseByNameOrAlias(user.id, rawName);
       if (existing && existing.isCustom && existing.userId === user.id) {
-        const updated = updateCustomExercise(user.id, existing.id, {
+        const updated = await updateCustomExercise(user.id, existing.id, {
           name: rawName,
           trackingType: args.trackingType,
           equipment,
@@ -540,7 +540,7 @@ function executeToolCall(
         return wrapToolResult({ created: false, exercise: updated });
       }
 
-      const created = createCustomExercise(user.id, {
+      const created = await createCustomExercise(user.id, {
         name: rawName,
         trackingType: args.trackingType,
         equipment,
@@ -559,7 +559,7 @@ function executeToolCall(
       }
       const hidden =
         typeof args.hidden === 'boolean' ? args.hidden : true;
-      const ok = setExerciseHidden(user.id, exerciseId, hidden);
+      const ok = await setExerciseHidden(user.id, exerciseId, hidden);
       if (!ok) {
         return wrapToolResult({ error: 'Exercise not found' }, true);
       }
@@ -581,7 +581,7 @@ function executeToolCall(
         );
       }
 
-      const res = applyAiImport(user, rawText);
+      const res = await applyAiImport(user, rawText);
       if (!res.valid) {
         return wrapToolResult(
           { valid: false, errors: res.errors },
@@ -597,7 +597,7 @@ function executeToolCall(
     }
 
     case 'log_workout_session': {
-      return handleLogWorkoutSession(user, args);
+      return await handleLogWorkoutSession(user, args);
     }
 
     default:
@@ -605,7 +605,7 @@ function executeToolCall(
   }
 }
 
-function handleLogWorkoutSession(
+async function handleLogWorkoutSession(
   user: UserProfile,
   args: Record<string, unknown>,
 ) {
@@ -653,7 +653,7 @@ function handleLogWorkoutSession(
     );
   }
 
-  const activeSchedule = getActiveSchedule(user.id);
+  const activeSchedule = await getActiveSchedule(user.id);
   let scheduleId: string | null = activeSchedule?.id ?? null;
   let scheduleDayId: string | null = null;
   if (typeof args.scheduleDayId === 'string' && args.scheduleDayId.trim()) {
@@ -695,9 +695,9 @@ function handleLogWorkoutSession(
 
     const exMatch =
       typeof rawEx.exerciseId === 'string' && rawEx.exerciseId.trim()
-        ? getExerciseById(user.id, rawEx.exerciseId.trim())
+        ? await getExerciseById(user.id, rawEx.exerciseId.trim())
         : typeof rawEx.exerciseName === 'string' && rawEx.exerciseName.trim()
-          ? findExerciseByNameOrAlias(user.id, rawEx.exerciseName.trim())
+          ? await findExerciseByNameOrAlias(user.id, rawEx.exerciseName.trim())
           : null;
 
     if (!exMatch) {
@@ -822,52 +822,56 @@ function handleLogWorkoutSession(
     scheduleId = activeSchedule?.id ?? null;
   }
 
-  const session = withTransaction((db) => {
-    db.prepare(`
+  const session = await withTransaction(async () => {
+    await query(
+      `
       INSERT INTO workout_sessions (
         id, user_id, session_date, schedule_id, schedule_day_id,
         is_jolly, jolly_mode, title, started_at, completed_at,
         duration_minutes, user_weight_kg, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      sessionId,
-      user.id,
-      sessionDate,
-      scheduleId,
-      scheduleDayId,
-      isJolly ? 1 : 0,
-      jollyMode,
-      title,
-      now,
-      now,
-      durationMinutes,
-      user.weightKg,
-      notes,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `,
+      [
+        sessionId,
+        user.id,
+        sessionDate,
+        scheduleId,
+        scheduleDayId,
+        isJolly ? 1 : 0,
+        jollyMode,
+        title,
+        now,
+        now,
+        durationMinutes,
+        user.weightKg,
+        notes,
+      ],
     );
 
-    const insertEx = db.prepare(`
+    const insertExSql = `
       INSERT INTO workout_exercises (id, session_id, exercise_id, order_index, notes)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    const insertSet = db.prepare(`
+      VALUES ($1, $2, $3, $4, $5)
+    `;
+    const insertSetSql = `
       INSERT INTO workout_sets (
         id, workout_exercise_id, set_number, weight_kg, reps,
         time_seconds, distance_m, rest_seconds, execution_quality_pct,
         is_completed, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertRepQ = db.prepare(`
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `;
+    const insertRepQSql = `
       INSERT INTO workout_set_rep_qualities (id, workout_set_id, rep_index, quality_pct)
-      VALUES (?, ?, ?, ?)
-    `);
+      VALUES ($1, $2, $3, $4)
+    `;
 
-    preparedExercises.forEach((ex, orderIndex) => {
+    for (let orderIndex = 0; orderIndex < preparedExercises.length; orderIndex += 1) {
+      const ex = preparedExercises[orderIndex];
       const weId = `we_${crypto.randomUUID()}`;
-      insertEx.run(weId, sessionId, ex.exerciseId, orderIndex, ex.notes);
+      await query(insertExSql, [weId, sessionId, ex.exerciseId, orderIndex, ex.notes]);
 
       for (const s of ex.sets) {
         const setId = `wset_${crypto.randomUUID()}`;
-        insertSet.run(
+        await query(insertSetSql, [
           setId,
           weId,
           s.setNumber,
@@ -879,19 +883,19 @@ function handleLogWorkoutSession(
           s.executionQualityPct,
           s.isCompleted ? 1 : 0,
           now,
-        );
+        ]);
         for (const rq of s.repQualities) {
-          insertRepQ.run(
+          await query(insertRepQSql, [
             `wrq_${crypto.randomUUID()}`,
             setId,
             rq.repIndex,
             rq.qualityPct,
-          );
+          ]);
         }
       }
-    });
+    }
 
-    return getWorkoutSessionById(user.id, sessionId);
+    return await getWorkoutSessionById(user.id, sessionId);
   });
 
   return wrapToolResult({ session });
@@ -901,10 +905,10 @@ function handleLogWorkoutSession(
  * Executes a single JSON-RPC 2.0 MCP request strictly scoped to `user`.
  * Returns `null` when the message is a JSON-RPC notification (no `id`).
  */
-export function handleMcpJsonRpcRequest(
+export async function handleMcpJsonRpcRequest(
   user: UserProfile,
   rpc: JsonRpcRequest,
-): JsonRpcResponse | null {
+): Promise<JsonRpcResponse | null> {
   const hasId = rpc.id !== undefined;
   const id = hasId ? (rpc.id ?? null) : null;
   const method = rpc.method;
@@ -991,7 +995,7 @@ export function handleMcpJsonRpcRequest(
     }
 
     try {
-      const toolResult = executeToolCall(user, toolName, toolArgs);
+      const toolResult = await executeToolCall(user, toolName, toolArgs);
       if (toolResult === null) {
         return {
           jsonrpc: '2.0',

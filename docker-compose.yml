@@ -1,20 +1,38 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: liftitup-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=liftitup
+      - POSTGRES_USER=liftitup
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-liftitup}
+    volumes:
+      - liftitup-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liftitup -d liftitup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   liftitup:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: liftitup
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
-      - DATABASE_PATH=/app/data/liftitup.db
+      - DATABASE_URL=${DATABASE_URL:-postgres://liftitup:liftitup@postgres:5432/liftitup}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-https://lift.0xpuddu.com}
-    volumes:
-      - liftitup-data:/app/data
 
 volumes:
-  liftitup-data:
+  liftitup-pgdata:

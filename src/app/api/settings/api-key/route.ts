@@ -6,9 +6,9 @@ import { upsertApiKey } from '@/lib/db/sessions';
 export const POST = withApiHandler(
   'settings.apiKey.regenerate',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const { rawKey, keyHash, keyPrefix } = generateApiKey();
-    const apiKeyInfo = upsertApiKey(user.id, keyHash, keyPrefix);
+    const apiKeyInfo = await upsertApiKey(user.id, keyHash, keyPrefix);
 
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin).replace(
       /\/+$/,

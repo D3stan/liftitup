@@ -11,9 +11,9 @@ import {
   isValidAppTheme,
   isValidThemeVariant,
 } from '@/lib/theme';
-import { getDb } from './connection';
+import { query, queryOne } from './connection';
 
-interface DbUserRow {
+type DbUserRow = {
   id: string;
   username: string;
   display_name: string;
@@ -31,7 +31,7 @@ interface DbUserRow {
   is_guest: number;
   last_active_at: string;
   created_at: string;
-}
+};
 
 export interface UserWithPassword extends UserProfile {
   passwordHash: string;
@@ -118,20 +118,21 @@ export function localDateForTimezone(tz: string, date: Date = new Date()): strin
   }).format(date);
 }
 
-export function getUserById(userId: string): UserProfile | null {
-  const db = getDb();
-  const row = db
-    .prepare('SELECT * FROM users WHERE id = ?')
-    .get(userId) as DbUserRow | undefined;
+export async function getUserById(userId: string): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>('SELECT * FROM users WHERE id = $1', [
+    userId,
+  ]);
   return row ? mapUserRow(row) : null;
 }
 
-export function getUserByUsername(username: string): UserWithPassword | null {
-  const db = getDb();
+export async function getUserByUsername(
+  username: string,
+): Promise<UserWithPassword | null> {
   const normalized = username.trim().toLowerCase();
-  const row = db
-    .prepare('SELECT * FROM users WHERE lower(username) = ?')
-    .get(normalized) as DbUserRow | undefined;
+  const row = await queryOne<DbUserRow>(
+    'SELECT * FROM users WHERE lower(username) = $1',
+    [normalized],
+  );
   if (!row) return null;
   return {
     ...mapUserRow(row),
@@ -139,8 +140,7 @@ export function getUserByUsername(username: string): UserWithPassword | null {
   };
 }
 
-export function createUser(input: CreateUserInput): UserProfile {
-  const db = getDb();
+export async function createUser(input: CreateUserInput): Promise<UserProfile> {
   const now = new Date().toISOString();
   const id = input.id ?? `usr_${crypto.randomUUID()}`;
   const username = input.username.trim().toLowerCase();
@@ -154,79 +154,83 @@ export function createUser(input: CreateUserInput): UserProfile {
     ? input.themeVariant
     : DEFAULT_THEME_VARIANT;
 
-  db.prepare(`
+  const row = await queryOne<DbUserRow>(
+    `
     INSERT INTO users (
       id, username, display_name, password_hash,
       height_cm, weight_kg, age, training_years,
       unit, timezone, theme, theme_variant,
       enable_set_quality, apple_fitness_enabled,
       is_guest, last_active_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
-    username,
-    displayName,
-    input.passwordHash,
-    input.heightCm ?? null,
-    input.weightKg ?? 75,
-    input.age ?? null,
-    input.trainingYears ?? null,
-    unit,
-    timezone,
-    theme,
-    themeVariant,
-    input.enableSetQuality ? 1 : 0,
-    input.appleFitnessEnabled === false ? 0 : 1,
-    input.isGuest ? 1 : 0,
-    now,
-    now,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    RETURNING *
+    `,
+    [
+      id,
+      username,
+      displayName,
+      input.passwordHash,
+      input.heightCm ?? null,
+      input.weightKg ?? 75,
+      input.age ?? null,
+      input.trainingYears ?? null,
+      unit,
+      timezone,
+      theme,
+      themeVariant,
+      input.enableSetQuality ? 1 : 0,
+      input.appleFitnessEnabled === false ? 0 : 1,
+      input.isGuest ? 1 : 0,
+      now,
+      now,
+    ],
   );
 
-  return getUserById(id)!;
+  return mapUserRow(row!);
 }
 
-export function updateUserSettings(
+export async function updateUserSettings(
   userId: string,
   patch: UpdateUserSettingsInput,
-): UserProfile | null {
-  const db = getDb();
+): Promise<UserProfile | null> {
   const setClauses: string[] = [];
   const params: Array<string | number | null> = [];
+  let idx = 1;
 
   if (patch.displayName !== undefined) {
-    setClauses.push('display_name = ?');
+    setClauses.push(`display_name = $${idx++}`);
     params.push(patch.displayName.trim());
   }
   if (patch.heightCm !== undefined) {
-    setClauses.push('height_cm = ?');
+    setClauses.push(`height_cm = $${idx++}`);
     params.push(patch.heightCm);
   }
   if (patch.weightKg !== undefined) {
-    setClauses.push('weight_kg = ?');
+    setClauses.push(`weight_kg = $${idx++}`);
     params.push(patch.weightKg);
   }
   if (patch.age !== undefined) {
-    setClauses.push('age = ?');
+    setClauses.push(`age = $${idx++}`);
     params.push(patch.age);
   }
   if (patch.trainingYears !== undefined) {
-    setClauses.push('training_years = ?');
+    setClauses.push(`training_years = $${idx++}`);
     params.push(patch.trainingYears);
   }
   if (patch.unit !== undefined) {
-    setClauses.push('unit = ?');
+    setClauses.push(`unit = $${idx++}`);
     params.push(patch.unit === 'lb' ? 'lb' : 'kg');
   }
   if (patch.timezone !== undefined) {
-    setClauses.push('timezone = ?');
+    setClauses.push(`timezone = $${idx++}`);
     params.push(sanitizeTimezone(patch.timezone));
   }
   if (patch.theme !== undefined) {
-    setClauses.push('theme = ?');
+    setClauses.push(`theme = $${idx++}`);
     params.push(isValidAppTheme(patch.theme) ? patch.theme : DEFAULT_THEME);
   }
   if (patch.themeVariant !== undefined) {
-    setClauses.push('theme_variant = ?');
+    setClauses.push(`theme_variant = $${idx++}`);
     params.push(
       isValidThemeVariant(patch.themeVariant)
         ? patch.themeVariant
@@ -234,11 +238,11 @@ export function updateUserSettings(
     );
   }
   if (patch.enableSetQuality !== undefined) {
-    setClauses.push('enable_set_quality = ?');
+    setClauses.push(`enable_set_quality = $${idx++}`);
     params.push(patch.enableSetQuality ? 1 : 0);
   }
   if (patch.appleFitnessEnabled !== undefined) {
-    setClauses.push('apple_fitness_enabled = ?');
+    setClauses.push(`apple_fitness_enabled = $${idx++}`);
     params.push(patch.appleFitnessEnabled ? 1 : 0);
   }
 
@@ -247,37 +251,40 @@ export function updateUserSettings(
   }
 
   params.push(userId);
-  db.prepare(`UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`).run(
-    ...params,
+  const row = await queryOne<DbUserRow>(
+    `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
+    params,
   );
-  return getUserById(userId);
+  return row ? mapUserRow(row) : null;
 }
 
 /**
  * Updates users.last_active_at throttled to at most once every 5 minutes
  * to avoid unnecessary write contention on read requests.
  */
-export function touchUserLastActive(userId: string): void {
-  const db = getDb();
+export async function touchUserLastActive(userId: string): Promise<void> {
   const now = new Date();
   const nowIso = now.toISOString();
   const thresholdIso = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
-  db.prepare(
-    'UPDATE users SET last_active_at = ? WHERE id = ? AND last_active_at < ?',
-  ).run(nowIso, userId, thresholdIso);
+  await query(
+    'UPDATE users SET last_active_at = $1 WHERE id = $2 AND last_active_at < $3',
+    [nowIso, userId, thresholdIso],
+  );
 }
 
 /**
  * Deletes guest sandbox users inactive for longer than `olderThanHours`.
  * Returns the number of purged guest users (cascade cleans up all child rows).
  */
-export function deleteExpiredGuests(olderThanHours = 24): number {
-  const db = getDb();
+export async function deleteExpiredGuests(
+  olderThanHours = 24,
+): Promise<number> {
   const cutoffIso = new Date(
     Date.now() - olderThanHours * 60 * 60 * 1000,
   ).toISOString();
-  const res = db
-    .prepare('DELETE FROM users WHERE is_guest = 1 AND last_active_at < ?')
-    .run(cutoffIso);
-  return Number(res.changes ?? 0);
+  const res = await query(
+    'DELETE FROM users WHERE is_guest = 1 AND last_active_at < $1',
+    [cutoffIso],
+  );
+  return Number(res.rowCount ?? 0);
 }

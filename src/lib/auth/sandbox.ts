@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { TrackingType, UserProfile } from '@/types/domain';
-import { withTransaction } from '@/lib/db/connection';
+import { query, withTransaction } from '@/lib/db/connection';
 import { recordBodyMetric } from '@/lib/db/bodyMetrics';
 import {
   createUser,
@@ -19,14 +19,14 @@ let lastPurgeAtMs = 0;
 /**
  * Purges guest sandboxes inactive for >24 hours, throttled to at most once per hour per process.
  */
-export function purgeExpiredGuestsIfDue(force = false): number {
+export async function purgeExpiredGuestsIfDue(force = false): Promise<number> {
   const now = Date.now();
   if (!force && now - lastPurgeAtMs < PURGE_INTERVAL_MS) {
     return 0;
   }
   lastPurgeAtMs = now;
   try {
-    const purged = deleteExpiredGuests(GUEST_TTL_HOURS);
+    const purged = await deleteExpiredGuests(GUEST_TTL_HOURS);
     if (purged > 0) {
       logger.info('purged expired guest sandboxes', { purgedCount: purged });
     }
@@ -70,17 +70,17 @@ interface SampleDayTemplate {
  * fictional 6-day Push/Pull/Legs/Rest/Upper/Lower rotation (including calisthenics
  * and a custom exercise), ~3 weeks of workout history with notes, and body_metrics.
  */
-export function createGuestSandbox(rawTimezone?: string): UserProfile {
-  purgeExpiredGuestsIfDue();
+export async function createGuestSandbox(rawTimezone?: string): Promise<UserProfile> {
+  await purgeExpiredGuestsIfDue();
 
   const timezone = sanitizeTimezone(rawTimezone);
   const today = localDateForTimezone(timezone);
   const anchorDate = addDaysYmd(today, -21);
   const nowIso = new Date().toISOString();
 
-  return withTransaction((db) => {
+  return await withTransaction(async () => {
     const suffix = crypto.randomBytes(4).toString('hex');
-    const user = createUser({
+    const user = await createUser({
       username: `guest_${suffix}`,
       displayName: 'Sample Athlete',
       passwordHash: '!guest-no-login!',
@@ -96,7 +96,7 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
     });
 
     // Fictional custom exercise example for the sandbox
-    const customRingPushup = createCustomExercise(user.id, {
+    const customRingPushup = await createCustomExercise(user.id, {
       name: 'Ring Tempo Push-Up',
       trackingType: 'bodyweight_reps',
       equipment: 'bodyweight',
@@ -322,43 +322,46 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
     ];
 
     const scheduleId = `sch_${crypto.randomUUID()}`;
-    db.prepare(`
+    await query(
+      `
       INSERT INTO schedules (
         id, user_id, name, is_active, rotation_anchor_date, rotation_anchor_index,
         created_at, updated_at
-      ) VALUES (?, ?, ?, 1, ?, 0, ?, ?)
-    `).run(
-      scheduleId,
-      user.id,
-      '6-Day Rotation (PPL / Upper-Lower)',
-      anchorDate,
-      nowIso,
-      nowIso,
+      ) VALUES ($1, $2, $3, 1, $4, 0, $5, $6)
+    `,
+      [
+        scheduleId,
+        user.id,
+        '6-Day Rotation (PPL / Upper-Lower)',
+        anchorDate,
+        nowIso,
+        nowIso,
+      ],
     );
 
-    const insertDay = db.prepare(`
+    const insertDaySql = `
       INSERT INTO schedule_days (id, schedule_id, position, label, is_rest_day)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    const insertDayEx = db.prepare(`
+      VALUES ($1, $2, $3, $4, $5)
+    `;
+    const insertDayExSql = `
       INSERT INTO schedule_day_exercises (
         id, schedule_day_id, exercise_id, order_index,
         target_sets, target_reps, target_reps_min, target_reps_max,
         target_time_seconds, target_weight_kg, target_distance_m,
         rest_seconds, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-    `);
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12)
+    `;
 
     const dayIds: string[] = [];
     for (let pos = 0; pos < dayTemplates.length; pos++) {
       const tpl = dayTemplates[pos];
       const dayId = `sday_${crypto.randomUUID()}`;
       dayIds.push(dayId);
-      insertDay.run(dayId, scheduleId, pos, tpl.label, tpl.isRestDay ? 1 : 0);
+      await query(insertDaySql, [dayId, scheduleId, pos, tpl.label, tpl.isRestDay ? 1 : 0]);
 
       for (let i = 0; i < tpl.exercises.length; i++) {
         const ex = tpl.exercises[i];
-        insertDayEx.run(
+        await query(insertDayExSql, [
           `sdex_${crypto.randomUUID()}`,
           dayId,
           ex.exerciseId,
@@ -371,30 +374,30 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
           ex.targetWeightKg ?? null,
           ex.restSeconds,
           ex.notes ?? '',
-        );
+        ]);
       }
     }
 
     // Seed ~3 weeks of fictional workout history from anchorDate (today - 21) up to today - 1
-    const insertSession = db.prepare(`
+    const insertSessionSql = `
       INSERT INTO workout_sessions (
         id, user_id, session_date, schedule_id, schedule_day_id,
         is_jolly, jolly_mode, title, started_at, completed_at,
         duration_minutes, user_weight_kg, notes,
         apple_watch_kcal, apple_watch_avg_hr, apple_watch_max_hr, cid
-      ) VALUES (?, ?, ?, ?, ?, 0, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
-    `);
-    const insertWorkoutEx = db.prepare(`
+      ) VALUES ($1, $2, $3, $4, $5, 0, NULL, $6, $7, $8, $9, $10, $11, NULL, NULL, NULL, NULL)
+    `;
+    const insertWorkoutExSql = `
       INSERT INTO workout_exercises (id, session_id, exercise_id, order_index, notes)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    const insertWorkoutSet = db.prepare(`
+      VALUES ($1, $2, $3, $4, $5)
+    `;
+    const insertWorkoutSetSql = `
       INSERT INTO workout_sets (
         id, workout_exercise_id, set_number, weight_kg, reps,
         time_seconds, distance_m, rest_seconds, execution_quality_pct,
         is_completed, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 1, ?)
-    `);
+      ) VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, 1, $9)
+    `;
 
     const sessionNotesByOffset: Record<number, string> = {
       0: 'Solid start to the block, bar speed felt crisp.',
@@ -423,7 +426,7 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
       const completedAt = `${dateYmd}T18:22:00.000Z`;
       const bodyWeight = Number((75.2 - weekIndex * 0.25).toFixed(1));
 
-      insertSession.run(
+      await query(insertSessionSql, [
         sessionId,
         user.id,
         dateYmd,
@@ -435,7 +438,7 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
         52,
         bodyWeight,
         sessionNotesByOffset[offset] ?? '',
-      );
+      ]);
 
       for (let i = 0; i < tpl.exercises.length; i++) {
         const ex = tpl.exercises[i];
@@ -446,7 +449,7 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
             : offset === 7 && i === 0
               ? 'Warmup felt tight, took an extra minute'
               : '';
-        insertWorkoutEx.run(weId, sessionId, ex.exerciseId, i, exNote);
+        await query(insertWorkoutExSql, [weId, sessionId, ex.exerciseId, i, exNote]);
 
         for (let setNum = 1; setNum <= ex.targetSets; setNum++) {
           const progWeight =
@@ -466,7 +469,7 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
           const qualityPct =
             offset === 16 && i === 0 && setNum === ex.targetSets ? 85 : null;
 
-          insertWorkoutSet.run(
+          await query(insertWorkoutSetSql, [
             `wset_${crypto.randomUUID()}`,
             weId,
             setNum,
@@ -476,7 +479,7 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
             ex.restSeconds,
             qualityPct,
             completedAt,
-          );
+          ]);
         }
       }
     }
@@ -489,7 +492,7 @@ export function createGuestSandbox(rawTimezone?: string): UserProfile {
       { offset: 0, weightKg: 74.5 },
     ];
     for (const pt of metricPoints) {
-      recordBodyMetric({
+      await recordBodyMetric({
         userId: user.id,
         measuredOn: addDaysYmd(today, pt.offset),
         weightKg: pt.weightKg,

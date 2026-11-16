@@ -8,7 +8,7 @@ import {
 } from '@/lib/export';
 
 export const GET = withApiHandler('export.get', async (req: NextRequest, ctx) => {
-  const { user } = requireAuth(req, ctx);
+  const { user } = await requireAuth(req, ctx);
   const rawFormat = req.nextUrl.searchParams.get('format') ?? 'json';
   const format = rawFormat.trim().toLowerCase();
 
@@ -19,7 +19,7 @@ export const GET = withApiHandler('export.get', async (req: NextRequest, ctx) =>
   const filename = getExportFilename(user, format);
 
   if (format === 'csv') {
-    const csv = buildUserExportCsv(user);
+    const csv = await buildUserExportCsv(user);
     return new NextResponse(csv, {
       status: 200,
       headers: {
@@ -30,7 +30,7 @@ export const GET = withApiHandler('export.get', async (req: NextRequest, ctx) =>
     });
   }
 
-  const payload = buildUserExportJson(user);
+  const payload = await buildUserExportJson(user);
   return new NextResponse(JSON.stringify(payload, null, 2), {
     status: 200,
     headers: {

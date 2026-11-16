@@ -26,8 +26,8 @@ interface PatchExerciseBody {
 export const GET = withApiHandler<ExerciseParams>(
   'exercises.get',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
-    const exercise = getExerciseById(user.id, ctx.params.id);
+    const { user } = await requireAuth(req, ctx);
+    const exercise = await getExerciseById(user.id, ctx.params.id);
     if (!exercise) {
       throw ApiError.notFound('Exercise not found');
     }
@@ -38,9 +38,9 @@ export const GET = withApiHandler<ExerciseParams>(
 export const PATCH = withApiHandler<ExerciseParams>(
   'exercises.patch',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const exerciseId = ctx.params.id;
-    const existing = getExerciseById(user.id, exerciseId);
+    const existing = await getExerciseById(user.id, exerciseId);
     if (!existing) {
       throw ApiError.notFound('Exercise not found');
     }
@@ -51,7 +51,7 @@ export const PATCH = withApiHandler<ExerciseParams>(
       if (typeof body.hidden !== 'boolean') {
         throw ApiError.validation('hidden must be a boolean');
       }
-      setExerciseHidden(user.id, exerciseId, body.hidden);
+      await setExerciseHidden(user.id, exerciseId, body.hidden);
     }
 
     const hasCustomEdits =
@@ -114,10 +114,10 @@ export const PATCH = withApiHandler<ExerciseParams>(
         patch.defaultRestSeconds = body.defaultRestSeconds;
       }
 
-      updateCustomExercise(user.id, exerciseId, patch);
+      await updateCustomExercise(user.id, exerciseId, patch);
     }
 
-    const updated = getExerciseById(user.id, exerciseId);
+    const updated = await getExerciseById(user.id, exerciseId);
     return NextResponse.json({ exercise: updated });
   },
 );
@@ -125,8 +125,8 @@ export const PATCH = withApiHandler<ExerciseParams>(
 export const DELETE = withApiHandler<ExerciseParams>(
   'exercises.delete',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
-    const result = deleteCustomExercise(user.id, ctx.params.id);
+    const { user } = await requireAuth(req, ctx);
+    const result = await deleteCustomExercise(user.id, ctx.params.id);
 
     if (!result.deleted) {
       if (result.reason === 'not_found') {

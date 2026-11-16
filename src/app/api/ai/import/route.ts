@@ -13,13 +13,13 @@ interface ImportBody {
 }
 
 export const GET = withApiHandler('ai.import.context', async (req: NextRequest, ctx) => {
-  const { user } = requireAuth(req, ctx);
-  const context = getAiPromptContext(user);
+  const { user } = await requireAuth(req, ctx);
+  const context = await getAiPromptContext(user);
   return NextResponse.json(context);
 });
 
 export const POST = withApiHandler('ai.import', async (req: NextRequest, ctx) => {
-  const { user } = requireAuth(req, ctx);
+  const { user } = await requireAuth(req, ctx);
   const body = await parseJsonBody<ImportBody>(req);
 
   if (body.mode !== 'validate' && body.mode !== 'confirm') {
@@ -31,11 +31,11 @@ export const POST = withApiHandler('ai.import', async (req: NextRequest, ctx) =>
   }
 
   if (body.mode === 'validate') {
-    const result = validateImportForUser(user, body.rawText);
+    const result = await validateImportForUser(user, body.rawText);
     return NextResponse.json(result);
   }
 
-  const result = applyAiImport(user, body.rawText);
+  const result = await applyAiImport(user, body.rawText);
   if (!result.valid) {
     throw ApiError.validation('Invalid AI plan JSON', { errors: result.errors });
   }

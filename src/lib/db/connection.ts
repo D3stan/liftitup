@@ -1,165 +1,207 @@
-import { DatabaseSync } from 'node:sqlite';
-import fs from 'node:fs';
-import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { logger } from '@/lib/logger';
-import { SCHEMA_VERSION, initSchema } from './schema';
+import { initSchema } from './schema';
 
-let dbInstance: DatabaseSync | null = null;
-let dbInstancePath: string | null = null;
+export type QueryResultLike<T = Record<string, unknown>> = {
+  rows: T[];
+  rowCount: number;
+};
 
-function resolveDbPath(): string {
-  return (
-    process.env.DATABASE_PATH ||
-    path.join(process.cwd(), 'data', 'liftitup.db')
-  );
+interface TxContext {
+  client: PoolClient;
+  depth: number;
 }
 
-/**
- * Q3 deploy wipe: if an existing SQLite file on disk has legacy v1 tables
- * (missing `schema_version` or `version < SCHEMA_VERSION`), back it up to
- * `<name>.v1-backup-<ts>.db` (removing any stale WAL/SHM sidecars) so a fresh
- * v2 database is initialized cleanly with zero manual intervention.
- */
-function backupLegacyDbIfNeeded(targetPath: string): void {
-  if (targetPath === ':memory:' || !fs.existsSync(targetPath)) {
-    return;
+const txStorage = new AsyncLocalStorage<TxContext>();
+
+let poolInstance: Pool | null = null;
+let initPromise: Promise<void> | null = null;
+
+function isPgMemPool(pool: Pool): boolean {
+  return pool.constructor?.name === 'MemPg';
+}
+
+function getPool(): Pool {
+  if (poolInstance) {
+    return poolInstance;
   }
-  const stat = fs.statSync(targetPath);
-  if (stat.size === 0) {
-    return;
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is required');
   }
-
-  let needsBackup = false;
-  let existingTableCount = 0;
-
-  const probe = new DatabaseSync(targetPath);
-  try {
-    const tables = probe
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-      )
-      .all() as unknown as Array<{ name: string }>;
-
-    existingTableCount = tables.length;
-    if (existingTableCount === 0) {
-      return;
-    }
-
-    const hasSchemaVersion = tables.some((t) => t.name === 'schema_version');
-    if (!hasSchemaVersion) {
-      needsBackup = true;
-    } else {
-      const row = probe
-        .prepare('SELECT MAX(version) AS version FROM schema_version')
-        .get() as { version: number | null } | undefined;
-      const version = row?.version === null || row?.version === undefined ? 0 : Number(row.version);
-      if (version < SCHEMA_VERSION) {
-        needsBackup = true;
-      }
-    }
-
-    if (needsBackup) {
-      try {
-        probe.exec('PRAGMA wal_checkpoint(TRUNCATE);');
-      } catch {
-        // Ignore checkpoint error if DB is not in WAL mode
-      }
-    }
-  } finally {
-    probe.close();
-  }
-
-  if (!needsBackup) {
-    return;
-  }
-
-  const dir = path.dirname(targetPath);
-  const rawExt = path.extname(targetPath);
-  const ext = rawExt || '.db';
-  const base = path.basename(targetPath, rawExt);
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = path.join(dir, `${base}.v1-backup-${ts}${ext}`);
-
-  fs.renameSync(targetPath, backupPath);
-
-  for (const sidecar of [`${targetPath}-wal`, `${targetPath}-shm`]) {
-    if (fs.existsSync(sidecar)) {
-      fs.unlinkSync(sidecar);
-    }
-  }
-
-  logger.info('backed up legacy v1 database and initializing fresh v2 database', {
-    dbPath: targetPath,
-    backupPath,
-    existingTableCount,
+  poolInstance = new Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 30_000,
   });
+  return poolInstance;
+}
+
+async function ensureSchema(): Promise<Pool> {
+  const pool = getPool();
+  if (!initPromise) {
+    initPromise = initSchema(pool).catch((err) => {
+      initPromise = null;
+      throw err;
+    });
+  }
+  await initPromise;
+  return pool;
 }
 
 /**
- * Returns the singleton SQLite DatabaseSync handle, initializing schema v2
- * and syncing EXERCISE_CATALOG on first connection.
+ * Overrides or clears the active Pool instance for unit tests (e.g., pg-mem).
+ * Resets cached schema initialization state.
  */
-export function getDb(): DatabaseSync {
-  const targetPath = resolveDbPath();
-  if (dbInstance && dbInstancePath === targetPath) {
-    return dbInstance;
+export function setTestPool(pool: Pool | null): void {
+  const prev = poolInstance;
+  initPromise = null;
+  poolInstance = pool;
+  if (prev && prev !== pool) {
+    void prev.end().catch(() => {});
   }
+}
 
-  if (dbInstance) {
+/**
+ * Closes the singleton Pool and clears cached schema initialization state.
+ */
+export async function closeDb(): Promise<void> {
+  initPromise = null;
+  if (poolInstance) {
+    const toClose = poolInstance;
+    poolInstance = null;
+    await toClose.end();
+  }
+}
+
+/**
+ * Ensures the database schema is initialized and verifies connectivity.
+ */
+export async function pingDb(): Promise<void> {
+  const pool = await ensureSchema();
+  await pool.query('SELECT 1');
+}
+
+/**
+ * Executes a parameterized PostgreSQL query against the active transaction client
+ * (when inside `withTransaction`) or the singleton Pool.
+ */
+export async function query<T extends QueryResultRow = Record<string, unknown>>(
+  sql: string,
+  params?: unknown[],
+): Promise<QueryResultLike<T>> {
+  const pool = await ensureSchema();
+  const tx = txStorage.getStore();
+  const runner = tx ? tx.client : pool;
+  const res =
+    params && params.length > 0
+      ? await runner.query<T>(sql, params)
+      : await runner.query<T>(sql);
+  return {
+    rows: res.rows,
+    rowCount: res.rowCount ?? 0,
+  };
+}
+
+/**
+ * Executes a parameterized query and returns the first row or null.
+ */
+export async function queryOne<T extends QueryResultRow = Record<string, unknown>>(
+  sql: string,
+  params?: unknown[],
+): Promise<T | null> {
+  const res = await query<T>(sql, params);
+  return res.rows[0] ?? null;
+}
+
+/**
+ * Executes raw SQL/DDL statements against the active transaction client or Pool.
+ */
+export async function exec(sql: string): Promise<void> {
+  const pool = await ensureSchema();
+  const tx = txStorage.getStore();
+  const runner = tx ? tx.client : pool;
+  await runner.query(sql);
+}
+
+/**
+ * Runs an async callback inside a PostgreSQL transaction using AsyncLocalStorage.
+ * Nested calls automatically use SAVEPOINT / RELEASE SAVEPOINT / ROLLBACK TO SAVEPOINT.
+ */
+export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  const pool = await ensureSchema();
+  const existing = txStorage.getStore();
+
+  if (existing) {
+    if (isPgMemPool(pool)) {
+      return txStorage.run(
+        { client: existing.client, depth: existing.depth + 1 },
+        fn,
+      );
+    }
+
+    const savepoint = `sp_${existing.depth}`;
+    await existing.client.query(`SAVEPOINT ${savepoint}`);
     try {
-      dbInstance.close();
-    } catch {
-      // ignore close errors during path switch
-    }
-    dbInstance = null;
-    dbInstancePath = null;
-  }
-
-  if (targetPath !== ':memory:') {
-    const dir = path.dirname(targetPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    backupLegacyDbIfNeeded(targetPath);
-  }
-
-  const db = new DatabaseSync(targetPath);
-  initSchema(db);
-  dbInstance = db;
-  dbInstancePath = targetPath;
-  return db;
-}
-
-/**
- * Closes the active database connection (mainly for tests).
- */
-export function closeDb(): void {
-  if (dbInstance) {
-    try {
-      dbInstance.close();
-    } finally {
-      dbInstance = null;
-      dbInstancePath = null;
+      const result = await txStorage.run(
+        { client: existing.client, depth: existing.depth + 1 },
+        fn,
+      );
+      await existing.client.query(`RELEASE SAVEPOINT ${savepoint}`);
+      return result;
+    } catch (err) {
+      try {
+        await existing.client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      } catch {
+        // ignore rollback failure if connection/transaction aborted
+      }
+      throw err;
     }
   }
-}
 
-/**
- * Runs a synchronous callback inside an IMMEDIATE SQLite transaction.
- */
-export function withTransaction<T>(fn: (db: DatabaseSync) => T): T {
-  const db = getDb();
-  db.exec('BEGIN IMMEDIATE');
+  const client = await pool.connect();
   try {
-    const result = fn(db);
-    db.exec('COMMIT');
+    await client.query('BEGIN');
+    const result = await txStorage.run({ client, depth: 1 }, fn);
+    await client.query('COMMIT');
     return result;
   } catch (err) {
     try {
-      db.exec('ROLLBACK');
+      await client.query('ROLLBACK');
     } catch {
       // ignore rollback failure if connection closed
     }
     throw err;
+  } finally {
+    client.release();
   }
 }
+
+const SHUTDOWN_KEY = Symbol.for('liftitup.db.shutdownRegistered');
+
+function registerShutdownHandlers(): void {
+  if (typeof process === 'undefined' || typeof process.once !== 'function') {
+    return;
+  }
+  const g = globalThis as Record<symbol, boolean | undefined>;
+  if (g[SHUTDOWN_KEY]) {
+    return;
+  }
+  g[SHUTDOWN_KEY] = true;
+
+  const onSignal = () => {
+    void closeDb().catch((err) => {
+      logger.warn('failed to close PostgreSQL pool on shutdown', { err });
+    });
+  };
+
+  try {
+    process.once('SIGTERM', onSignal);
+    process.once('SIGINT', onSignal);
+  } catch {
+    // ignore in restricted/test runtimes
+  }
+}
+
+registerShutdownHandlers();

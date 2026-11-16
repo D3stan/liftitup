@@ -23,7 +23,7 @@ export const POST = withApiHandler('auth.login', async (req: NextRequest, ctx) =
     throw ApiError.validation('password is required');
   }
 
-  const found = getUserByUsername(body.username);
+  const found = await getUserByUsername(body.username);
   if (!found || found.isGuest) {
     await verifyPassword(body.password, DUMMY_SCRYPT_HASH);
     throw ApiError.unauthorized('Invalid username or password');
@@ -37,5 +37,5 @@ export const POST = withApiHandler('auth.login', async (req: NextRequest, ctx) =
   const { passwordHash: _ignored, ...user } = found;
   ctx.setUserId(user.id);
   const res = NextResponse.json({ user });
-  return createSessionCookieForUser(res, user.id);
+  return await createSessionCookieForUser(res, user.id);
 });

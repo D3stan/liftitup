@@ -4,12 +4,11 @@ import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
 import { requireAuth } from '@/lib/auth';
 import {
   getActiveSchedule,
-  getDb,
   listScheduleEvents,
   listWorkoutSessions,
   localDateForTimezone,
-  withTransaction,
 } from '@/lib/db';
+import { query, withTransaction } from '@/lib/db/connection';
 import {
   getPointerForDate,
   remapPointerAfterEdit,
@@ -229,7 +228,7 @@ function validateDays(rawDays: unknown): ValidatedDay[] {
 
 export const GET = withApiHandler('api.schedule.get', async (req, ctx) => {
   const auth = await requireAuth(req, ctx);
-  const schedule = getActiveSchedule(auth.user.id);
+  const schedule = await getActiveSchedule(auth.user.id);
   return NextResponse.json({ schedule });
 });
 
@@ -253,19 +252,16 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
     todayStr = localDateForTimezone(auth.user.timezone);
   }
 
-  const db = getDb();
-
   // Verify all referenced exercises exist and are visible to this user
   const exerciseIds = Array.from(
     new Set(days.flatMap((d) => d.exercises.map((e) => e.exerciseId))),
   );
   if (exerciseIds.length > 0) {
-    const placeholders = exerciseIds.map(() => '?').join(',');
-    const foundRows = db
-      .prepare(
-        `SELECT id FROM exercises WHERE id IN (${placeholders}) AND (user_id IS NULL OR user_id = ?)`,
-      )
-      .all(...exerciseIds, auth.user.id) as Array<{ id: string }>;
+    const placeholders = exerciseIds.map((_, i) => `$${i + 1}`).join(', ');
+    const { rows: foundRows } = await query<{ id: string }>(
+      `SELECT id FROM exercises WHERE id IN (${placeholders}) AND (user_id IS NULL OR user_id = $${exerciseIds.length + 1})`,
+      [...exerciseIds, auth.user.id],
+    );
     const foundSet = new Set(foundRows.map((r) => r.id));
     for (const id of exerciseIds) {
       if (!foundSet.has(id)) {
@@ -276,8 +272,8 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
 
   const now = new Date().toISOString();
 
-  withTransaction(() => {
-    const oldSchedule = getActiveSchedule(auth.user.id);
+  await withTransaction(async () => {
+    const oldSchedule = await getActiveSchedule(auth.user.id);
 
     // 1. Compute today's queue pointer on the old schedule before editing
     let oldQueue: QueueDay[] = [];
@@ -293,8 +289,8 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
         label: d.label,
         isRestDay: d.isRestDay,
       }));
-      const events = listScheduleEvents(auth.user.id, oldSchedule.id);
-      const sessions = listWorkoutSessions(auth.user.id, {
+      const events = await listScheduleEvents(auth.user.id, oldSchedule.id);
+      const sessions = await listWorkoutSessions(auth.user.id, {
         from: oldSchedule.rotationAnchorDate,
         includeExercises: false,
       });
@@ -353,54 +349,32 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
       // Delete removed days first (ON DELETE CASCADE cleans up their exercises)
       for (const oldDay of oldSchedule.days) {
         if (!usedDayIds.has(oldDay.id)) {
-          db.prepare('DELETE FROM schedule_days WHERE id = ?').run(oldDay.id);
+          await query('DELETE FROM schedule_days WHERE id = $1', [oldDay.id]);
         }
       }
 
       // Temporarily shift surviving day positions negative to avoid UNIQUE(schedule_id, position) collisions
-      const shiftStmt = db.prepare(
-        'UPDATE schedule_days SET position = ? WHERE id = ?',
-      );
-      resolvedDays.forEach((d, idx) => {
+      for (let idx = 0; idx < resolvedDays.length; idx++) {
+        const d = resolvedDays[idx];
         if (d.isExisting) {
-          shiftStmt.run(-1000 - idx, d.resolvedId);
-        }
-      });
-
-      const updateDayStmt = db.prepare(
-        'UPDATE schedule_days SET position = ?, label = ?, is_rest_day = ? WHERE id = ?',
-      );
-      const insertDayStmt = db.prepare(
-        'INSERT INTO schedule_days (id, schedule_id, position, label, is_rest_day) VALUES (?, ?, ?, ?, ?)',
-      );
-      const deleteDayExStmt = db.prepare(
-        'DELETE FROM schedule_day_exercises WHERE id = ?',
-      );
-      const updateExStmt = db.prepare(`
-        UPDATE schedule_day_exercises
-        SET exercise_id = ?, order_index = ?, target_sets = ?, target_reps = ?,
-            target_reps_min = ?, target_reps_max = ?, target_time_seconds = ?,
-            target_weight_kg = ?, target_distance_m = ?, rest_seconds = ?, notes = ?
-        WHERE id = ?
-      `);
-      const insertExStmt = db.prepare(`
-        INSERT INTO schedule_day_exercises (
-          id, schedule_day_id, exercise_id, order_index, target_sets, target_reps,
-          target_reps_min, target_reps_max, target_time_seconds, target_weight_kg,
-          target_distance_m, rest_seconds, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      resolvedDays.forEach((d, pos) => {
-        if (d.isExisting) {
-          updateDayStmt.run(pos, d.label, d.isRestDay ? 1 : 0, d.resolvedId);
-        } else {
-          insertDayStmt.run(
+          await query('UPDATE schedule_days SET position = $1 WHERE id = $2', [
+            -1000 - idx,
             d.resolvedId,
-            scheduleId,
-            pos,
-            d.label,
-            d.isRestDay ? 1 : 0,
+          ]);
+        }
+      }
+
+      for (let pos = 0; pos < resolvedDays.length; pos++) {
+        const d = resolvedDays[pos];
+        if (d.isExisting) {
+          await query(
+            'UPDATE schedule_days SET position = $1, label = $2, is_rest_day = $3 WHERE id = $4',
+            [pos, d.label, d.isRestDay ? 1 : 0, d.resolvedId],
+          );
+        } else {
+          await query(
+            'INSERT INTO schedule_days (id, schedule_id, position, label, is_rest_day) VALUES ($1, $2, $3, $4, $5)',
+            [d.resolvedId, scheduleId, pos, d.label, d.isRestDay ? 1 : 0],
           );
         }
 
@@ -422,45 +396,62 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
 
         for (const oldExId of existingExSet) {
           if (!usedExIds.has(oldExId)) {
-            deleteDayExStmt.run(oldExId);
+            await query('DELETE FROM schedule_day_exercises WHERE id = $1', [
+              oldExId,
+            ]);
           }
         }
 
-        resolvedExercises.forEach((ex, orderIdx) => {
+        for (let orderIdx = 0; orderIdx < resolvedExercises.length; orderIdx++) {
+          const ex = resolvedExercises[orderIdx];
           if (ex.isExisting) {
-            updateExStmt.run(
-              ex.exerciseId,
-              orderIdx,
-              ex.targetSets,
-              ex.targetReps,
-              ex.targetRepsMin,
-              ex.targetRepsMax,
-              ex.targetTimeSeconds,
-              ex.targetWeightKg,
-              ex.targetDistanceM,
-              ex.restSeconds,
-              ex.notes,
-              ex.resolvedId,
+            await query(
+              `UPDATE schedule_day_exercises
+               SET exercise_id = $1, order_index = $2, target_sets = $3, target_reps = $4,
+                   target_reps_min = $5, target_reps_max = $6, target_time_seconds = $7,
+                   target_weight_kg = $8, target_distance_m = $9, rest_seconds = $10, notes = $11
+               WHERE id = $12`,
+              [
+                ex.exerciseId,
+                orderIdx,
+                ex.targetSets,
+                ex.targetReps,
+                ex.targetRepsMin,
+                ex.targetRepsMax,
+                ex.targetTimeSeconds,
+                ex.targetWeightKg,
+                ex.targetDistanceM,
+                ex.restSeconds,
+                ex.notes,
+                ex.resolvedId,
+              ],
             );
           } else {
-            insertExStmt.run(
-              ex.resolvedId,
-              d.resolvedId,
-              ex.exerciseId,
-              orderIdx,
-              ex.targetSets,
-              ex.targetReps,
-              ex.targetRepsMin,
-              ex.targetRepsMax,
-              ex.targetTimeSeconds,
-              ex.targetWeightKg,
-              ex.targetDistanceM,
-              ex.restSeconds,
-              ex.notes,
+            await query(
+              `INSERT INTO schedule_day_exercises (
+                 id, schedule_day_id, exercise_id, order_index, target_sets, target_reps,
+                 target_reps_min, target_reps_max, target_time_seconds, target_weight_kg,
+                 target_distance_m, rest_seconds, notes
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+              [
+                ex.resolvedId,
+                d.resolvedId,
+                ex.exerciseId,
+                orderIdx,
+                ex.targetSets,
+                ex.targetReps,
+                ex.targetRepsMin,
+                ex.targetRepsMax,
+                ex.targetTimeSeconds,
+                ex.targetWeightKg,
+                ex.targetDistanceM,
+                ex.restSeconds,
+                ex.notes,
+              ],
             );
           }
-        });
-      });
+        }
+      }
 
       const newQueue: QueueDay[] = resolvedDays.map((d, pos) => ({
         id: d.resolvedId,
@@ -470,55 +461,58 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
       }));
       const mappedIndex = remapPointerAfterEdit(oldQueue, newQueue, pointer);
 
-      db.prepare(
+      await query(
         `UPDATE schedules
-         SET name = ?, rotation_anchor_date = ?, rotation_anchor_index = ?, updated_at = ?
-         WHERE id = ?`,
-      ).run(scheduleName, todayStr, mappedIndex, now, scheduleId);
+         SET name = $1, rotation_anchor_date = $2, rotation_anchor_index = $3, updated_at = $4
+         WHERE id = $5`,
+        [scheduleName, todayStr, mappedIndex, now, scheduleId],
+      );
     } else {
       scheduleId = crypto.randomUUID();
-      db.prepare(
+      await query(
         `INSERT INTO schedules (
           id, user_id, name, is_active, rotation_anchor_date, rotation_anchor_index, created_at, updated_at
-        ) VALUES (?, ?, ?, 1, ?, 0, ?, ?)`,
-      ).run(scheduleId, auth.user.id, scheduleName, todayStr, now, now);
-
-      const insertDayStmt = db.prepare(
-        'INSERT INTO schedule_days (id, schedule_id, position, label, is_rest_day) VALUES (?, ?, ?, ?, ?)',
+        ) VALUES ($1, $2, $3, 1, $4, 0, $5, $6)`,
+        [scheduleId, auth.user.id, scheduleName, todayStr, now, now],
       );
-      const insertExStmt = db.prepare(`
-        INSERT INTO schedule_day_exercises (
-          id, schedule_day_id, exercise_id, order_index, target_sets, target_reps,
-          target_reps_min, target_reps_max, target_time_seconds, target_weight_kg,
-          target_distance_m, rest_seconds, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
 
-      days.forEach((d, pos) => {
+      for (let pos = 0; pos < days.length; pos++) {
+        const d = days[pos];
         const dayId = crypto.randomUUID();
-        insertDayStmt.run(dayId, scheduleId, pos, d.label, d.isRestDay ? 1 : 0);
-        d.exercises.forEach((ex, orderIdx) => {
-          insertExStmt.run(
-            crypto.randomUUID(),
-            dayId,
-            ex.exerciseId,
-            orderIdx,
-            ex.targetSets,
-            ex.targetReps,
-            ex.targetRepsMin,
-            ex.targetRepsMax,
-            ex.targetTimeSeconds,
-            ex.targetWeightKg,
-            ex.targetDistanceM,
-            ex.restSeconds,
-            ex.notes,
+        await query(
+          'INSERT INTO schedule_days (id, schedule_id, position, label, is_rest_day) VALUES ($1, $2, $3, $4, $5)',
+          [dayId, scheduleId, pos, d.label, d.isRestDay ? 1 : 0],
+        );
+        for (let orderIdx = 0; orderIdx < d.exercises.length; orderIdx++) {
+          const ex = d.exercises[orderIdx];
+          await query(
+            `INSERT INTO schedule_day_exercises (
+               id, schedule_day_id, exercise_id, order_index, target_sets, target_reps,
+               target_reps_min, target_reps_max, target_time_seconds, target_weight_kg,
+               target_distance_m, rest_seconds, notes
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            [
+              crypto.randomUUID(),
+              dayId,
+              ex.exerciseId,
+              orderIdx,
+              ex.targetSets,
+              ex.targetReps,
+              ex.targetRepsMin,
+              ex.targetRepsMax,
+              ex.targetTimeSeconds,
+              ex.targetWeightKg,
+              ex.targetDistanceM,
+              ex.restSeconds,
+              ex.notes,
+            ],
           );
-        });
-      });
+        }
+      }
     }
   });
 
-  const updated = getActiveSchedule(auth.user.id);
+  const updated = await getActiveSchedule(auth.user.id);
   ctx.log.info('Active schedule replaced', {
     scheduleId: updated?.id ?? null,
     dayCount: updated?.days.length ?? 0,

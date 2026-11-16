@@ -47,15 +47,15 @@ function parseNullableNumber(
 }
 
 export const GET = withApiHandler('settings.get', async (req: NextRequest, ctx) => {
-  const { user } = requireAuth(req, ctx);
-  const apiKey = getApiKeyByUserId(user.id);
+  const { user } = await requireAuth(req, ctx);
+  const apiKey = await getApiKeyByUserId(user.id);
   return NextResponse.json({ user, apiKey });
 });
 
 export const PATCH = withApiHandler(
   'settings.patch',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const body = await parseJsonBody<SettingsPatchBody>(req);
     const patch: UpdateUserSettingsInput = {};
 
@@ -140,13 +140,13 @@ export const PATCH = withApiHandler(
       patch.appleFitnessEnabled = body.appleFitnessEnabled;
     }
 
-    const updated = withTransaction(() => {
-      const nextUser = updateUserSettings(user.id, patch);
+    const updated = await withTransaction(async () => {
+      const nextUser = await updateUserSettings(user.id, patch);
       if (!nextUser) {
         throw ApiError.notFound('User not found');
       }
       if (patch.weightKg !== undefined) {
-        recordBodyMetric({
+        await recordBodyMetric({
           userId: user.id,
           measuredOn: localDateForTimezone(nextUser.timezone),
           weightKg: patch.weightKg,
@@ -156,7 +156,7 @@ export const PATCH = withApiHandler(
       return nextUser;
     });
 
-    const apiKey = getApiKeyByUserId(user.id);
+    const apiKey = await getApiKeyByUserId(user.id);
     return NextResponse.json({ user: updated, apiKey });
   },
 );

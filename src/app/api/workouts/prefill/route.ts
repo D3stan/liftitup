@@ -7,7 +7,7 @@ import { isValidYmd } from '@/lib/workouts/queries';
 export const GET = withApiHandler(
   'workouts.prefill.get',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const rawIds = req.nextUrl.searchParams.get('exerciseIds') ?? '';
     const beforeDate = req.nextUrl.searchParams.get('beforeDate') ?? undefined;
 
@@ -21,7 +21,7 @@ export const GET = withApiHandler(
       .filter(Boolean)
       .slice(0, 50);
 
-    const prefillByExerciseId = getLastPerformanceByExerciseIds(
+    const prefillByExerciseId = await getLastPerformanceByExerciseIds(
       user.id,
       ids,
       beforeDate,

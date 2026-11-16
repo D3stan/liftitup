@@ -7,14 +7,14 @@ import type { TrackingType } from '@/types/domain';
 export const GET = withApiHandler(
   'workouts.exercises.list',
   async (req: NextRequest, ctx) => {
-    const { user } = requireAuth(req, ctx);
+    const { user } = await requireAuth(req, ctx);
     const q = req.nextUrl.searchParams.get('q') ?? undefined;
     const category = req.nextUrl.searchParams.get('category') ?? undefined;
     const trackingType =
       (req.nextUrl.searchParams.get('trackingType') as TrackingType | null) ??
       undefined;
 
-    const exercises = listExercises(user.id, {
+    const exercises = await listExercises(user.id, {
       query: q,
       category,
       trackingType,

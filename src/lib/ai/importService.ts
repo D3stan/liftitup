@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { Exercise, RotationSchedule, UserProfile } from '@/types/domain';
 import { recordBodyMetric } from '@/lib/db/bodyMetrics';
-import { withTransaction } from '@/lib/db/connection';
+import { query, withTransaction } from '@/lib/db/connection';
 import {
   getUserById,
   localDateForTimezone,
@@ -40,8 +40,9 @@ export interface AiConfirmResult extends AiValidateResult {
   user?: UserProfile | null;
 }
 
-function toMatchableExercises(userId: string): MatchableExercise[] {
-  return listExercises(userId, { includeHidden: true }).map((ex) => ({
+async function toMatchableExercises(userId: string): Promise<MatchableExercise[]> {
+  const exercises = await listExercises(userId, { includeHidden: true });
+  return exercises.map((ex) => ({
     id: ex.id,
     name: ex.name,
     trackingType: ex.trackingType,
@@ -50,8 +51,10 @@ function toMatchableExercises(userId: string): MatchableExercise[] {
   }));
 }
 
-export function getAiPromptContext(user: UserProfile): AiPromptContextResponse {
-  const schedule = getActiveSchedule(user.id);
+export async function getAiPromptContext(
+  user: UserProfile,
+): Promise<AiPromptContextResponse> {
+  const schedule = await getActiveSchedule(user.id);
   const editPrompt = buildEditPlanPrompt({
     profile: {
       heightCm: user.heightCm,
@@ -97,10 +100,10 @@ export function getAiPromptContext(user: UserProfile): AiPromptContextResponse {
   return { user, schedule, editPrompt };
 }
 
-export function validateImportForUser(
+export async function validateImportForUser(
   user: UserProfile,
   rawText: string,
-): AiValidateResult {
+): Promise<AiValidateResult> {
   const validation = validateAiImportPayload(rawText);
   if (!validation.valid || !validation.payload) {
     return {
@@ -110,7 +113,7 @@ export function validateImportForUser(
     };
   }
 
-  const catalog = toMatchableExercises(user.id);
+  const catalog = await toMatchableExercises(user.id);
   const preview = buildImportPreview(validation.payload, catalog);
   return {
     valid: true,
@@ -119,10 +122,10 @@ export function validateImportForUser(
   };
 }
 
-export function applyAiImport(
+export async function applyAiImport(
   user: UserProfile,
   rawText: string,
-): AiConfirmResult {
+): Promise<AiConfirmResult> {
   const validation = validateAiImportPayload(rawText);
   if (!validation.valid || !validation.payload) {
     return {
@@ -135,12 +138,12 @@ export function applyAiImport(
   const payload = validation.payload;
   const today = localDateForTimezone(user.timezone);
 
-  return withTransaction((db) => {
-    const existing = toMatchableExercises(user.id);
+  return await withTransaction(async () => {
+    const existing = await toMatchableExercises(user.id);
     const preview = buildImportPreview(payload, existing);
 
     // 1. Update user profile & record body weight metric
-    updateUserSettings(user.id, {
+    await updateUserSettings(user.id, {
       heightCm: payload.profile.heightCm,
       weightKg: payload.profile.weightKg,
       age: payload.profile.age,
@@ -148,7 +151,7 @@ export function applyAiImport(
       unit: payload.profile.unit,
     });
 
-    recordBodyMetric({
+    await recordBodyMetric({
       userId: user.id,
       measuredOn: today,
       weightKg: payload.profile.weightKg,
@@ -160,7 +163,7 @@ export function applyAiImport(
     const customIdByLowerName = new Map<string, string>();
 
     for (const item of preview.newCustomExercises) {
-      const created = createCustomExercise(user.id, {
+      const created = await createCustomExercise(user.id, {
         name: item.name,
         trackingType: item.trackingType,
       });
@@ -170,37 +173,43 @@ export function applyAiImport(
 
     // 3. Deactivate any existing active schedules and create new one anchored today
     const now = new Date().toISOString();
-    db.prepare(
-      'UPDATE schedules SET is_active = 0, updated_at = ? WHERE user_id = ? AND is_active = 1',
-    ).run(now, user.id);
+    await query(
+      'UPDATE schedules SET is_active = 0, updated_at = $1 WHERE user_id = $2 AND is_active = 1',
+      [now, user.id],
+    );
 
     const scheduleId = `sched_${crypto.randomUUID()}`;
-    db.prepare(`
+    await query(
+      `
       INSERT INTO schedules (
         id, user_id, name, is_active, rotation_anchor_date, rotation_anchor_index,
         created_at, updated_at
-      ) VALUES (?, ?, ?, 1, ?, 0, ?, ?)
-    `).run(scheduleId, user.id, payload.schedule.name, today, now, now);
+      ) VALUES ($1, $2, $3, 1, $4, 0, $5, $6)
+    `,
+      [scheduleId, user.id, payload.schedule.name, today, now, now],
+    );
 
-    const insertDay = db.prepare(`
+    const insertDaySql = `
       INSERT INTO schedule_days (id, schedule_id, position, label, is_rest_day)
-      VALUES (?, ?, ?, ?, ?)
-    `);
+      VALUES ($1, $2, $3, $4, $5)
+    `;
 
-    const insertDayEx = db.prepare(`
+    const insertDayExSql = `
       INSERT INTO schedule_day_exercises (
         id, schedule_day_id, exercise_id, order_index,
         target_sets, target_reps, target_reps_min, target_reps_max,
         target_time_seconds, target_weight_kg, target_distance_m,
         rest_seconds, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `;
 
-    payload.schedule.days.forEach((day, position) => {
+    for (let position = 0; position < payload.schedule.days.length; position += 1) {
+      const day = payload.schedule.days[position];
       const dayId = `sday_${crypto.randomUUID()}`;
-      insertDay.run(dayId, scheduleId, position, day.label, day.isRestDay ? 1 : 0);
+      await query(insertDaySql, [dayId, scheduleId, position, day.label, day.isRestDay ? 1 : 0]);
 
-      day.exercises.forEach((ex, orderIndex) => {
+      for (let orderIndex = 0; orderIndex < day.exercises.length; orderIndex += 1) {
+        const ex = day.exercises[orderIndex];
         const matched = matchExerciseName(ex.name, existing);
         const exerciseId =
           matched?.id ?? customIdByLowerName.get(ex.name.trim().toLowerCase());
@@ -208,7 +217,7 @@ export function applyAiImport(
           throw new Error(`Failed to resolve exercise "${ex.name}"`);
         }
 
-        insertDayEx.run(
+        await query(insertDayExSql, [
           `sdex_${crypto.randomUUID()}`,
           dayId,
           exerciseId,
@@ -222,17 +231,17 @@ export function applyAiImport(
           ex.targetDistanceM,
           ex.restSeconds,
           ex.notes,
-        );
-      });
-    });
+        ]);
+      }
+    }
 
     return {
       valid: true,
       errors: [],
       preview,
       createdCustomExercises,
-      schedule: getActiveSchedule(user.id),
-      user: getUserById(user.id),
+      schedule: await getActiveSchedule(user.id),
+      user: await getUserById(user.id),
     };
   });
 }
