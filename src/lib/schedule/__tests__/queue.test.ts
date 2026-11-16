@@ -872,3 +872,54 @@ describe('getPointerForDate & remapPointerAfterEdit — B.4 Re-anchoring', () =>
     assert.equal(remapPointerAfterEdit(STD_QUEUE, [], 2), 0);
   });
 });
+
+describe('Phase 6 — Imported sessions are invisible to rotation advancement', () => {
+  it('displays imported sessions in CalendarDay.sessions without marking planned days completed or advancing qIdx', () => {
+    const days = projectCalendar({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-06',
+      anchorIndex: 0,
+      events: [],
+      sessions: [
+        // Imported session via cid prefix on anchorDate
+        makeSession({
+          id: 'imp-1',
+          sessionDate: '2026-11-06',
+          scheduleDayId: null,
+          title: 'Imported Push',
+          cid: 'import:liftitup:old_1',
+        }),
+        // Imported jolly session via isImported flag on next day
+        makeSession({
+          id: 'imp-2',
+          sessionDate: '2026-11-07',
+          scheduleDayId: null,
+          isJolly: true,
+          jollyMode: 'instead',
+          title: 'Imported Jolly',
+          isImported: true,
+        }),
+      ],
+      today: '2026-11-08',
+      rangeStart: '2026-11-06',
+      rangeEnd: '2026-11-09',
+    });
+
+    // Neither 2026-11-06 nor 2026-11-07 advanced qIdx (stays at 0 = Push1)
+    assert.deepEqual(
+      days.map((d) => [d.date, d.status, d.plannedDay?.label ?? null, d.pointerIndex]),
+      [
+        ['2026-11-06', 'skipped', 'Push1', 0],
+        ['2026-11-07', 'idle', null, 0],
+        ['2026-11-08', 'planned', 'Push1', 0],
+        ['2026-11-09', 'planned', 'Pull1', 1],
+      ],
+    );
+
+    // Imported sessions are still attached for viewing
+    assert.equal(days[0].sessions.length, 1);
+    assert.equal(days[0].sessions[0].id, 'imp-1');
+    assert.equal(days[1].sessions.length, 1);
+    assert.equal(days[1].sessions[0].id, 'imp-2');
+  });
+});

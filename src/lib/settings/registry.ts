@@ -49,7 +49,8 @@ export const SETTINGS_CATEGORIES: SettingsCategoryMeta[] = [
   {
     id: 'data',
     title: 'Data',
-    description: 'Export your workouts and body metrics as JSON or CSV.',
+    description:
+      'Export JSON/CSV, restore from a Liftitup backup, or import an AI plan.',
     href: '/settings/data',
   },
   {
@@ -255,6 +256,35 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
     categoryTitle: 'Data',
     href: '/settings/data',
     keywords: ['export', 'download', 'json', 'csv', 'backup', 'data'],
+  },
+  {
+    id: 'data-restore',
+    title: 'Restore from Liftitup JSON',
+    description:
+      'Validate and restore workouts, active split, custom exercises, and body metrics from a Liftitup export.',
+    categoryId: 'data',
+    categoryTitle: 'Data',
+    href: '/settings/data#restore',
+    keywords: [
+      'restore',
+      'import',
+      'backup',
+      'liftitup',
+      'json',
+      'merge',
+      'replace',
+      'data',
+    ],
+  },
+  {
+    id: 'data-ai-import',
+    title: 'AI Plan Import',
+    description:
+      'Copy prompts and paste AI-generated workout split JSON into Liftitup.',
+    categoryId: 'data',
+    categoryTitle: 'Data',
+    href: '/settings/data/ai',
+    keywords: ['ai', 'import', 'plan', 'split', 'prompt', 'json', 'data'],
   },
 
   // Apple Health

@@ -405,6 +405,8 @@ async function executeToolCall(
           jollyMode: s.jollyMode,
           title: s.title,
           completedAt: s.completedAt,
+          cid: s.cid,
+          isImported: Boolean(s.cid?.startsWith('import:')),
         })),
         today,
         rangeStart: today,

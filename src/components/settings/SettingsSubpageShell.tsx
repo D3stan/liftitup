@@ -9,6 +9,8 @@ interface SettingsSubpageShellProps {
   title: string;
   user: UserProfile | null;
   loading: boolean;
+  backHref?: string;
+  backLabel?: string;
   children: React.ReactNode;
 }
 
@@ -16,6 +18,8 @@ export function SettingsSubpageShell({
   title,
   user,
   loading,
+  backHref = '/settings',
+  backLabel = 'Settings',
   children,
 }: SettingsSubpageShellProps) {
   return (
@@ -23,11 +27,11 @@ export function SettingsSubpageShell({
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <Link
-            href="/settings"
+            href={backHref}
             className="btn alt min-h-[44px] shrink-0 gap-1.5 px-3 no-underline"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Settings</span>
+            <span>{backLabel}</span>
           </Link>
           <h1 className="truncate font-marker text-2xl text-[var(--ink)]">
             {title}

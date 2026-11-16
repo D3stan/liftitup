@@ -1,5 +1,5 @@
-import { AiImportView } from '@/components/ai/AiImportView';
+import { redirect } from 'next/navigation';
 
 export default function AiPage() {
-  return <AiImportView />;
+  redirect('/settings/data/ai');
 }
