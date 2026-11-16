@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSessionCookieForUser } from '@/lib/auth/session';
 import { getUserByUsername } from '@/lib/db/users';
@@ -26,16 +27,40 @@ export const POST = withApiHandler('auth.login', async (req: NextRequest, ctx) =
   const found = await getUserByUsername(body.username);
   if (!found || found.isGuest) {
     await verifyPassword(body.password, DUMMY_SCRYPT_HASH);
+    await safeRecordEvent({
+      userId: found?.id ?? '__unknown__',
+      eventType: 'login_failed',
+      detail: { reason: found?.isGuest ? 'guest_login' : 'unknown_user' },
+    });
     throw ApiError.unauthorized('Invalid username or password');
   }
 
   const valid = await verifyPassword(body.password, found.passwordHash);
   if (!valid) {
+    await safeRecordEvent({
+      userId: found.id,
+      eventType: 'login_failed',
+      detail: { reason: 'invalid_password' },
+    });
     throw ApiError.unauthorized('Invalid username or password');
+  }
+
+  if (found.isDisabled) {
+    await safeRecordEvent({
+      userId: found.id,
+      eventType: 'login_failed',
+      detail: { reason: 'disabled' },
+    });
+    throw ApiError.forbidden('Account is disabled');
   }
 
   const { passwordHash: _ignored, ...user } = found;
   ctx.setUserId(user.id);
+  await safeRecordEvent({
+    userId: user.id,
+    eventType: 'login_success',
+    detail: { mustChangePassword: Boolean(user.mustChangePassword) },
+  });
   const res = NextResponse.json({ user });
   return await createSessionCookieForUser(res, user.id);
 });

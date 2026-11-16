@@ -32,3 +32,14 @@ npm run test:postgres
 
 - **Database backups contain private progress photos:** LiftItUp stores progress photos as binary data in PostgreSQL (`progress_photo_blobs`). Any `pg_dump`, volume snapshot (`liftitup-pgdata`), or database backup contains users' private progress photos and must be encrypted, stored, and shared accordingly.
 - **Set a real `POSTGRES_PASSWORD`:** `docker-compose.yml` falls back to a local development default (`liftitup`). Before deploying or exposing the database/app beyond local development, always set `POSTGRES_PASSWORD` (and matching `DATABASE_URL`) to a strong, unique secret.
+
+## Admin Area & Password Reset
+
+- **Admin access (`ADMIN_USER_IDS`):** Set `ADMIN_USER_IDS` to a comma- or whitespace-separated list of user IDs (e.g., `usr_...`) allowed to access `/admin` and `/api/admin/*`. Non-admins, guests, disabled users, unauthenticated visitors, and API-key callers all receive HTTP `404`.
+- **Password reset CLI:** Accounts have no email. To reset a user's password from the container terminal without exposing a reset button in the web UI or passing a password on the command line:
+
+```bash
+docker compose exec liftitup node scripts/reset-password.mjs <username>
+```
+
+The script generates a one-time high-entropy temporary password, revokes all active sessions for that user, requires choosing a new password at next login, and writes an entry to `audit_log`.

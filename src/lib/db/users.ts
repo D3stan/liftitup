@@ -40,6 +40,8 @@ type DbUserRow = {
   apple_health_last_received_linked?: number | null;
   photo_quota?: number | null;
   is_guest: number;
+  is_disabled?: number;
+  must_change_password?: number;
   last_active_at: string;
   created_at: string;
 };
@@ -135,6 +137,8 @@ export function mapUserRow(row: DbUserRow): UserProfile {
         ? null
         : Number(row.photo_quota),
     isGuest: Boolean(row.is_guest),
+    isDisabled: Boolean(row.is_disabled),
+    mustChangePassword: Boolean(row.must_change_password),
     lastActiveAt: row.last_active_at,
     createdAt: row.created_at,
   };
@@ -389,4 +393,53 @@ export async function deleteExpiredGuests(
     }
     return deleted;
   });
+}
+
+export async function getUserByIdWithPassword(
+  userId: string,
+): Promise<UserWithPassword | null> {
+  const row = await queryOne<DbUserRow>('SELECT * FROM users WHERE id = $1', [
+    userId,
+  ]);
+  if (!row) return null;
+  return {
+    ...mapUserRow(row),
+    passwordHash: row.password_hash,
+  };
+}
+
+export async function updateUserPasswordAndClearMustChange(
+  userId: string,
+  passwordHash: string,
+): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>(
+    `UPDATE users
+     SET password_hash = $1, must_change_password = 0
+     WHERE id = $2
+     RETURNING *`,
+    [passwordHash, userId],
+  );
+  return row ? mapUserRow(row) : null;
+}
+
+export async function setUserDisabledFlag(
+  userId: string,
+  disabled: boolean,
+): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>(
+    'UPDATE users SET is_disabled = $1 WHERE id = $2 RETURNING *',
+    [disabled ? 1 : 0, userId],
+  );
+  return row ? mapUserRow(row) : null;
+}
+
+export async function setUserPhotoQuota(
+  userId: string,
+  photoQuota: number | null,
+): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>(
+    'UPDATE users SET photo_quota = $1 WHERE id = $2 RETURNING *',
+    [photoQuota, userId],
+  );
+  return row ? mapUserRow(row) : null;
 }

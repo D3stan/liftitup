@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { requireAuth } from '@/lib/auth/session';
 import {
   applyLiftitupRestore,
@@ -157,6 +158,11 @@ export const POST = withApiHandler(
       mode,
       confirmation,
       exerciseResolutions,
+    });
+    await safeRecordEvent({
+      userId: user.id,
+      eventType: 'file_import',
+      detail: { source: 'liftitup', mode },
     });
     return NextResponse.json(result);
   },

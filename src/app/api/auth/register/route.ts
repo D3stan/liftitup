@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { hashPassword } from '@/lib/auth/password';
-import { createSessionCookieForUser } from '@/lib/auth/session';
+import {
+  createSessionCookieForUser,
+  hashToken,
+  SESSION_COOKIE_NAME,
+} from '@/lib/auth/session';
 import { withTransaction } from '@/lib/db/connection';
 import { recordBodyMetric } from '@/lib/db/bodyMetrics';
 import {
+  deleteAuthSession,
+  getAuthSessionByTokenHash,
+} from '@/lib/db/sessions';
+import {
   createUser,
+  getUserById,
   getUserByUsername,
   localDateForTimezone,
   sanitizeTimezone,
@@ -91,6 +101,22 @@ export const POST = withApiHandler(
       80,
     );
 
+    // Detect active guest session BEFORE setting the new registered user cookie
+    let convertedFromGuestId: string | null = null;
+    let priorTokenHash: string | null = null;
+    const priorCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (priorCookie) {
+      const candidateHash = hashToken(priorCookie);
+      const priorSession = await getAuthSessionByTokenHash(candidateHash);
+      if (priorSession && Date.parse(priorSession.expiresAt) > Date.now()) {
+        const priorUser = await getUserById(priorSession.userId);
+        if (priorUser?.isGuest) {
+          convertedFromGuestId = priorUser.id;
+          priorTokenHash = candidateHash;
+        }
+      }
+    }
+
     const passwordHash = await hashPassword(body.password);
 
     const user = await withTransaction(async () => {
@@ -121,6 +147,23 @@ export const POST = withApiHandler(
       }
 
       return created;
+    });
+
+    if (priorTokenHash) {
+      await deleteAuthSession(priorTokenHash);
+    }
+
+    if (convertedFromGuestId) {
+      await safeRecordEvent({
+        userId: user.id,
+        eventType: 'guest_converted',
+        detail: { fromGuestUserId: convertedFromGuestId },
+      });
+    }
+    await safeRecordEvent({
+      userId: user.id,
+      eventType: 'registered',
+      detail: { fromGuest: Boolean(convertedFromGuestId) },
     });
 
     ctx.setUserId(user.id);

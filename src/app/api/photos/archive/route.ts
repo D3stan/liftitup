@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { requireSessionAuth } from '@/lib/auth/session';
 import {
   getProgressPhotoFullBytesForArchive,
@@ -19,6 +20,11 @@ export const GET = withApiHandler(
     }
 
     const photos = await listProgressPhotos(user.id, { order: 'asc' });
+    await safeRecordEvent({
+      userId: user.id,
+      eventType: 'photo_archive_export',
+      detail: { photoCount: photos.length },
+    });
     const today = localDateForTimezone(user.timezone);
     const stream = createPhotoArchiveStream(user, photos, (photoId) =>
       getProgressPhotoFullBytesForArchive(user.id, photoId),

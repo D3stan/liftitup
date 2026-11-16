@@ -15,11 +15,97 @@ interface TxContext {
 
 const txStorage = new AsyncLocalStorage<TxContext>();
 
+const POOL_MAX_CONNECTIONS = 10;
+const MAX_SLOW_QUERY_ENTRIES = 50;
+const DEFAULT_SLOW_QUERY_THRESHOLD_MS = (() => {
+  const raw = Number(process.env.ADMIN_SLOW_QUERY_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 200;
+})();
+
+export interface DbPoolStats {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+  maxConnections: number;
+}
+
+export interface SlowQueryRecord {
+  sql: string;
+  durationMs: number;
+  recordedAt: string;
+}
+
+export interface DbHealthStats {
+  pool: DbPoolStats;
+  totalQueriesExecuted: number;
+  slowQueryThresholdMs: number;
+  slowQueries: SlowQueryRecord[];
+}
+
 let poolInstance: Pool | null = null;
 let initPromise: Promise<void> | null = null;
+let totalQueriesExecuted = 0;
+let slowQueryThresholdMs = DEFAULT_SLOW_QUERY_THRESHOLD_MS;
+const slowQueryBuffer: SlowQueryRecord[] = [];
+
+function sanitizeSlowSql(sql: string): string {
+  return sql.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function recordQueryTiming(sql: string, durationMs: number): void {
+  totalQueriesExecuted += 1;
+  if (durationMs >= slowQueryThresholdMs) {
+    slowQueryBuffer.unshift({
+      sql: sanitizeSlowSql(sql),
+      durationMs: Math.round(durationMs * 100) / 100,
+      recordedAt: new Date().toISOString(),
+    });
+    if (slowQueryBuffer.length > MAX_SLOW_QUERY_ENTRIES) {
+      slowQueryBuffer.length = MAX_SLOW_QUERY_ENTRIES;
+    }
+  }
+}
+
+export function isPgMemActive(): boolean {
+  return poolInstance ? isPgMemPool(poolInstance) : false;
+}
+
+export function hasActivePool(): boolean {
+  return Boolean(poolInstance || process.env.DATABASE_URL);
+}
+
+export function setSlowQueryThresholdMsForTests(ms: number): void {
+  slowQueryThresholdMs = Number.isFinite(ms) && ms >= 0 ? ms : DEFAULT_SLOW_QUERY_THRESHOLD_MS;
+}
+
+export function resetDbHealthStatsForTests(): void {
+  totalQueriesExecuted = 0;
+  slowQueryBuffer.length = 0;
+  slowQueryThresholdMs = DEFAULT_SLOW_QUERY_THRESHOLD_MS;
+}
+
+export function getDbHealthStats(): DbHealthStats {
+  const p = poolInstance as
+    | (Pool & { totalCount?: number; idleCount?: number; waitingCount?: number })
+    | null;
+  return {
+    pool: {
+      totalCount: Number(p?.totalCount ?? 0),
+      idleCount: Number(p?.idleCount ?? 0),
+      waitingCount: Number(p?.waitingCount ?? 0),
+      maxConnections: POOL_MAX_CONNECTIONS,
+    },
+    totalQueriesExecuted,
+    slowQueryThresholdMs,
+    slowQueries: [...slowQueryBuffer],
+  };
+}
 
 function isPgMemPool(pool: Pool): boolean {
-  return pool.constructor?.name === 'MemPg';
+  return (
+    pool.constructor?.name === 'MemPg' ||
+    Boolean((pool as unknown as { __isPgMem?: boolean }).__isPgMem)
+  );
 }
 
 function getPool(): Pool {
@@ -32,7 +118,7 @@ function getPool(): Pool {
   }
   poolInstance = new Pool({
     connectionString,
-    max: 10,
+    max: POOL_MAX_CONNECTIONS,
     idleTimeoutMillis: 30_000,
   });
   return poolInstance;
@@ -94,14 +180,21 @@ export async function query<T extends QueryResultRow = Record<string, unknown>>(
   const pool = await ensureSchema();
   const tx = txStorage.getStore();
   const runner = tx ? tx.client : pool;
-  const res =
-    params && params.length > 0
-      ? await runner.query<T>(sql, params)
-      : await runner.query<T>(sql);
-  return {
-    rows: res.rows,
-    rowCount: res.rowCount ?? 0,
-  };
+  const startedAt = performance.now();
+  try {
+    const res =
+      params && params.length > 0
+        ? await runner.query<T>(sql, params)
+        : await runner.query<T>(sql);
+    recordQueryTiming(sql, performance.now() - startedAt);
+    return {
+      rows: res.rows,
+      rowCount: res.rowCount ?? 0,
+    };
+  } catch (err) {
+    recordQueryTiming(sql, performance.now() - startedAt);
+    throw err;
+  }
 }
 
 /**
@@ -122,7 +215,12 @@ export async function exec(sql: string): Promise<void> {
   const pool = await ensureSchema();
   const tx = txStorage.getStore();
   const runner = tx ? tx.client : pool;
-  await runner.query(sql);
+  const startedAt = performance.now();
+  try {
+    await runner.query(sql);
+  } finally {
+    recordQueryTiming(sql, performance.now() - startedAt);
+  }
 }
 
 /**

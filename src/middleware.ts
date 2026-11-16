@@ -11,6 +11,8 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/icons/') ||
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
     PUBLIC_PATHS.has(pathname) ||
     /\.[a-z0-9]+$/i.test(pathname)
   ) {

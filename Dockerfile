@@ -21,6 +21,9 @@ ENV HOSTNAME="0.0.0.0"
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/scripts ./scripts
+COPY --from=builder --chown=node:node /app/src/lib/auth/passwordCore.mjs ./src/lib/auth/passwordCore.mjs
+COPY --from=builder --chown=node:node /app/src/lib/admin/passwordResetCore.mjs ./src/lib/admin/passwordResetCore.mjs
 
 RUN chown -R node:node /app
 

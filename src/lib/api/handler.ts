@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { recordRequestMetric } from '@/lib/admin/metrics';
 import { generateRequestId, logger, type LogFields } from '@/lib/logger';
 
 export interface StandardErrorBody {
@@ -124,6 +125,17 @@ export function withApiHandler<TParams = Record<string, string>>(
         // Some synthetic responses may have immutable headers
       }
 
+      recordRequestMetric({
+        route: routeName,
+        method,
+        status,
+        durationMs,
+        requestId,
+        ...(status >= 500
+          ? { errorCode: `HTTP_${status}`, errorMessage: `HTTP ${status} on ${routeName}` }
+          : {}),
+      });
+
       if (status >= 500) {
         logger.error('request completed with server error', {
           ...baseFields(),
@@ -149,6 +161,16 @@ export function withApiHandler<TParams = Record<string, string>>(
       const durationMs = Math.round(performance.now() - startedAt);
 
       if (err instanceof ApiError) {
+        recordRequestMetric({
+          route: routeName,
+          method,
+          status: err.status,
+          durationMs,
+          requestId,
+          ...(err.status >= 500
+            ? { errorCode: err.code, errorMessage: err.message }
+            : {}),
+        });
         const body: StandardErrorBody = {
           error: {
             code: err.code,
@@ -169,6 +191,16 @@ export function withApiHandler<TParams = Record<string, string>>(
           headers: { 'x-request-id': requestId },
         });
       }
+
+      recordRequestMetric({
+        route: routeName,
+        method,
+        status: 500,
+        durationMs,
+        requestId,
+        errorCode: 'INTERNAL_ERROR',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
 
       logger.error('unhandled route error', {
         ...baseFields(),

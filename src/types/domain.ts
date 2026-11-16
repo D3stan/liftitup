@@ -52,6 +52,8 @@ export interface UserProfile {
   appleHealthLastReceivedLinked: boolean | null;
   photoQuota?: number | null;
   isGuest: boolean;
+  isDisabled?: boolean;
+  mustChangePassword?: boolean;
   lastActiveAt: string;
   createdAt: string;
 }

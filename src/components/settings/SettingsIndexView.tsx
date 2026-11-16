@@ -189,6 +189,11 @@ export function SettingsIndexView() {
         <LogOut className="h-4 w-4" />
         Log out
       </Button>
+
+      <p className="text-center text-xs text-[var(--muted)]">
+        Basic usage and reliability metrics are collected for instance health.
+        Your workout content, notes, and photos remain private.
+      </p>
     </div>
   );
 }
