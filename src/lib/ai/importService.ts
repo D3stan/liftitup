@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import type { Exercise, RotationSchedule, UserProfile } from '@/types/domain';
-import { recordBodyMetric } from '@/lib/db/bodyMetrics';
+import {
+  recordBodyMetric,
+  syncUserProfileWeightFromBodyMetrics,
+} from '@/lib/db/bodyMetrics';
 import { query, withTransaction } from '@/lib/db/connection';
 import {
   getUserById,
@@ -145,7 +148,6 @@ export async function applyAiImport(
     // 1. Update user profile & record body weight metric
     await updateUserSettings(user.id, {
       heightCm: payload.profile.heightCm,
-      weightKg: payload.profile.weightKg,
       age: payload.profile.age,
       trainingYears: payload.profile.trainingYears,
       unit: payload.profile.unit,
@@ -157,6 +159,8 @@ export async function applyAiImport(
       weightKg: payload.profile.weightKg,
       source: 'ai_import',
     });
+
+    await syncUserProfileWeightFromBodyMetrics(user.id);
 
     // 2. Auto-create unknown exercises as custom exercises (deduped case-insensitively)
     const createdCustomExercises: Exercise[] = [];

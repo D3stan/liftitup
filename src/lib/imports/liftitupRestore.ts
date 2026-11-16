@@ -15,6 +15,7 @@ import {
   type MatchableExercise,
 } from '@/lib/ai/importSchema';
 import { ApiError } from '@/lib/api/handler';
+import { syncUserProfileWeightFromBodyMetrics } from '@/lib/db/bodyMetrics';
 import { query, withTransaction } from '@/lib/db/connection';
 import { resetUserAccountDataForRestoreInTx } from '@/lib/db/userDeletion';
 import {
@@ -1976,6 +1977,10 @@ export async function applyLiftitupRestore(
       );
       bodyMetricsCreated += 1;
     }
+
+    await syncUserProfileWeightFromBodyMetrics(user.id, {
+      preserveExistingIfEmpty: true,
+    });
 
     // 7. Restore active split + schedule events (unless Merge mode & user already has one)
     let splitRestored = false;

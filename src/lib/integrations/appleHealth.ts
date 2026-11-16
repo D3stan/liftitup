@@ -5,12 +5,12 @@ import type {
   UserProfile,
 } from '@/types/domain';
 import { ApiError } from '@/lib/api/handler';
-import { recordBodyMetric } from '@/lib/db/bodyMetrics';
-import { query, queryOne, withTransaction } from '@/lib/db/connection';
 import {
-  recordAppleHealthLastReceived,
-  updateUserSettings,
-} from '@/lib/db/users';
+  recordBodyMetric,
+  syncUserProfileWeightFromBodyMetrics,
+} from '@/lib/db/bodyMetrics';
+import { query, queryOne, withTransaction } from '@/lib/db/connection';
+import { recordAppleHealthLastReceived } from '@/lib/db/users';
 import {
   AppleHealthValidationError,
   compareOverlapScores,
@@ -442,12 +442,6 @@ export async function ingestAppleHealthPayload(
           weightKg: item.bodyweightKg,
           source: 'apple_health',
         });
-        const updated = await updateUserSettings(user.id, {
-          weightKg: item.bodyweightKg,
-        });
-        if (updated) {
-          latestUser = updated;
-        }
         weightCount += 1;
         continue;
       }
@@ -497,16 +491,14 @@ export async function ingestAppleHealthPayload(
           weightKg: item.bodyweightKg,
           source: 'apple_health',
         });
-        const updated = await updateUserSettings(user.id, {
-          weightKg: item.bodyweightKg,
-        });
-        if (updated) {
-          latestUser = updated;
-        }
         weightCount += 1;
       }
 
       savedWorkouts.push(workout);
+    }
+
+    if (weightCount > 0) {
+      await syncUserProfileWeightFromBodyMetrics(user.id);
     }
 
     const updatedLastReceived = await recordAppleHealthLastReceived(user.id, {
