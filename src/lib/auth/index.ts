@@ -7,6 +7,7 @@ export {
   generateApiKey,
   optionalAuth,
   requireAuth,
+  requireSessionAuth,
   requireApiKeyAuth,
   createSessionCookieForUser,
   clearSessionCookie,

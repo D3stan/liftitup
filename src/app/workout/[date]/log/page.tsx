@@ -29,10 +29,11 @@ import {
 } from '@/components/ui';
 import type { WorkoutDayViewResponse } from '@/lib/workouts/types';
 import {
-  clearWorkoutDraft,
+  adoptLegacyWorkoutDrafts,
+  clearUserWorkoutDraft,
   generateCid,
-  loadWorkoutDraft,
-  saveWorkoutDraft,
+  loadUserWorkoutDraft,
+  saveUserWorkoutDraft,
 } from '@/lib/offline/outbox';
 import ExerciseLoggerCard from '@/components/workout/ExerciseLoggerCard';
 import ExercisePickerSheet from '@/components/workout/ExercisePickerSheet';
@@ -242,8 +243,9 @@ function WorkoutLoggerInner() {
         setDayView(dayRes);
         setExercisesCatalog(exRes.exercises);
 
+        adoptLegacyWorkoutDrafts(dayRes.user.id);
         const existingDraft = !ignoreSavedDraft
-          ? loadWorkoutDraft<WorkoutDraft>(draftKey)
+          ? loadUserWorkoutDraft<WorkoutDraft>(dayRes.user.id, draftKey)
           : null;
 
         if (existingDraft && Array.isArray(existingDraft.exercises)) {
@@ -279,12 +281,12 @@ function WorkoutLoggerInner() {
 
   // Persist draft automatically
   useEffect(() => {
-    if (!draft) return;
-    saveWorkoutDraft(draftKey, {
+    if (!draft || !dayView) return;
+    saveUserWorkoutDraft(dayView.user.id, draftKey, {
       ...draft,
       updatedAt: new Date().toISOString(),
     });
-  }, [draft, draftKey]);
+  }, [draft, dayView, draftKey]);
 
   const updateDraft = (updater: (prev: WorkoutDraft) => WorkoutDraft) => {
     setDraft((prev) => (prev ? updater(prev) : prev));
@@ -573,7 +575,7 @@ function WorkoutLoggerInner() {
         toast.success('Workout saved');
       }
 
-      clearWorkoutDraft(draftKey);
+      clearUserWorkoutDraft(dayView.user.id, draftKey);
       router.push(`/workout/${encodeURIComponent(date)}`);
     } catch (err) {
       // Never swallow errors into an outbox loop: surface exact server message
@@ -584,14 +586,14 @@ function WorkoutLoggerInner() {
   };
 
   const handleDeleteSession = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !dayView) return;
     setDeleting(true);
     try {
       await apiFetch(
         `/api/workouts/sessions/${encodeURIComponent(sessionId)}`,
         { method: 'DELETE' },
       );
-      clearWorkoutDraft(draftKey);
+      clearUserWorkoutDraft(dayView.user.id, draftKey);
       toast.success('Workout deleted');
       router.push(`/workout/${encodeURIComponent(date)}`);
     } catch (err) {
@@ -664,7 +666,7 @@ function WorkoutLoggerInner() {
           <button
             type="button"
             onClick={() => {
-              clearWorkoutDraft(draftKey);
+              clearUserWorkoutDraft(dayView.user.id, draftKey);
               loadData(true);
             }}
             className="inline-flex items-center gap-1 underline"

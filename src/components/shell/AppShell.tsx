@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { UserProfile } from '@/types/domain';
 import { applyThemeToDocument } from '@/lib/theme';
+import { adoptLegacyWorkoutDrafts } from '@/lib/offline/outbox';
 import { ApiClientError, apiFetch, Toaster } from '@/components/ui';
 import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const loadMe = useCallback(async () => {
     try {
       const data = await apiFetch<{ user: UserProfile }>('/api/auth/me');
+      adoptLegacyWorkoutDrafts(data.user.id);
       setUser(data.user);
       applyThemeToDocument(data.user.theme, data.user.themeVariant);
     } catch (err) {
