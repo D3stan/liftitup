@@ -24,7 +24,7 @@ function formatShortDate(iso: string): string {
 export function SvgLineChart({
   points,
   unitLabel = '',
-  strokeColor = '#d9412b',
+  strokeColor = 'var(--red)',
   emptyLabel = 'No data yet',
 }: SvgLineChartProps) {
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -89,7 +89,7 @@ export function SvgLineChart({
 
   if (!geom) {
     return (
-      <div className="flex h-36 items-center justify-center text-sm text-[#6b6254]">
+      <div className="flex h-36 items-center justify-center text-sm text-[var(--muted)]">
         {emptyLabel}
       </div>
     );
@@ -102,12 +102,12 @@ export function SvgLineChart({
 
   return (
     <div className="w-full">
-      <div className="mb-1 flex items-center justify-between text-xs text-[#6b6254]">
+      <div className="mb-1 flex items-center justify-between text-xs text-[var(--muted)]">
         <span>
           {formatShortDate(active.pt.label)}
           {active.pt.sublabel ? ` · ${active.pt.sublabel}` : ''}
         </span>
-        <span className="font-bold text-[#1d1a16]">
+        <span className="font-bold text-[var(--ink)]">
           {Number.isInteger(active.pt.value)
             ? active.pt.value
             : active.pt.value.toFixed(1)}
@@ -127,7 +127,8 @@ export function SvgLineChart({
               y1={tick.y}
               x2={geom.width - geom.padRight}
               y2={tick.y}
-              stroke="rgba(29,26,22,0.12)"
+              stroke="var(--ink)"
+              strokeOpacity={0.14}
               strokeDasharray="4 4"
             />
             <text
@@ -135,7 +136,7 @@ export function SvgLineChart({
               y={tick.y + 4}
               textAnchor="end"
               fontSize="12"
-              fill="#6b6254"
+              fill="var(--muted)"
             >
               {tick.label}
             </text>
@@ -166,8 +167,8 @@ export function SvgLineChart({
                 cx={c.x}
                 cy={c.y}
                 r={isSelected ? 5.5 : 4}
-                fill={isSelected ? '#f2b632' : strokeColor}
-                stroke="#1d1a16"
+                fill={isSelected ? 'var(--gold)' : strokeColor}
+                stroke="var(--line)"
                 strokeWidth="2"
               />
             </g>
@@ -179,7 +180,7 @@ export function SvgLineChart({
           y={geom.height - 6}
           textAnchor="start"
           fontSize="12"
-          fill="#6b6254"
+          fill="var(--muted)"
         >
           {formatShortDate(points[0].label)}
         </text>
@@ -189,7 +190,7 @@ export function SvgLineChart({
             y={geom.height - 6}
             textAnchor="end"
             fontSize="12"
-            fill="#6b6254"
+            fill="var(--muted)"
           >
             {formatShortDate(points[points.length - 1].label)}
           </text>

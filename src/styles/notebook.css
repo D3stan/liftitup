@@ -13,11 +13,11 @@ html {
 }
 
 body {
-  font-family: "Patrick Hand", "Comic Sans MS", "Chalkboard SE", cursive, sans-serif;
-  font-size: 19px;
+  font-family: var(--font-body);
+  font-size: var(--text-base, 19px);
   line-height: 1.35;
   color: var(--ink);
-  background: var(--paper) radial-gradient(rgba(29, 26, 22, 0.10) 1px, transparent 1.2px) 0 0 / 14px 14px;
+  background: var(--paper) radial-gradient(var(--dot-color) 1px, transparent 1.2px) 0 0 / 14px 14px;
   min-height: 100dvh;
   overscroll-behavior-y: none;
   margin: 0;
@@ -26,7 +26,7 @@ body {
 
 /* Headings, Brand, Big Numbers, KPIs, Steppers */
 h1, h2, h3, .font-marker, .brand, .kpi-val, .stepper-val {
-  font-family: "Permanent Marker", "Marker Felt", cursive, sans-serif;
+  font-family: var(--font-display);
   font-weight: 400;
   letter-spacing: 0.4px;
   line-height: 1.1;
@@ -34,8 +34,8 @@ h1, h2, h3, .font-marker, .brand, .kpi-val, .stepper-val {
 
 /* Prevent iOS Safari Focus Auto-Zoom (Always >= 16px) */
 input, select, textarea {
-  font-family: "Patrick Hand", "Comic Sans MS", cursive, sans-serif;
-  font-size: max(16px, 19px);
+  font-family: var(--font-body);
+  font-size: max(16px, var(--text-base, 19px));
   color: var(--ink);
 }
 
@@ -48,13 +48,13 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 }
 
 /* ==========================================================================
-   2. SIGNATURE CARTOON NOTEBOOK COMPONENTS (fit-or-pivot + myfood)
+   2. SIGNATURE THEME COMPONENTS
    ========================================================================== */
 
-/* Wobbly Cards */
+/* Cards */
 .card {
   background: var(--card);
-  border: 3px solid var(--ink);
+  border: 3px solid var(--line);
   border-radius: var(--wob);
   padding: 16px;
   box-shadow: var(--sh);
@@ -62,7 +62,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 
 .card-sm {
   background: var(--card);
-  border: 3px solid var(--ink);
+  border: 3px solid var(--line);
   border-radius: var(--wob-sm);
   padding: 12px;
   box-shadow: var(--sh-s);
@@ -71,7 +71,8 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 /* Hero Today Card (tilted gold highlight card) */
 .hero-card {
   background: var(--gold);
-  border: 3px solid var(--ink);
+  color: var(--btn-gold-fg);
+  border: 3px solid var(--line);
   border-radius: var(--wob);
   padding: 18px;
   box-shadow: var(--sh-l);
@@ -88,7 +89,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 
 /* Brand Badge */
 .brand {
-  font-family: "Permanent Marker", cursive;
+  font-family: var(--font-display);
   color: var(--red);
   transform: rotate(-1.5deg);
   display: inline-flex;
@@ -98,12 +99,12 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 
 .brand-badge {
   background: var(--gold);
-  color: var(--ink);
-  border: 2px solid var(--ink);
-  border-radius: 4px 8px 4px 8px;
+  color: var(--btn-gold-fg);
+  border: 2px solid var(--line);
+  border-radius: var(--wob-sm);
   padding: 2px 8px;
   font-size: 0.78em;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: 2px 2px 0 var(--shadow-color);
   transform: rotate(2.5deg);
 }
 
@@ -116,12 +117,12 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   min-height: 44px;
   min-width: 44px;
   padding: 8px 16px;
-  border: 3px solid var(--ink);
+  border: 3px solid var(--line);
   border-radius: var(--wob-sm);
   background: var(--gold);
-  color: var(--ink);
-  font-family: "Patrick Hand", cursive;
-  font-size: 19px;
+  color: var(--btn-gold-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base, 19px);
   font-weight: 700;
   box-shadow: var(--sh);
   cursor: pointer;
@@ -130,7 +131,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 
 .btn:active:not(:disabled) {
   transform: translate(3px, 3px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: 1px 1px 0 var(--shadow-color);
 }
 
 .btn:disabled {
@@ -145,7 +146,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 
 .btn.red {
   background: var(--red);
-  color: #ffffff;
+  color: var(--btn-red-fg);
 }
 
 .btn.green {
@@ -159,7 +160,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 }
 
 .btn.big {
-  font-family: "Permanent Marker", cursive;
+  font-family: var(--font-display);
   font-size: 1.25rem;
   min-height: 52px;
   padding: 10px 20px;
@@ -185,11 +186,11 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 .stepper-btn {
   width: 44px;
   height: 44px;
-  border: 3px solid var(--ink);
+  border: 3px solid var(--line);
   border-radius: 50%;
   background: var(--card);
   color: var(--ink);
-  font-family: "Permanent Marker", cursive;
+  font-family: var(--font-display);
   font-size: 1.25rem;
   display: inline-flex;
   align-items: center;
@@ -201,19 +202,21 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 
 .stepper-btn:active:not(:disabled) {
   transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: 1px 1px 0 var(--shadow-color);
   background: var(--gold);
+  color: var(--btn-gold-fg);
 }
 
 /* Sticky Notes with Masking Tape */
 .note {
   position: relative;
   background: var(--note);
-  border: 2.5px solid var(--ink);
-  border-radius: 3px 8px 4px 10px;
+  color: var(--ink);
+  border: 2.5px solid var(--line);
+  border-radius: var(--wob-sm);
   padding: 12px 14px;
   transform: rotate(-0.5deg);
-  box-shadow: 3px 3px 0 rgba(29, 26, 22, 0.35);
+  box-shadow: var(--note-shadow);
 }
 
 .note::before {
@@ -223,8 +226,8 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   left: calc(50% - 28px);
   width: 56px;
   height: 16px;
-  background: rgba(251, 245, 228, 0.78);
-  border: 1.5px dashed rgba(29, 26, 22, 0.4);
+  background: var(--tape-bg);
+  border: 1.5px dashed var(--tape-border);
   transform: rotate(1.5deg);
   pointer-events: none;
 }
@@ -234,10 +237,10 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   position: relative;
   height: 20px;
   background: var(--card);
-  border: 3px solid var(--ink);
+  border: 3px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: 2px 2px 0 var(--shadow-color);
 }
 
 .bar-fill {
@@ -245,7 +248,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   background: repeating-linear-gradient(
     -45deg,
     var(--red) 0 8px,
-    #b5321f 8px 16px
+    var(--red-stripe) 8px 16px
   );
   transition: transform 220ms var(--ease-out), width 220ms var(--ease-out);
 }
@@ -254,7 +257,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   background: repeating-linear-gradient(
     -45deg,
     var(--gold) 0 8px,
-    #d99b16 8px 16px
+    var(--gold-stripe) 8px 16px
   );
 }
 
@@ -262,7 +265,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   background: repeating-linear-gradient(
     -45deg,
     var(--green) 0 8px,
-    #22602c 8px 16px
+    var(--green-stripe) 8px 16px
   );
 }
 
@@ -273,7 +276,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   background: repeating-linear-gradient(
     90deg,
     transparent 0 calc(8.333% - 1.5px),
-    rgba(29, 26, 22, 0.28) calc(8.333% - 1.5px) 8.333%
+    var(--bar-divider) calc(8.333% - 1.5px) 8.333%
   );
   pointer-events: none;
 }
@@ -288,7 +291,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 .level-box {
   width: 14px;
   height: 14px;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--line);
   border-radius: 3px;
   background: var(--card);
 }
@@ -307,16 +310,18 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
-  border: 2.5px solid var(--ink);
+  border: 2.5px solid var(--line);
   border-radius: 999px;
   background: var(--card);
+  color: var(--ink);
   font-size: 0.9rem;
   font-weight: 700;
-  box-shadow: 2px 2px 0 var(--ink);
+  box-shadow: 2px 2px 0 var(--shadow-color);
 }
 
 .pill.gold {
   background: var(--gold);
+  color: var(--btn-gold-fg);
 }
 
 .pill.green {
@@ -334,7 +339,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 /* KPI Before -> After Tile */
 .kpi {
   background: var(--card);
-  border: 3px solid var(--ink);
+  border: 3px solid var(--line);
   border-radius: var(--wob-sm);
   padding: 10px 12px;
   box-shadow: var(--sh-s);
@@ -348,7 +353,7 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(29, 26, 22, 0.55);
+  background: var(--backdrop);
   backdrop-filter: blur(3px);
   z-index: 60;
   transition: opacity 200ms var(--ease-out);
@@ -364,10 +369,10 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   overscroll-behavior: contain;
   touch-action: pan-y;
   background: var(--paper);
-  border-top: 4px solid var(--ink);
+  border-top: 4px solid var(--line);
   border-radius: 20px 20px 0 0;
   padding: 18px 16px calc(22px + var(--sab));
-  box-shadow: 0 -6px 0 var(--ink);
+  box-shadow: 0 -6px 0 var(--shadow-color);
   z-index: 70;
   transition: transform 240ms var(--ease-drawer), opacity 200ms var(--ease-out);
 }
@@ -377,18 +382,195 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   width: 100%;
   min-height: 44px;
   padding: 8px 12px;
-  background: var(--card);
-  border: 3px solid var(--ink);
+  background: var(--surface);
+  border: 3px solid var(--line);
   border-radius: var(--wob-sm);
-  box-shadow: inset 2px 2px 0 rgba(29, 26, 22, 0.12);
-  font-size: 19px;
+  box-shadow: var(--inset-shadow);
+  font-size: max(16px, var(--text-base, 19px));
   color: var(--ink);
   outline: none;
 }
 
 .nb-input:focus {
   border-color: var(--red);
-  background: #fffef9;
+  background: var(--input-focus-bg);
+}
+
+/* ==========================================================================
+   3. THEME-SPECIFIC SURFACE & GEOMETRY OVERRIDES
+   ========================================================================== */
+
+/* Cutecore: pastel pixel gingham background & crisp zero-wobble pixel geometry */
+[data-theme="cutecore"] body {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(90deg, rgba(255, 165, 200, 0.22) 50%, transparent 50%),
+    linear-gradient(rgba(255, 165, 200, 0.22) 50%, transparent 50%);
+  background-size: 20px 20px;
+}
+
+[data-theme="cutecore"] .hero-card,
+[data-theme="cutecore"] .wobble-grid > *,
+[data-theme="cutecore"] .note,
+[data-theme="cutecore"] .note::before,
+[data-theme="cutecore"] .brand,
+[data-theme="cutecore"] .brand-badge {
+  transform: none;
+}
+
+[data-theme="cutecore"] .stepper-btn,
+[data-theme="cutecore"] .pill,
+[data-theme="cutecore"] .bar,
+[data-theme="cutecore"] .level-box {
+  border-radius: 0;
+}
+
+[data-theme="cutecore"] .sheet-panel {
+  border-radius: 0;
+}
+
+/* Analog Horror: CRT vignette, scanline overlay & sharp institutional corners */
+[data-theme="analog-horror"] body {
+  background:
+    radial-gradient(ellipse at center, rgba(28, 34, 42, 0.35) 0%, rgba(10, 11, 13, 0.92) 80%, #050607 100%),
+    var(--paper);
+  letter-spacing: 0.01em;
+}
+
+[data-theme="analog-horror"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0px,
+    rgba(255, 255, 255, 0) 2px,
+    rgba(0, 0, 0, 0.22) 3px,
+    rgba(0, 0, 0, 0.22) 4px
+  );
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.65);
+}
+
+[data-theme="analog-horror"] .hero-card,
+[data-theme="analog-horror"] .wobble-grid > *,
+[data-theme="analog-horror"] .note,
+[data-theme="analog-horror"] .note::before,
+[data-theme="analog-horror"] .brand,
+[data-theme="analog-horror"] .brand-badge {
+  transform: none;
+}
+
+[data-theme="analog-horror"] .bar,
+[data-theme="analog-horror"] .level-box,
+[data-theme="analog-horror"] .pill {
+  border-radius: 2px;
+}
+
+[data-theme="analog-horror"] .sheet-panel {
+  border-radius: 6px 6px 0 0;
+}
+
+/* Brazilian Phonk: dark diagonal speed-grid, uppercase italic Impact headings, zero wobble */
+[data-theme="brazilian-phonk"] body {
+  background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient(
+      -30deg,
+      rgba(57, 255, 20, 0.05) 0px,
+      rgba(57, 255, 20, 0.05) 1px,
+      transparent 1px,
+      transparent 22px
+    ),
+    repeating-linear-gradient(
+      60deg,
+      rgba(255, 30, 138, 0.04) 0px,
+      rgba(255, 30, 138, 0.04) 1px,
+      transparent 1px,
+      transparent 22px
+    );
+}
+
+[data-theme="brazilian-phonk"] h1,
+[data-theme="brazilian-phonk"] h2,
+[data-theme="brazilian-phonk"] h3,
+[data-theme="brazilian-phonk"] .font-marker,
+[data-theme="brazilian-phonk"] .brand,
+[data-theme="brazilian-phonk"] .kpi-val,
+[data-theme="brazilian-phonk"] .stepper-val,
+[data-theme="brazilian-phonk"] .btn.big {
+  text-transform: uppercase;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+[data-theme="brazilian-phonk"] .hero-card,
+[data-theme="brazilian-phonk"] .wobble-grid > *,
+[data-theme="brazilian-phonk"] .note,
+[data-theme="brazilian-phonk"] .note::before,
+[data-theme="brazilian-phonk"] .brand,
+[data-theme="brazilian-phonk"] .brand-badge {
+  transform: none;
+}
+
+[data-theme="brazilian-phonk"] .bar,
+[data-theme="brazilian-phonk"] .level-box,
+[data-theme="brazilian-phonk"] .pill {
+  border-radius: 2px;
+}
+
+[data-theme="brazilian-phonk"] .sheet-panel {
+  border-radius: 4px 4px 0 0;
+}
+
+/* Future Funk: synthwave horizon glow, retro grid, italic pop headings, zero wobble */
+[data-theme="future-funk"] body {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 79, 216, 0.2) 0%, rgba(41, 242, 255, 0.08) 45%, transparent 72%),
+    linear-gradient(90deg, rgba(255, 79, 216, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(41, 242, 255, 0.07) 1px, transparent 1px);
+  background-size: 100% 100%, 28px 28px, 28px 28px;
+}
+
+[data-theme="future-funk"] h1,
+[data-theme="future-funk"] h2,
+[data-theme="future-funk"] h3,
+[data-theme="future-funk"] .font-marker,
+[data-theme="future-funk"] .brand,
+[data-theme="future-funk"] .kpi-val,
+[data-theme="future-funk"] .stepper-val,
+[data-theme="future-funk"] .btn.big {
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+[data-theme="future-funk"] .hero-card,
+[data-theme="future-funk"] .wobble-grid > *,
+[data-theme="future-funk"] .note,
+[data-theme="future-funk"] .note::before,
+[data-theme="future-funk"] .brand,
+[data-theme="future-funk"] .brand-badge {
+  transform: none;
+}
+
+/* Lo-fi Art: subtle twilight ambient glow, soft cozy geometry, zero wobble */
+[data-theme="lofi-art"] body {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle at 80% 12%, rgba(240, 182, 109, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 18% 82%, rgba(120, 183, 201, 0.1) 0%, transparent 50%);
+}
+
+[data-theme="lofi-art"] .hero-card,
+[data-theme="lofi-art"] .wobble-grid > *,
+[data-theme="lofi-art"] .note,
+[data-theme="lofi-art"] .note::before,
+[data-theme="lofi-art"] .brand,
+[data-theme="lofi-art"] .brand-badge {
+  transform: none;
 }
 
 /* Reduced Motion Accessibility */

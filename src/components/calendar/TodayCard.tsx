@@ -98,12 +98,12 @@ export function TodayCard({
     return (
       <section className="card space-y-3" aria-label="Today">
         <div className="flex items-center justify-between gap-2">
-          <span className="pill gold text-xs">TODAY</span>
-          <span className="text-sm font-bold text-[#5d5446]">
+          <span className="pill gold text-xs text-[var(--btn-gold-fg)]">TODAY</span>
+          <span className="text-sm font-bold text-[var(--muted)]">
             {formatDayHeader(today)}
           </span>
         </div>
-        <h2 className="font-marker text-2xl text-[#1d1a16]">No split yet</h2>
+        <h2 className="font-marker text-2xl text-[var(--ink)]">No split yet</h2>
         <div className="grid grid-cols-2 gap-2">
           <Link href="/split/edit" className="btn no-underline">
             Create split
@@ -125,15 +125,18 @@ export function TodayCard({
         isStartable: false,
       };
 
-  const cardClass =
-    todayDay?.status === 'planned' ? 'hero-card space-y-3' : 'card space-y-3';
+  const isPlannedToday = todayDay?.status === 'planned';
+  const cardClass = isPlannedToday ? 'hero-card space-y-3' : 'card space-y-3';
+  const cardFgClass = isPlannedToday
+    ? 'text-[var(--btn-gold-fg)]'
+    : 'text-[var(--ink)]';
 
   return (
     <section className={cardClass} aria-label="Today">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="pill bg-[#fbf5e4] text-xs">TODAY</span>
-          <span className="text-sm font-bold text-[#1d1a16] truncate">
+          <span className="pill bg-[var(--card)] text-[var(--ink)] text-xs">TODAY</span>
+          <span className={`text-sm font-bold truncate ${cardFgClass}`}>
             {formatDayHeader(today)}
           </span>
         </div>
@@ -150,7 +153,7 @@ export function TodayCard({
 
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-marker text-2xl text-[#1d1a16] truncate">
+          <h2 className={`font-marker text-2xl truncate ${cardFgClass}`}>
             {info.title}
           </h2>
           {info.badge && (

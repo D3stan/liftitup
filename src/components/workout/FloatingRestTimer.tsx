@@ -120,18 +120,18 @@ export default function FloatingRestTimer({
       }}
     >
       <div
-        className={`card-sm border-[3px] border-[#1d1a16] transition-colors duration-150 ${
-          isFinished ? 'bg-[#cde6c0]' : 'bg-[#fbf5e4]'
+        className={`card-sm border-[3px] border-[var(--line)] transition-colors duration-150 ${
+          isFinished ? 'bg-[var(--green-bg)]' : 'bg-[var(--card)]'
         }`}
         style={{
-          boxShadow: '5px 5px 0 var(--ink)',
+          boxShadow: '5px 5px 0 var(--shadow-color)',
         }}
       >
         {!endTimeMs && isExpandedPicker ? (
           <div className="space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Timer className="h-5 w-5 text-[#d9412b]" />
+                <Timer className="h-5 w-5 text-[var(--red)]" />
                 <span className="font-marker text-lg">Rest Timer</span>
               </div>
               <button
@@ -161,10 +161,10 @@ export default function FloatingRestTimer({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
                 <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[2.5px] border-[#1d1a16] ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[2.5px] border-[var(--line)] ${
                     isFinished
-                      ? 'animate-pulse bg-[#2e7d3a] text-white'
-                      : 'bg-[#f2b632]'
+                      ? 'animate-pulse bg-[var(--green)] text-[var(--btn-red-fg)]'
+                      : 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
                   }`}
                 >
                   {isFinished ? (
@@ -183,7 +183,7 @@ export default function FloatingRestTimer({
                     </span>
                   </div>
                   {label && (
-                    <p className="truncate text-sm font-bold text-[#5d5446]">
+                    <p className="truncate text-sm font-bold text-[var(--muted)]">
                       {label}
                     </p>
                   )}

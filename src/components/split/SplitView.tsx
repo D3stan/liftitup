@@ -66,7 +66,7 @@ export function SplitView() {
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-        <div className="card text-center text-[#6a6257]">Loading…</div>
+        <div className="card text-center text-[var(--muted)]">Loading…</div>
       </div>
     );
   }
@@ -74,7 +74,7 @@ export function SplitView() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 pb-28 pt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-marker text-2xl text-[#1d1a16]">
+        <h1 className="font-marker text-2xl text-[var(--ink)]">
           {schedule?.name || 'Split'}
         </h1>
         <div className="flex items-center gap-2">
@@ -97,7 +97,7 @@ export function SplitView() {
 
       {!schedule || schedule.days.length === 0 ? (
         <div className="card flex flex-col items-center gap-3 py-8 text-center">
-          <p className="font-marker text-lg text-[#1d1a16]">No split yet</p>
+          <p className="font-marker text-lg text-[var(--ink)]">No split yet</p>
           <Link href="/split/edit" className="btn">
             Create split
           </Link>
@@ -108,15 +108,15 @@ export function SplitView() {
             <section key={day.id} className="card space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
-                  <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-[6px_8px_6px_8px] border-2 border-[#1d1a16] bg-[#f2b632] px-1.5 font-marker text-sm text-[#1d1a16]">
+                  <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-[6px_8px_6px_8px] border-2 border-[var(--line)] bg-[var(--gold)] px-1.5 font-marker text-sm text-[var(--btn-gold-fg)]">
                     {idx + 1}
                   </span>
-                  <h2 className="font-marker text-xl text-[#1d1a16]">
+                  <h2 className="font-marker text-xl text-[var(--ink)]">
                     {day.label}
                   </h2>
                 </div>
                 {day.isRestDay && (
-                  <span className="rounded border-2 border-[#1d1a16] bg-[#d3e2f4] px-2.5 py-0.5 text-sm font-bold text-[#1d1a16]">
+                  <span className="rounded border-2 border-[var(--line)] bg-[var(--blue-bg)] px-2.5 py-0.5 text-sm font-bold text-[var(--ink)]">
                     Rest
                   </span>
                 )}
@@ -125,21 +125,21 @@ export function SplitView() {
               {!day.isRestDay && (
                 <div className="space-y-2 pt-1">
                   {day.exercises.length === 0 ? (
-                    <p className="text-sm text-[#6a6257]">No exercises</p>
+                    <p className="text-sm text-[var(--muted)]">No exercises</p>
                   ) : (
                     day.exercises.map((ex) => (
                       <div
                         key={ex.id}
-                        className="rounded-[8px_10px_8px_10px] border-2 border-[#1d1a16] bg-[#fffef9] px-3 py-2"
+                        className="rounded-[8px_10px_8px_10px] border-2 border-[var(--line)] bg-[var(--surface)] px-3 py-2"
                       >
-                        <div className="font-bold text-[#1d1a16]">
+                        <div className="font-bold text-[var(--ink)]">
                           {ex.exerciseName ?? 'Exercise'}
                         </div>
-                        <div className="text-sm text-[#4a433b]">
+                        <div className="text-sm text-[var(--muted)]">
                           {formatExerciseTarget(ex, unit)}
                         </div>
                         {ex.notes.trim().length > 0 && (
-                          <div className="mt-1 text-sm italic text-[#6a6257]">
+                          <div className="mt-1 text-sm italic text-[var(--muted)]">
                             {ex.notes}
                           </div>
                         )}

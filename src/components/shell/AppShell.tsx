@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { UserProfile } from '@/types/domain';
+import { applyThemeToDocument } from '@/lib/theme';
 import { ApiClientError, apiFetch, Toaster } from '@/components/ui';
 import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     try {
       const data = await apiFetch<{ user: UserProfile }>('/api/auth/me');
       setUser(data.user);
+      applyThemeToDocument(data.user.theme, data.user.themeVariant);
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 401) {
         setUser(null);

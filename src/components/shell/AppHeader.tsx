@@ -12,7 +12,7 @@ interface AppHeaderProps {
 export function AppHeader({ user }: AppHeaderProps) {
   return (
     <header
-      className="sticky top-0 z-30 border-b-[3px] border-[#1d1a16] bg-[#ece2c6]/95 backdrop-blur-md"
+      className="sticky top-0 z-30 border-b-[3px] border-[var(--line)] bg-[var(--paper)]/95 backdrop-blur-md"
       style={{ paddingTop: 'var(--sat)' }}
     >
       <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-3 py-2">

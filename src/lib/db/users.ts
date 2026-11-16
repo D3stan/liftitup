@@ -1,5 +1,16 @@
 import crypto from 'node:crypto';
-import type { UserProfile, WeightUnit } from '@/types/domain';
+import type {
+  AppTheme,
+  ThemeVariant,
+  UserProfile,
+  WeightUnit,
+} from '@/types/domain';
+import {
+  DEFAULT_THEME,
+  DEFAULT_THEME_VARIANT,
+  isValidAppTheme,
+  isValidThemeVariant,
+} from '@/lib/theme';
 import { getDb } from './connection';
 
 interface DbUserRow {
@@ -13,6 +24,8 @@ interface DbUserRow {
   training_years: number | null;
   unit: string;
   timezone: string;
+  theme?: string;
+  theme_variant?: string;
   enable_set_quality: number;
   apple_fitness_enabled: number;
   is_guest: number;
@@ -35,6 +48,8 @@ export interface CreateUserInput {
   trainingYears?: number | null;
   unit?: WeightUnit;
   timezone?: string;
+  theme?: AppTheme;
+  themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
   appleFitnessEnabled?: boolean;
   isGuest?: boolean;
@@ -48,6 +63,8 @@ export interface UpdateUserSettingsInput {
   trainingYears?: number | null;
   unit?: WeightUnit;
   timezone?: string;
+  theme?: AppTheme;
+  themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
   appleFitnessEnabled?: boolean;
 }
@@ -63,6 +80,10 @@ export function mapUserRow(row: DbUserRow): UserProfile {
     trainingYears: row.training_years === null ? null : Number(row.training_years),
     unit: row.unit === 'lb' ? 'lb' : 'kg',
     timezone: row.timezone || 'UTC',
+    theme: isValidAppTheme(row.theme) ? row.theme : DEFAULT_THEME,
+    themeVariant: isValidThemeVariant(row.theme_variant)
+      ? row.theme_variant
+      : DEFAULT_THEME_VARIANT,
     enableSetQuality: Boolean(row.enable_set_quality),
     appleFitnessEnabled: Boolean(row.apple_fitness_enabled),
     isGuest: Boolean(row.is_guest),
@@ -126,14 +147,21 @@ export function createUser(input: CreateUserInput): UserProfile {
   const displayName = input.displayName.trim() || username;
   const timezone = sanitizeTimezone(input.timezone);
   const unit: WeightUnit = input.unit === 'lb' ? 'lb' : 'kg';
+  const theme: AppTheme = isValidAppTheme(input.theme)
+    ? input.theme
+    : DEFAULT_THEME;
+  const themeVariant: ThemeVariant = isValidThemeVariant(input.themeVariant)
+    ? input.themeVariant
+    : DEFAULT_THEME_VARIANT;
 
   db.prepare(`
     INSERT INTO users (
       id, username, display_name, password_hash,
       height_cm, weight_kg, age, training_years,
-      unit, timezone, enable_set_quality, apple_fitness_enabled,
+      unit, timezone, theme, theme_variant,
+      enable_set_quality, apple_fitness_enabled,
       is_guest, last_active_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     username,
@@ -145,6 +173,8 @@ export function createUser(input: CreateUserInput): UserProfile {
     input.trainingYears ?? null,
     unit,
     timezone,
+    theme,
+    themeVariant,
     input.enableSetQuality ? 1 : 0,
     input.appleFitnessEnabled === false ? 0 : 1,
     input.isGuest ? 1 : 0,
@@ -190,6 +220,18 @@ export function updateUserSettings(
   if (patch.timezone !== undefined) {
     setClauses.push('timezone = ?');
     params.push(sanitizeTimezone(patch.timezone));
+  }
+  if (patch.theme !== undefined) {
+    setClauses.push('theme = ?');
+    params.push(isValidAppTheme(patch.theme) ? patch.theme : DEFAULT_THEME);
+  }
+  if (patch.themeVariant !== undefined) {
+    setClauses.push('theme_variant = ?');
+    params.push(
+      isValidThemeVariant(patch.themeVariant)
+        ? patch.themeVariant
+        : DEFAULT_THEME_VARIANT,
+    );
   }
   if (patch.enableSetQuality !== undefined) {
     setClauses.push('enable_set_quality = ?');

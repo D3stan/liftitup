@@ -116,7 +116,7 @@ function WelcomeContent() {
             <div>
               <label
                 htmlFor="auth-username"
-                className="mb-1 block text-sm font-bold text-[#5d5446]"
+                className="mb-1 block text-sm font-bold text-[var(--muted)]"
               >
                 Username
               </label>
@@ -140,7 +140,7 @@ function WelcomeContent() {
               <div>
                 <label
                   htmlFor="auth-displayname"
-                  className="mb-1 block text-sm font-bold text-[#5d5446]"
+                  className="mb-1 block text-sm font-bold text-[var(--muted)]"
                 >
                   Name (optional)
                 </label>
@@ -160,7 +160,7 @@ function WelcomeContent() {
             <div>
               <label
                 htmlFor="auth-password"
-                className="mb-1 block text-sm font-bold text-[#5d5446]"
+                className="mb-1 block text-sm font-bold text-[var(--muted)]"
               >
                 Password
               </label>

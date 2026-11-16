@@ -57,7 +57,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary navigation"
-      className="fixed bottom-0 left-0 right-0 z-40 border-t-[3px] border-[#1d1a16] bg-[#ece2c6]/95 backdrop-blur-md px-1.5 pt-1.5"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t-[3px] border-[var(--line)] bg-[var(--paper)]/95 backdrop-blur-md px-1.5 pt-1.5"
       style={{ paddingBottom: 'calc(8px + var(--sab))' }}
     >
       <div className="mx-auto grid max-w-2xl grid-cols-5 gap-1.5">
@@ -71,8 +71,8 @@ export function BottomNav() {
               aria-current={active ? 'page' : undefined}
               className={`flex min-h-[48px] flex-col items-center justify-center rounded-[8px] border-[2.5px] px-1 py-1 no-underline transition-transform duration-100 ${
                 active
-                  ? 'bg-[#f2b632] border-[#1d1a16] shadow-[3px_3px_0_#1d1a16] -translate-y-0.5 text-[#1d1a16] font-bold'
-                  : 'bg-[#fbf5e4]/80 border-transparent text-[#5d5446]'
+                  ? 'bg-[var(--gold)] border-[var(--line)] shadow-[3px_3px_0_var(--shadow-color)] -translate-y-0.5 text-[var(--btn-gold-fg)] font-bold'
+                  : 'bg-[var(--card)]/80 border-transparent text-[var(--muted)]'
               }`}
             >
               <Icon className="h-5 w-5 shrink-0" />

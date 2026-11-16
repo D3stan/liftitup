@@ -249,8 +249,8 @@ export function AppleFitnessPanel({
     <section className="card flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Watch className="h-5 w-5 text-[#1d1a16]" />
-          <h2 className="font-marker text-lg text-[#1d1a16]">Apple Health</h2>
+          <Watch className="h-5 w-5 text-[var(--ink)]" />
+          <h2 className="font-marker text-lg text-[var(--ink)]">Apple Health</h2>
         </div>
         <button
           type="button"
@@ -258,10 +258,10 @@ export function AppleFitnessPanel({
           aria-checked={user.appleFitnessEnabled}
           disabled={busy}
           onClick={handleToggle}
-          className={`min-h-[44px] min-w-[72px] rounded-xl border-2 border-[#1d1a16] px-3 text-sm font-bold transition ${
+          className={`min-h-[44px] min-w-[72px] rounded-xl border-2 border-[var(--line)] px-3 text-sm font-bold transition ${
             user.appleFitnessEnabled
-              ? 'bg-[#cde6c0] text-[#1d1a16]'
-              : 'bg-[#e8dec1] text-[#6b6254]'
+              ? 'bg-[var(--green-bg)] text-[var(--ink)]'
+              : 'bg-[var(--surface-alt)] text-[var(--muted)]'
           }`}
         >
           {user.appleFitnessEnabled ? 'ON' : 'OFF'}
@@ -269,7 +269,7 @@ export function AppleFitnessPanel({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+        <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
           Webhook URL
         </span>
         <div className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export function AppleFitnessPanel({
             readOnly
             value={webhookUrl}
             aria-label="Apple Health webhook URL"
-            className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+            className="min-h-[44px] w-full rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
           />
           <Button
             variant="alt"
@@ -312,17 +312,17 @@ export function AppleFitnessPanel({
       </div>
 
       {workouts.length > 0 && (
-        <div className="flex flex-col gap-1.5 border-t border-[#1d1a16]/15 pt-2">
-          <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+        <div className="flex flex-col gap-1.5 border-t border-[var(--line)]/15 pt-2">
+          <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
             Recent Syncs
           </span>
           {workouts.slice(0, 5).map((w) => (
             <div
               key={w.id}
-              className="flex items-center justify-between rounded-lg border border-[#1d1a16]/20 bg-[#fffdf7] px-2.5 py-1.5 text-sm"
+              className="flex items-center justify-between rounded-lg border border-[var(--line)]/20 bg-[var(--surface)] px-2.5 py-1.5 text-sm"
             >
               <span className="truncate font-medium">{w.workoutType}</span>
-              <span className="shrink-0 text-xs text-[#6b6254]">
+              <span className="shrink-0 text-xs text-[var(--muted)]">
                 {w.durationMinutes}m · {w.activeCalories} kcal
               </span>
             </div>

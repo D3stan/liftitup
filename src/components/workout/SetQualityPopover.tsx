@@ -131,7 +131,7 @@ export default function SetQualityPopover({
               type="button"
               onClick={handleTogglePerRep}
               className={`btn alt !min-h-[44px] !px-3 text-base ${
-                perRepMode ? '!bg-[#fbedba]' : ''
+                perRepMode ? '!bg-[var(--gold-bg)]' : ''
               }`}
             >
               {perRepMode ? 'Per-rep: ON' : 'Per-rep'}
@@ -148,7 +148,9 @@ export default function SetQualityPopover({
                   type="button"
                   onClick={() => setDraftPct(p.value)}
                   className={`btn alt !min-h-[44px] text-base ${
-                    draftPct === p.value ? '!bg-[#f2b632]' : ''
+                    draftPct === p.value
+                      ? '!bg-[var(--gold)] !text-[var(--btn-gold-fg)]'
+                      : ''
                   }`}
                 >
                   {p.label}
@@ -172,7 +174,7 @@ export default function SetQualityPopover({
                 value={draftPct}
                 onChange={(e) => setDraftPct(Number(e.target.value))}
                 aria-label="Execution quality percentage"
-                className="flex-1 h-10 accent-[#1d1a16]"
+                className="flex-1 h-10 accent-[var(--ink)]"
               />
               <button
                 type="button"
@@ -192,7 +194,7 @@ export default function SetQualityPopover({
                   key={r}
                   type="button"
                   onClick={() => handleCycleRep(r)}
-                  className={`min-h-[44px] rounded-[8px] border-[2.5px] border-[#1d1a16] px-2 py-1 font-bold text-sm shadow-[2px_2px_0_#1d1a16] ${getQualityBadgeColor(
+                  className={`min-h-[44px] rounded-[8px] border-[2.5px] border-[var(--line)] px-2 py-1 font-bold text-sm shadow-[2px_2px_0_var(--shadow-color)] ${getQualityBadgeColor(
                     val,
                   )}`}
                 >

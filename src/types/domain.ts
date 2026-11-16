@@ -14,6 +14,16 @@ export type {
 
 export type WeightUnit = 'kg' | 'lb';
 
+export type AppTheme =
+  | 'notebook'
+  | 'cutecore'
+  | 'analog-horror'
+  | 'brazilian-phonk'
+  | 'future-funk'
+  | 'lofi-art';
+
+export type ThemeVariant = 'light' | 'dark';
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -24,6 +34,8 @@ export interface UserProfile {
   trainingYears: number | null;
   unit: WeightUnit;
   timezone: string;
+  theme: AppTheme;
+  themeVariant: ThemeVariant;
   enableSetQuality: boolean;
   appleFitnessEnabled: boolean;
   isGuest: boolean;

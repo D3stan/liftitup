@@ -120,7 +120,7 @@ export default function WorkoutDayPage() {
   if (loading) {
     return (
       <main className="mx-auto max-w-xl space-y-4 px-4 pb-28 pt-4">
-        <div className="card h-24 animate-pulse bg-[#fbedba]/50" />
+        <div className="card h-24 animate-pulse bg-[var(--gold-bg)]/50" />
         <div className="card h-44 animate-pulse" />
       </main>
     );
@@ -134,7 +134,7 @@ export default function WorkoutDayPage() {
           <span>Calendar</span>
         </Link>
         <div className="card space-y-3">
-          <p className="font-bold text-[#d9412b]">
+          <p className="font-bold text-[var(--red)]">
             {errorMsg || 'Unable to load'}
           </p>
           <Button variant="primary" onClick={loadDay}>
@@ -207,7 +207,7 @@ export default function WorkoutDayPage() {
                   </span>
                 )}
               </div>
-              <h1 className="font-marker text-2xl leading-tight text-[#1d1a16]">
+              <h1 className="font-marker text-2xl leading-tight text-[var(--ink)]">
                 {session.title}
               </h1>
             </div>
@@ -232,7 +232,7 @@ export default function WorkoutDayPage() {
           </div>
 
           {session.notes.trim().length > 0 && (
-            <div className="note text-base font-bold text-[#1d1a16]">
+            <div className="note text-base font-bold text-[var(--ink)]">
               {session.notes}
             </div>
           )}
@@ -243,13 +243,13 @@ export default function WorkoutDayPage() {
               return (
                 <div
                   key={ex.id}
-                  className="rounded-[10px] border-[2.5px] border-[#1d1a16] bg-[#ece2c6]/60 p-3 space-y-2"
+                  className="rounded-[10px] border-[2.5px] border-[var(--line)] bg-[var(--paper)]/60 p-3 space-y-2"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="pill !bg-[#1d1a16] px-2 py-0 text-xs !text-[#fbf5e4]">
+                    <span className="pill !bg-[var(--ink)] px-2 py-0 text-xs !text-[var(--card)]">
                       #{idx + 1}
                     </span>
-                    <h2 className="font-bold text-lg leading-snug text-[#1d1a16]">
+                    <h2 className="font-bold text-lg leading-snug text-[var(--ink)]">
                       {ex.exerciseName ?? ex.exerciseId}
                     </h2>
                   </div>
@@ -270,7 +270,7 @@ export default function WorkoutDayPage() {
                       return (
                         <span
                           key={s.id}
-                          className={`inline-flex items-center gap-1.5 rounded-[6px] border-2 border-[#1d1a16] px-2.5 py-1 text-sm font-bold ${color}`}
+                          className={`inline-flex items-center gap-1.5 rounded-[6px] border-2 border-[var(--line)] px-2.5 py-1 text-sm font-bold ${color}`}
                         >
                           <span>{formatLoggedSet(s, t, user.unit)}</span>
                           {user.enableSetQuality &&
@@ -295,7 +295,7 @@ export default function WorkoutDayPage() {
         <section className="card space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <h1 className="font-marker text-2xl text-[#1d1a16]">
+              <h1 className="font-marker text-2xl text-[var(--ink)]">
                 {plannedDay.label}
               </h1>
             </div>
@@ -315,23 +315,23 @@ export default function WorkoutDayPage() {
             {plannedDay.exercises.map((ex, idx) => (
               <div
                 key={ex.id}
-                className="rounded-[10px] border-[2.5px] border-[#1d1a16] bg-[#ece2c6]/60 px-3 py-2.5 space-y-1"
+                className="rounded-[10px] border-[2.5px] border-[var(--line)] bg-[var(--paper)]/60 px-3 py-2.5 space-y-1"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="pill shrink-0 !bg-[#1d1a16] px-2 py-0 text-xs !text-[#fbf5e4]">
+                    <span className="pill shrink-0 !bg-[var(--ink)] px-2 py-0 text-xs !text-[var(--card)]">
                       #{idx + 1}
                     </span>
-                    <span className="truncate font-bold text-lg text-[#1d1a16]">
+                    <span className="truncate font-bold text-lg text-[var(--ink)]">
                       {ex.exerciseName ?? ex.exerciseId}
                     </span>
                   </div>
-                  <span className="shrink-0 text-sm font-bold text-[#5d5446]">
+                  <span className="shrink-0 text-sm font-bold text-[var(--muted)]">
                     {ex.restSeconds}s
                   </span>
                 </div>
 
-                <div className="text-base font-bold text-[#5d5446]">
+                <div className="text-base font-bold text-[var(--muted)]">
                   {formatPlannedTarget(ex, user.unit)}
                 </div>
 
@@ -374,7 +374,7 @@ export default function WorkoutDayPage() {
         calendarDay.status !== 'planned') &&
         sessions.length === 0 && (
           <section className="card space-y-3 text-center">
-            <h1 className="font-marker text-2xl text-[#1d1a16]">
+            <h1 className="font-marker text-2xl text-[var(--ink)]">
               {calendarDay.status === 'rest'
                 ? 'Rest Day'
                 : calendarDay.status === 'postponed'

@@ -275,20 +275,20 @@ export function getQualityRowColor(
   enableSetQuality: boolean,
   qualityPct: number | null,
 ): string {
-  if (!isCompleted) return 'bg-[#fbf5e4]';
+  if (!isCompleted) return 'bg-[var(--card)]';
   if (!enableSetQuality || qualityPct === null || qualityPct === 100) {
-    return 'bg-[#cde6c0]';
+    return 'bg-[var(--green-bg)]';
   }
-  if (qualityPct >= 80) return 'bg-[#fef0c3]';
-  if (qualityPct >= 50) return 'bg-[#fbd5b5]';
-  return 'bg-[#f9c6bf]';
+  if (qualityPct >= 80) return 'bg-[var(--gold-bg)]';
+  if (qualityPct >= 50) return 'bg-[color-mix(in_srgb,var(--gold-bg)_45%,var(--red-bg))]';
+  return 'bg-[var(--red-bg)]';
 }
 
 export function getQualityBadgeColor(qualityPct: number | null): string {
-  if (qualityPct === null || qualityPct === 100) return '!bg-[#cde6c0]';
-  if (qualityPct >= 80) return '!bg-[#fef0c3]';
-  if (qualityPct >= 50) return '!bg-[#fbd5b5]';
-  return '!bg-[#f9c6bf]';
+  if (qualityPct === null || qualityPct === 100) return '!bg-[var(--green-bg)]';
+  if (qualityPct >= 80) return '!bg-[var(--gold-bg)]';
+  if (qualityPct >= 50) return '!bg-[color-mix(in_srgb,var(--gold-bg)_45%,var(--red-bg))]';
+  return '!bg-[var(--red-bg)]';
 }
 
 export function localTodayYmd(): string {

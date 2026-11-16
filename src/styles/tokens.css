@@ -1,8 +1,10 @@
 :root {
   /* Core Ink-on-Paper Cartoon Notebook Palette (fit-or-pivot + myfood) */
-  --ink: #1d1a16;        /* Primary text, 3px solid borders, hard offset shadows */
+  --ink: #1d1a16;        /* Primary text */
   --paper: #ece2c6;      /* Warm vintage notebook paper background + PWA theme-color */
   --card: #fbf5e4;       /* Card, sheet, pill, and surface background */
+  --surface: #fffdf7;    /* Input and code block background */
+  --surface-alt: #e8dec1;/* Inactive toggle / secondary surface background */
   --muted: #5d5446;      /* Secondary text, labels, inactive tabs */
   --line: #1d1a16;       /* Border color */
   --red: #d9412b;        /* Brand title, PR flame, high-intensity CTA, MRV warning */
@@ -15,10 +17,35 @@
   --blue-bg: #d4e3f7;    /* Secondary info badge fill */
   --note: #fff27a;       /* Sticky-note yellow for tips, warnings, PR notes */
 
+  /* Contrast-Safe Button & Chrome Tokens */
+  --shadow-color: #1d1a16;
+  --btn-red-fg: #ffffff;
+  --btn-gold-fg: #1d1a16;
+  --backdrop: rgba(29, 26, 22, 0.55);
+  --selection-bg: #f2b632;
+  --selection-fg: #1d1a16;
+
+  /* Typography */
+  --font-body: "Patrick Hand", "Comic Sans MS", "Chalkboard SE", cursive, sans-serif;
+  --font-display: "Permanent Marker", "Marker Felt", cursive, sans-serif;
+  --text-base: 19px;
+
+  /* Surface Accents */
+  --dot-color: rgba(29, 26, 22, 0.10);
+  --note-shadow: 3px 3px 0 rgba(29, 26, 22, 0.35);
+  --tape-bg: rgba(251, 245, 228, 0.78);
+  --tape-border: rgba(29, 26, 22, 0.4);
+  --red-stripe: #b5321f;
+  --gold-stripe: #d99b16;
+  --green-stripe: #22602c;
+  --bar-divider: rgba(29, 26, 22, 0.28);
+  --inset-shadow: inset 2px 2px 0 rgba(29, 26, 22, 0.12);
+  --input-focus-bg: #fffef9;
+
   /* Hard Offset Shadows (Never soft/blurred shadows on cards/buttons) */
-  --sh: 4px 4px 0 var(--ink);
-  --sh-s: 3px 3px 0 var(--ink);
-  --sh-l: 6px 6px 0 var(--ink);
+  --sh: 4px 4px 0 var(--shadow-color);
+  --sh-s: 3px 3px 0 var(--shadow-color);
+  --sh-l: 6px 6px 0 var(--shadow-color);
 
   /* Hand-Drawn Wobbly Border Radius */
   --wob: 3px 10px 4px 12px / 10px 3px 12px 4px;
@@ -33,4 +60,263 @@
   --tabbar: 68px;
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
+}
+
+/* ==========================================================================
+   NOTEBOOK DARK VARIANT
+   ========================================================================== */
+[data-theme="notebook"][data-variant="dark"] {
+  --paper: #171512;
+  --card: #231f1a;
+  --surface: #2b2620;
+  --surface-alt: #302a23;
+  --ink: #f4ebd8;
+  --muted: #b5aa96;
+  --line: #f4ebd8;
+  --red: #e85a44;
+  --red-bg: #4a231d;
+  --gold: #f2b632;
+  --btn-gold-fg: #1d1a16;
+  --gold-bg: #463717;
+  --green: #58b966;
+  --green-bg: #1e3b23;
+  --blue: #6aa1eb;
+  --blue-bg: #1b2f4a;
+  --note: #4a4119;
+  --shadow-color: #080705;
+  --btn-red-fg: #ffffff;
+  --backdrop: rgba(8, 7, 5, 0.72);
+  --selection-bg: #f2b632;
+  --selection-fg: #1d1a16;
+
+  --dot-color: rgba(244, 235, 216, 0.12);
+  --note-shadow: 3px 3px 0 rgba(8, 7, 5, 0.65);
+  --tape-bg: rgba(74, 65, 25, 0.65);
+  --tape-border: rgba(244, 235, 216, 0.35);
+  --red-stripe: #c4412d;
+  --gold-stripe: #c99018;
+  --green-stripe: #3e934b;
+  --bar-divider: rgba(8, 7, 5, 0.45);
+  --inset-shadow: inset 2px 2px 0 rgba(8, 7, 5, 0.45);
+  --input-focus-bg: #322c25;
+}
+
+/* ==========================================================================
+   CUTECORE (Hello Kitty Pixel Pastel)
+   ========================================================================== */
+[data-theme="cutecore"] {
+  --paper: #ffeaf2;
+  --card: #fff8fb;
+  --surface: #ffffff;
+  --surface-alt: #ffd4e5;
+  --ink: #4a1c36;
+  --muted: #8b5674;
+  --line: #4a1c36;
+  --red: #ff3b7f;
+  --red-bg: #ffd0e2;
+  --gold: #ffe07d;
+  --btn-gold-fg: #4a1c36;
+  --gold-bg: #fff3c4;
+  --blue: #4da6e8;
+  --blue-bg: #dbf0ff;
+  --green: #3aa874;
+  --green-bg: #d4f7e6;
+  --note: #fff5b8;
+  --shadow-color: #f08cb5;
+  --btn-red-fg: #ffffff;
+  --backdrop: rgba(74, 28, 54, 0.42);
+  --selection-bg: #ff3b7f;
+  --selection-fg: #ffffff;
+
+  --wob: 0px;
+  --wob-sm: 0px;
+  --font-display: ui-monospace, "Silkscreen", "Courier New", monospace;
+  --font-body: ui-rounded, "Nunito", "Hiragino Maru Gothic ProN", "Segoe UI", system-ui, sans-serif;
+  --text-base: 17px;
+
+  --note-shadow: 3px 3px 0 var(--shadow-color);
+  --tape-bg: rgba(255, 208, 226, 0.85);
+  --tape-border: rgba(74, 28, 54, 0.45);
+  --red-stripe: #e22266;
+  --gold-stripe: #f0c94d;
+  --green-stripe: #2b895c;
+  --bar-divider: rgba(74, 28, 54, 0.25);
+  --inset-shadow: inset 2px 2px 0 rgba(240, 140, 181, 0.28);
+  --input-focus-bg: #ffffff;
+}
+
+/* ==========================================================================
+   ANALOG HORROR (CRT & VHS Broadcast)
+   ========================================================================== */
+[data-theme="analog-horror"] {
+  --paper: #0a0b0d;
+  --card: #121418;
+  --surface: #0d0f13;
+  --surface-alt: #1b1f26;
+  --ink: #dcdad0;
+  --muted: #828791;
+  --line: #686e7a;
+  --red: #d91e2a;
+  --red-bg: #360b0f;
+  --gold: #d6a319;
+  --btn-gold-fg: #0a0b0d;
+  --gold-bg: #2e2408;
+  --green: #48b864;
+  --green-bg: #102916;
+  --blue: #5289c7;
+  --blue-bg: #101f33;
+  --note: #26210f;
+  --shadow-color: #000000;
+  --btn-red-fg: #ffffff;
+  --backdrop: rgba(0, 0, 0, 0.78);
+  --selection-bg: #d91e2a;
+  --selection-fg: #ffffff;
+
+  --wob: 2px;
+  --wob-sm: 2px;
+  --font-body: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-display: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --text-base: 15.5px;
+
+  --note-shadow: 3px 3px 0 #000000;
+  --tape-bg: rgba(46, 36, 8, 0.85);
+  --tape-border: rgba(214, 163, 25, 0.45);
+  --red-stripe: #a6131d;
+  --gold-stripe: #a87d10;
+  --green-stripe: #318e49;
+  --bar-divider: rgba(0, 0, 0, 0.55);
+  --inset-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.6);
+  --input-focus-bg: #141820;
+}
+
+/* ==========================================================================
+   BRAZILIAN PHONK (Acid Neon & Street Drift)
+   ========================================================================== */
+[data-theme="brazilian-phonk"] {
+  --paper: #09090d;
+  --card: #13131b;
+  --surface: #0d0d14;
+  --surface-alt: #1d1d29;
+  --ink: #f4f7f5;
+  --muted: #989cb0;
+  --line: #39ff14;
+  --red: #ff1e6e;
+  --red-bg: #3b0d20;
+  --gold: #d9ff00;
+  --btn-gold-fg: #09090d;
+  --gold-bg: #2c3305;
+  --green: #39ff14;
+  --green-bg: #0f3312;
+  --blue: #00d9ff;
+  --blue-bg: #092b38;
+  --note: #282c0a;
+  --shadow-color: #ff1e8a;
+  --btn-red-fg: #ffffff;
+  --backdrop: rgba(9, 9, 13, 0.78);
+  --selection-bg: #39ff14;
+  --selection-fg: #09090d;
+
+  --wob: 2px;
+  --wob-sm: 2px;
+  --font-display: Impact, "Arial Black", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-base: 16.5px;
+
+  --note-shadow: 3px 3px 0 #ff1e8a;
+  --tape-bg: rgba(217, 255, 0, 0.25);
+  --tape-border: rgba(57, 255, 20, 0.65);
+  --red-stripe: #c80e52;
+  --gold-stripe: #a6c400;
+  --green-stripe: #20b808;
+  --bar-divider: rgba(9, 9, 13, 0.6);
+  --inset-shadow: inset 2px 2px 0 rgba(255, 30, 138, 0.25);
+  --input-focus-bg: #161622;
+}
+
+/* ==========================================================================
+   FUTURE FUNK (80s City-Pop & Synth Neon)
+   ========================================================================== */
+[data-theme="future-funk"] {
+  --paper: #170b2b;
+  --card: #241142;
+  --surface: #1b0c34;
+  --surface-alt: #32185c;
+  --ink: #fff4ff;
+  --muted: #c8a2e8;
+  --line: #ff4fd8;
+  --red: #ff2e93;
+  --red-bg: #4f0e38;
+  --gold: #ffbe3b;
+  --btn-gold-fg: #1b072e;
+  --gold-bg: #4b2b0a;
+  --blue: #29f2ff;
+  --blue-bg: #0b3a4d;
+  --green: #38f2af;
+  --green-bg: #0d3d2f;
+  --note: #3b1c54;
+  --shadow-color: #29f2ff;
+  --btn-red-fg: #ffffff;
+  --backdrop: rgba(23, 11, 43, 0.78);
+  --selection-bg: #ff4fd8;
+  --selection-fg: #170b2b;
+
+  --wob: 10px;
+  --wob-sm: 8px;
+  --font-display: "Trebuchet MS", "Avenir Next", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-base: 16.5px;
+
+  --note-shadow: 3px 3px 0 #29f2ff;
+  --tape-bg: rgba(255, 79, 216, 0.28);
+  --tape-border: rgba(41, 242, 255, 0.65);
+  --red-stripe: #c4186d;
+  --gold-stripe: #d49419;
+  --green-stripe: #1bb87f;
+  --bar-divider: rgba(23, 11, 43, 0.55);
+  --inset-shadow: inset 2px 2px 0 rgba(41, 242, 255, 0.22);
+  --input-focus-bg: #2a144d;
+}
+
+/* ==========================================================================
+   LO-FI ART (Rainy Twilight & Warm Lamp)
+   ========================================================================== */
+[data-theme="lofi-art"] {
+  --paper: #1c1f33;
+  --card: #262a42;
+  --surface: #202438;
+  --surface-alt: #323756;
+  --ink: #efe6d8;
+  --muted: #a6a3bd;
+  --line: #6d6a8a;
+  --red: #d97a8c;
+  --red-bg: #472836;
+  --gold: #f0b66d;
+  --btn-gold-fg: #1c1f33;
+  --gold-bg: #453524;
+  --blue: #78b7c9;
+  --blue-bg: #1e3745;
+  --green: #82bf93;
+  --green-bg: #203b2c;
+  --note: #3d3426;
+  --shadow-color: #101220;
+  --btn-red-fg: #ffffff;
+  --backdrop: rgba(16, 18, 32, 0.72);
+  --selection-bg: #f0b66d;
+  --selection-fg: #1c1f33;
+
+  --wob: 14px;
+  --wob-sm: 10px;
+  --font-body: "Patrick Hand", ui-rounded, sans-serif;
+  --font-display: "Patrick Hand", ui-rounded, sans-serif;
+  --text-base: 18px;
+
+  --note-shadow: 3px 3px 0 #101220;
+  --tape-bg: rgba(240, 182, 109, 0.25);
+  --tape-border: rgba(239, 230, 216, 0.3);
+  --red-stripe: #b85c6e;
+  --gold-stripe: #cc944e;
+  --green-stripe: #629b72;
+  --bar-divider: rgba(16, 18, 32, 0.45);
+  --inset-shadow: inset 2px 2px 0 rgba(16, 18, 32, 0.4);
+  --input-focus-bg: #292e47;
 }

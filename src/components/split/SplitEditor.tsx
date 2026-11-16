@@ -132,7 +132,7 @@ function parseOptionalNum(raw: string): number | null {
 }
 
 const INPUT_CLS =
-  'w-full min-h-[44px] rounded-[8px_10px_8px_10px] border-[2.5px] border-[#1d1a16] bg-[#fffdf7] px-2.5 py-1.5 text-[16px] text-[#1d1a16] outline-none focus:bg-[#fffef9]';
+  'w-full min-h-[44px] rounded-[8px_10px_8px_10px] border-[2.5px] border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[16px] text-[var(--ink)] outline-none focus:bg-[var(--surface)]';
 
 export function SplitEditor() {
   const router = useRouter();
@@ -348,7 +348,7 @@ export function SplitEditor() {
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-        <div className="card text-center text-[#6a6257]">Loading…</div>
+        <div className="card text-center text-[var(--muted)]">Loading…</div>
       </div>
     );
   }
@@ -367,7 +367,7 @@ export function SplitEditor() {
       </div>
 
       <div className="card space-y-2">
-        <label className="block text-sm font-bold text-[#4a433b]">
+        <label className="block text-sm font-bold text-[var(--muted)]">
           Split name
           <input
             type="text"
@@ -383,7 +383,7 @@ export function SplitEditor() {
         {days.map((day, dayIdx) => (
           <section key={day.localKey} className="card space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-8 min-w-[32px] items-center justify-center rounded-[6px_8px_6px_8px] border-2 border-[#1d1a16] bg-[#f2b632] px-1.5 font-marker text-sm text-[#1d1a16]">
+              <span className="inline-flex h-8 min-w-[32px] items-center justify-center rounded-[6px_8px_6px_8px] border-2 border-[var(--line)] bg-[var(--gold)] px-1.5 font-marker text-sm text-[var(--btn-gold-fg)]">
                 {dayIdx + 1}
               </span>
               <input
@@ -463,14 +463,14 @@ export function SplitEditor() {
                   return (
                     <div
                       key={ex.localKey}
-                      className="space-y-2.5 rounded-[10px_12px_10px_12px] border-[2.5px] border-[#1d1a16] bg-[#fffef9] p-3"
+                      className="space-y-2.5 rounded-[10px_12px_10px_12px] border-[2.5px] border-[var(--line)] bg-[var(--surface)] p-3"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="font-bold leading-snug text-[#1d1a16]">
+                          <div className="font-bold leading-snug text-[var(--ink)]">
                             {ex.exerciseName}
                           </div>
-                          <div className="text-xs text-[#6a6257]">
+                          <div className="text-xs text-[var(--muted)]">
                             {TRACKING_TYPE_LABEL[type]}
                           </div>
                         </div>
@@ -505,7 +505,7 @@ export function SplitEditor() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        <label className="block text-xs font-bold text-[#4a433b]">
+                        <label className="block text-xs font-bold text-[var(--muted)]">
                           Sets
                           <input
                             type="number"
@@ -524,7 +524,7 @@ export function SplitEditor() {
 
                         {showReps && (
                           <>
-                            <label className="block text-xs font-bold text-[#4a433b]">
+                            <label className="block text-xs font-bold text-[var(--muted)]">
                               Reps / Min
                               <input
                                 type="number"
@@ -541,7 +541,7 @@ export function SplitEditor() {
                                 className={`${INPUT_CLS} mt-0.5`}
                               />
                             </label>
-                            <label className="block text-xs font-bold text-[#4a433b]">
+                            <label className="block text-xs font-bold text-[var(--muted)]">
                               Max reps
                               <input
                                 type="number"
@@ -562,7 +562,7 @@ export function SplitEditor() {
                         )}
 
                         {showWeight && (
-                          <label className="block text-xs font-bold text-[#4a433b]">
+                          <label className="block text-xs font-bold text-[var(--muted)]">
                             {weightLabel}
                             <input
                               type="number"
@@ -583,7 +583,7 @@ export function SplitEditor() {
                         )}
 
                         {showTime && (
-                          <label className="block text-xs font-bold text-[#4a433b]">
+                          <label className="block text-xs font-bold text-[var(--muted)]">
                             Time (s)
                             <input
                               type="number"
@@ -603,7 +603,7 @@ export function SplitEditor() {
                         )}
 
                         {showDist && (
-                          <label className="block text-xs font-bold text-[#4a433b]">
+                          <label className="block text-xs font-bold text-[var(--muted)]">
                             Dist (m)
                             <input
                               type="number"
@@ -622,7 +622,7 @@ export function SplitEditor() {
                           </label>
                         )}
 
-                        <label className="block text-xs font-bold text-[#4a433b]">
+                        <label className="block text-xs font-bold text-[var(--muted)]">
                           Rest (s)
                           <input
                             type="number"

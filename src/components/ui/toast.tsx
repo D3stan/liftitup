@@ -91,9 +91,9 @@ export const toast: ToastFn = Object.assign(
 );
 
 const VARIANT_CLASSES: Record<ToastVariant, string> = {
-  info: 'bg-[#fbf5e4] text-[#1d1a16]',
-  success: 'bg-[#cde6c0] text-[#1d1a16]',
-  error: 'bg-[#f6cfc4] text-[#1d1a16]',
+  info: 'bg-[var(--card)] text-[var(--ink)]',
+  success: 'bg-[var(--green-bg)] text-[var(--ink)]',
+  error: 'bg-[var(--red-bg)] text-[var(--ink)]',
 };
 
 export function Toaster() {
@@ -122,7 +122,7 @@ export function Toaster() {
           <div
             key={item.id}
             role={item.variant === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto flex w-full max-w-md items-center gap-2.5 rounded-[8px] border-[3px] border-[#1d1a16] px-3.5 py-2.5 shadow-[4px_4px_0_#1d1a16] ${VARIANT_CLASSES[item.variant]}`}
+            className={`pointer-events-auto flex w-full max-w-md items-center gap-2.5 rounded-[8px] border-[3px] border-[var(--line)] px-3.5 py-2.5 shadow-[4px_4px_0_var(--shadow-color)] ${VARIANT_CLASSES[item.variant]}`}
           >
             <Icon className="h-5 w-5 shrink-0" />
             <span className="flex-1 text-base font-bold leading-snug break-words">
@@ -132,7 +132,7 @@ export function Toaster() {
               type="button"
               onClick={() => dismissToast(item.id)}
               aria-label="Dismiss"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 border-transparent hover:border-[#1d1a16]"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 border-transparent hover:border-[var(--line)]"
             >
               <X className="h-4 w-4" />
             </button>

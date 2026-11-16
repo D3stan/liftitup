@@ -604,7 +604,7 @@ function WorkoutLoggerInner() {
   if (loading || !draft || !dayView) {
     return (
       <main className="mx-auto max-w-xl space-y-4 px-4 pb-32 pt-4">
-        <div className="card h-24 animate-pulse bg-[#fbedba]/50" />
+        <div className="card h-24 animate-pulse bg-[var(--gold-bg)]/50" />
         <div className="card h-56 animate-pulse" />
       </main>
     );
@@ -659,7 +659,7 @@ function WorkoutLoggerInner() {
 
       {/* Restored Draft Pill */}
       {restoredFromStorage && (
-        <div className="flex items-center justify-between gap-2 rounded-[8px] border-2 border-[#1d1a16] bg-[#fbedba] px-3 py-2 text-sm font-bold">
+        <div className="flex items-center justify-between gap-2 rounded-[8px] border-2 border-[var(--line)] bg-[var(--gold-bg)] px-3 py-2 text-sm font-bold">
           <span>Draft restored</span>
           <button
             type="button"
@@ -686,7 +686,7 @@ function WorkoutLoggerInner() {
             }
             placeholder="Workout title"
             aria-label="Workout title"
-            className="min-h-[44px] flex-1 rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#ece2c6]/60 px-3 font-marker text-xl outline-none focus:bg-white"
+            className="min-h-[44px] flex-1 rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--paper)]/60 px-3 font-marker text-xl outline-none focus:bg-[var(--surface)]"
           />
           {!noteOpen && (
             <button
@@ -736,7 +736,7 @@ function WorkoutLoggerInner() {
         {(noteOpen || draft.notes.trim().length > 0) && (
           <div className="note space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold uppercase text-[#5d5446]">
+              <span className="text-xs font-bold uppercase text-[var(--muted)]">
                 Workout Note
               </span>
               {draft.notes.trim().length === 0 && (
@@ -744,7 +744,7 @@ function WorkoutLoggerInner() {
                   type="button"
                   onClick={() => setNoteOpen(false)}
                   aria-label="Close empty workout note"
-                  className="flex h-7 w-7 items-center justify-center rounded border border-[#1d1a16]/40 bg-[#fbf5e4]"
+                  className="flex h-7 w-7 items-center justify-center rounded border border-[var(--line)]/40 bg-[var(--card)]"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -757,7 +757,7 @@ function WorkoutLoggerInner() {
                 updateDraft((prev) => ({ ...prev, notes: e.target.value }))
               }
               placeholder="Workout note..."
-              className="w-full resize-none rounded-[6px] border-2 border-[#1d1a16] bg-[#fbf5e4] px-2.5 py-1.5 text-base font-bold outline-none"
+              className="w-full resize-none rounded-[6px] border-2 border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-base font-bold outline-none"
             />
           </div>
         )}
@@ -787,7 +787,7 @@ function WorkoutLoggerInner() {
         ))}
 
         {draft.exercises.length === 0 && (
-          <div className="card py-6 text-center font-bold text-[#5d5446]">
+          <div className="card py-6 text-center font-bold text-[var(--muted)]">
             No exercises yet
           </div>
         )}
@@ -899,7 +899,7 @@ export default function WorkoutLogPage() {
     <Suspense
       fallback={
         <main className="mx-auto max-w-xl space-y-4 px-4 pb-32 pt-4">
-          <div className="card h-24 animate-pulse bg-[#fbedba]/50" />
+          <div className="card h-24 animate-pulse bg-[var(--gold-bg)]/50" />
           <div className="card h-56 animate-pulse" />
         </main>
       }

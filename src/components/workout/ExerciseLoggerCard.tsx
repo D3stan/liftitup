@@ -108,17 +108,17 @@ export default function ExerciseLoggerCard({
   return (
     <div
       className={`card space-y-3 transition-colors duration-150 ${
-        allDone ? 'bg-[#eef7e8]' : ''
+        allDone ? 'bg-[color-mix(in_srgb,var(--green-bg)_55%,var(--card))]' : ''
       }`}
     >
       {/* Header: Order + Name + Controls */}
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="pill shrink-0 !bg-[#1d1a16] px-2.5 py-0.5 font-marker text-xs !text-[#fbf5e4]">
+            <span className="pill shrink-0 !bg-[var(--ink)] px-2.5 py-0.5 font-marker text-xs !text-[var(--card)]">
               #{index + 1}
             </span>
-            <h3 className="min-w-0 flex-1 font-marker text-xl leading-tight text-[#1d1a16]">
+            <h3 className="min-w-0 flex-1 font-marker text-xl leading-tight text-[var(--ink)]">
               {exercise.exerciseName}
             </h3>
           </div>
@@ -176,7 +176,7 @@ export default function ExerciseLoggerCard({
       {(noteOpen || exercise.notes.trim().length > 0) && (
         <div className="note space-y-1.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-bold uppercase text-[#5d5446]">
+            <span className="text-xs font-bold uppercase text-[var(--muted)]">
               Exercise Note
             </span>
             {exercise.notes.trim().length === 0 && (
@@ -184,7 +184,7 @@ export default function ExerciseLoggerCard({
                 type="button"
                 onClick={() => setNoteOpen(false)}
                 aria-label="Close empty note"
-                className="flex h-7 w-7 items-center justify-center rounded border border-[#1d1a16]/40 bg-[#fbf5e4]"
+                className="flex h-7 w-7 items-center justify-center rounded border border-[var(--line)]/40 bg-[var(--card)]"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -195,7 +195,7 @@ export default function ExerciseLoggerCard({
             value={exercise.notes}
             onChange={(e) => onChangeNotes(index, e.target.value)}
             placeholder="Note..."
-            className="w-full resize-none rounded-[6px] border-2 border-[#1d1a16] bg-[#fbf5e4] px-2.5 py-1.5 text-base font-bold outline-none"
+            className="w-full resize-none rounded-[6px] border-2 border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-base font-bold outline-none"
           />
         </div>
       )}
@@ -217,11 +217,11 @@ export default function ExerciseLoggerCard({
               onPointerUp={cancelLongPress}
               onPointerLeave={cancelLongPress}
               onPointerCancel={cancelLongPress}
-              className={`rounded-[10px] border-[2.5px] border-[#1d1a16] p-2.5 shadow-[2px_2px_0_#1d1a16] transition-colors ${rowColor}`}
+              className={`rounded-[10px] border-[2.5px] border-[var(--line)] p-2.5 shadow-[2px_2px_0_var(--shadow-color)] transition-colors ${rowColor}`}
             >
               {/* Top line: Set # + Quality pill + Check + Remove */}
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="pill bg-[#fbf5e4] px-2.5 py-0.5 font-marker text-xs">
+                <span className="pill bg-[var(--card)] px-2.5 py-0.5 font-marker text-xs">
                   Set {setIdx + 1}
                 </span>
 
@@ -231,7 +231,7 @@ export default function ExerciseLoggerCard({
                       type="button"
                       onClick={() => setQualitySetIdx(setIdx)}
                       aria-label={`Set ${setIdx + 1} quality`}
-                      className={`min-h-[44px] min-w-[54px] rounded-[8px] border-[2.5px] border-[#1d1a16] px-2.5 text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${getQualityBadgeColor(
+                      className={`min-h-[44px] min-w-[54px] rounded-[8px] border-[2.5px] border-[var(--line)] px-2.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${getQualityBadgeColor(
                         setRow.executionQualityPct,
                       )}`}
                     >
@@ -284,7 +284,7 @@ export default function ExerciseLoggerCard({
               >
                 {usesWeight && (
                   <label className="block space-y-0.5">
-                    <span className="block text-xs font-bold uppercase text-[#5d5446]">
+                    <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       {getWeightFieldLabel(t, unit)}
                     </span>
                     <input
@@ -297,14 +297,14 @@ export default function ExerciseLoggerCard({
                         })
                       }
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#fbf5e4] px-3 text-base font-bold outline-none focus:bg-white"
+                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
                     />
                   </label>
                 )}
 
                 {usesReps && (
                   <label className="block space-y-0.5">
-                    <span className="block text-xs font-bold uppercase text-[#5d5446]">
+                    <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       Reps
                     </span>
                     <input
@@ -315,14 +315,14 @@ export default function ExerciseLoggerCard({
                         onUpdateSet(index, setIdx, { reps: e.target.value })
                       }
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#fbf5e4] px-3 text-base font-bold outline-none focus:bg-white"
+                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
                     />
                   </label>
                 )}
 
                 {usesDist && (
                   <label className="block space-y-0.5">
-                    <span className="block text-xs font-bold uppercase text-[#5d5446]">
+                    <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       Meters
                     </span>
                     <input
@@ -335,14 +335,14 @@ export default function ExerciseLoggerCard({
                         })
                       }
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#fbf5e4] px-3 text-base font-bold outline-none focus:bg-white"
+                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
                     />
                   </label>
                 )}
 
                 {usesTime && (
                   <label className="block space-y-0.5">
-                    <span className="block text-xs font-bold uppercase text-[#5d5446]">
+                    <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       Seconds
                     </span>
                     <input
@@ -355,7 +355,7 @@ export default function ExerciseLoggerCard({
                         })
                       }
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#fbf5e4] px-3 text-base font-bold outline-none focus:bg-white"
+                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
                     />
                   </label>
                 )}

@@ -68,7 +68,7 @@ export function ExercisePickerSheet({
       <div className="space-y-3">
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#6a6257]"
+            className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--muted)]"
             aria-hidden="true"
           />
           <input
@@ -76,15 +76,15 @@ export function ExercisePickerSheet({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search exercises..."
-            className="w-full min-h-[44px] rounded-[10px_14px_12px_10px] border-[3px] border-[#1d1a16] bg-[#fffdf7] pl-10 pr-3 py-2 text-[17px] text-[#1d1a16] outline-none focus:bg-[#fffef9]"
+            className="w-full min-h-[44px] rounded-[10px_14px_12px_10px] border-[3px] border-[var(--line)] bg-[var(--surface)] pl-10 pr-3 py-2 text-[17px] text-[var(--ink)] outline-none focus:bg-[var(--surface)]"
           />
         </div>
 
         <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
           {loading ? (
-            <p className="py-6 text-center text-[#6a6257]">Loading…</p>
+            <p className="py-6 text-center text-[var(--muted)]">Loading…</p>
           ) : filtered.length === 0 ? (
-            <p className="py-6 text-center text-[#6a6257]">No matches</p>
+            <p className="py-6 text-center text-[var(--muted)]">No matches</p>
           ) : (
             filtered.map((ex) => (
               <button
@@ -94,12 +94,12 @@ export function ExercisePickerSheet({
                   onSelect(ex);
                   onClose();
                 }}
-                className="flex w-full min-h-[48px] items-center justify-between gap-2 rounded-[10px_12px_10px_12px] border-[2.5px] border-[#1d1a16] bg-[#fffdf7] px-3 py-2 text-left shadow-[2px_2px_0_#1d1a16] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                className="flex w-full min-h-[48px] items-center justify-between gap-2 rounded-[10px_12px_10px_12px] border-[2.5px] border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-left shadow-[2px_2px_0_var(--shadow-color)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
               >
-                <span className="font-bold leading-snug text-[#1d1a16]">
+                <span className="font-bold leading-snug text-[var(--ink)]">
                   {ex.name}
                 </span>
-                <span className="shrink-0 rounded border-[2px] border-[#1d1a16] bg-[#f7ead1] px-2 py-0.5 text-xs font-bold text-[#1d1a16]">
+                <span className="shrink-0 rounded border-[2px] border-[var(--line)] bg-[var(--surface-alt)] px-2 py-0.5 text-xs font-bold text-[var(--ink)]">
                   {TRACKING_TYPE_LABEL[ex.trackingType]}
                 </span>
               </button>

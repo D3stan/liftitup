@@ -10,6 +10,7 @@ import {
   updateUserSettings,
   type UpdateUserSettingsInput,
 } from '@/lib/db/users';
+import { isValidAppTheme, isValidThemeVariant } from '@/lib/theme';
 
 interface SettingsPatchBody {
   displayName?: unknown;
@@ -19,6 +20,8 @@ interface SettingsPatchBody {
   trainingYears?: unknown;
   unit?: unknown;
   timezone?: unknown;
+  theme?: unknown;
+  themeVariant?: unknown;
   enableSetQuality?: unknown;
   appleFitnessEnabled?: unknown;
 }
@@ -105,6 +108,22 @@ export const PATCH = withApiHandler(
         throw ApiError.validation('timezone must be a valid IANA timezone');
       }
       patch.timezone = body.timezone.trim();
+    }
+
+    if (body.theme !== undefined) {
+      if (!isValidAppTheme(body.theme)) {
+        throw ApiError.validation(
+          'theme must be "notebook", "cutecore", "analog-horror", "brazilian-phonk", "future-funk", or "lofi-art"',
+        );
+      }
+      patch.theme = body.theme;
+    }
+
+    if (body.themeVariant !== undefined) {
+      if (!isValidThemeVariant(body.themeVariant)) {
+        throw ApiError.validation('themeVariant must be "light" or "dark"');
+      }
+      patch.themeVariant = body.themeVariant;
     }
 
     if (body.enableSetQuality !== undefined) {

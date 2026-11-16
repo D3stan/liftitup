@@ -34,7 +34,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
         <div className="mx-auto max-w-lg">
           <div className="mb-3 flex items-center justify-between gap-2">
             {title ? (
-              <h2 className="font-marker text-xl text-[#1d1a16]">{title}</h2>
+              <h2 className="font-marker text-xl text-[var(--ink)]">{title}</h2>
             ) : (
               <span />
             )}

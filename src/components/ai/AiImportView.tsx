@@ -204,8 +204,8 @@ export function AiImportView() {
     <div className="space-y-4">
       <section className="card space-y-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-[#1d1a16]" />
-          <h1 className="font-marker text-2xl text-[#1d1a16]">AI Import</h1>
+          <Sparkles className="h-5 w-5 text-[var(--ink)]" />
+          <h1 className="font-marker text-2xl text-[var(--ink)]">AI Import</h1>
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -269,27 +269,27 @@ export function AiImportView() {
           placeholder="Paste JSON here"
           rows={6}
           spellCheck={false}
-          className="w-full rounded-[8px] border-[3px] border-[#1d1a16] bg-[#fbf5e4] p-3 text-base font-bold text-[#1d1a16] shadow-[3px_3px_0_#1d1a16] focus:outline-none"
+          className="w-full rounded-[8px] border-[3px] border-[var(--line)] bg-[var(--surface)] p-3 text-base font-bold text-[var(--ink)] shadow-[3px_3px_0_var(--shadow-color)] focus:outline-none"
         />
 
         {validating && (
-          <div className="text-sm font-bold text-[#5d5446]">Validating...</div>
+          <div className="text-sm font-bold text-[var(--muted)]">Validating...</div>
         )}
       </section>
 
       {hasInput && errors.length > 0 && (
         <section
           role="alert"
-          className="card-sm space-y-2 bg-[#f6cfc4]"
+          className="card-sm space-y-2 bg-[var(--red-bg)]"
         >
-          <div className="flex items-center gap-2 font-marker text-lg text-[#1d1a16]">
+          <div className="flex items-center gap-2 font-marker text-lg text-[var(--ink)]">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <span>Validation errors</span>
           </div>
-          <ul className="space-y-1 text-base font-bold text-[#1d1a16]">
+          <ul className="space-y-1 text-base font-bold text-[var(--ink)]">
             {errors.map((err, idx) => (
               <li key={`${err.path}-${idx}`} className="break-words">
-                <code className="rounded bg-[#fbf5e4] px-1.5 py-0.5 text-sm">
+                <code className="rounded bg-[var(--card)] px-1.5 py-0.5 text-sm">
                   {err.path}
                 </code>{' '}
                 {err.message}
@@ -302,7 +302,7 @@ export function AiImportView() {
       {preview && (
         <section className="card space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-marker text-xl text-[#1d1a16]">
+            <h2 className="font-marker text-xl text-[var(--ink)]">
               {preview.scheduleName}
             </h2>
             <div className="flex flex-wrap gap-1.5">
@@ -334,10 +334,10 @@ export function AiImportView() {
             {preview.days.map((day, idx) => (
               <div
                 key={`${day.label}-${idx}`}
-                className="card-sm space-y-1.5 bg-[#fbf5e4]"
+                className="card-sm space-y-1.5 bg-[var(--card)]"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-marker text-base text-[#1d1a16]">
+                  <span className="font-marker text-base text-[var(--ink)]">
                     {idx + 1}. {day.label}
                   </span>
                   {day.isRestDay && <span className="pill">Rest</span>}
@@ -348,10 +348,10 @@ export function AiImportView() {
                     {day.exercises.map((ex, exIdx) => (
                       <li
                         key={`${ex.name}-${exIdx}`}
-                        className="border-t border-dashed border-[#1d1a16]/25 pt-1.5 first:border-t-0 first:pt-0"
+                        className="border-t border-dashed border-[var(--line)]/25 pt-1.5 first:border-t-0 first:pt-0"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-1">
-                          <span className="text-base font-bold text-[#1d1a16]">
+                          <span className="text-base font-bold text-[var(--ink)]">
                             {ex.matchedExerciseName ?? ex.name}
                           </span>
                           <div className="flex items-center gap-1">
@@ -360,16 +360,16 @@ export function AiImportView() {
                                 New custom
                               </span>
                             )}
-                            <span className="text-xs font-bold text-[#5d5446]">
+                            <span className="text-xs font-bold text-[var(--muted)]">
                               {ex.resolvedTrackingType}
                             </span>
                           </div>
                         </div>
-                        <div className="text-sm font-bold text-[#5d5446]">
+                        <div className="text-sm font-bold text-[var(--muted)]">
                           {formatExerciseTarget(ex, preview.profile.unit)}
                         </div>
                         {ex.notes && (
-                          <div className="text-sm italic text-[#5d5446]">
+                          <div className="text-sm italic text-[var(--muted)]">
                             {ex.notes}
                           </div>
                         )}

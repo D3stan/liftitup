@@ -23,24 +23,24 @@ interface WeekCalendarProps {
 function getCellStyle(day: HydratedCalendarDay, isToday: boolean): string {
   switch (day.status) {
     case 'completed':
-      return 'bg-[#cde6c0] border-[#1d1a16]';
+      return 'bg-[var(--green-bg)] border-[var(--line)]';
     case 'planned':
       return isToday
-        ? 'bg-[#fbedba] border-[#1d1a16]'
-        : 'bg-[#fbf5e4] border-[#1d1a16]';
+        ? 'bg-[var(--gold-bg)] border-[var(--line)]'
+        : 'bg-[var(--card)] border-[var(--line)]';
     case 'rest':
-      return 'bg-[#ece2c6] border-[#1d1a16]/75';
+      return 'bg-[var(--paper)] border-[var(--line)]/75';
     case 'skipped':
-      return 'bg-[#f6cfc4] border-[#1d1a16]';
+      return 'bg-[var(--red-bg)] border-[var(--line)]';
     case 'postponed':
-      return 'bg-[#ece2c6] border-dashed border-[#1d1a16]';
+      return 'bg-[var(--paper)] border-dashed border-[var(--line)]';
     case 'jolly_extra':
     case 'jolly_instead':
-      return 'bg-[#d4e3f7] border-[#1d1a16]';
+      return 'bg-[var(--blue-bg)] border-[var(--line)]';
     case 'idle':
     case 'unscheduled':
     default:
-      return 'bg-[#fbf5e4]/55 border-[#1d1a16]/45 text-[#5d5446]';
+      return 'bg-[var(--card)]/55 border-[var(--line)]/45 text-[var(--muted)]';
   }
 }
 
@@ -96,7 +96,7 @@ export function WeekCalendar({
         </button>
 
         <div className="flex items-center gap-2 min-w-0">
-          <h2 className="font-marker text-lg text-[#1d1a16] truncate">
+          <h2 className="font-marker text-lg text-[var(--ink)] truncate">
             {formatWeekRange(weekStart, weekEnd)}
           </h2>
           {!isCurrentWeek && (
@@ -145,16 +145,16 @@ export function WeekCalendar({
               key={day.date}
               href={`/workout/${day.date}`}
               aria-current={isToday ? 'date' : undefined}
-              className={`flex min-h-[78px] min-w-0 flex-col items-center justify-between rounded-[8px] border-[2.5px] px-1 py-1.5 text-center no-underline text-[#1d1a16] ${getCellStyle(
+              className={`flex min-h-[78px] min-w-0 flex-col items-center justify-between rounded-[8px] border-[2.5px] px-1 py-1.5 text-center no-underline text-[var(--ink)] ${getCellStyle(
                 day,
                 isToday,
               )} ${
                 isToday
-                  ? 'shadow-[3px_3px_0_#1d1a16] ring-2 ring-[#1d1a16] ring-offset-1 ring-offset-[#fbf5e4]'
+                  ? 'shadow-[3px_3px_0_var(--shadow-color)] ring-2 ring-[var(--line)] ring-offset-1 ring-offset-[var(--card)]'
                   : ''
               }`}
             >
-              <span className="text-[11px] font-bold uppercase leading-none text-[#5d5446]">
+              <span className="text-[11px] font-bold uppercase leading-none text-[var(--muted)]">
                 {weekday}
               </span>
 
@@ -162,7 +162,7 @@ export function WeekCalendar({
 
               <span className="flex w-full items-center justify-center gap-0.5 text-[11px] font-bold leading-tight">
                 {day.status === 'completed' && (
-                  <Check className="h-3 w-3 shrink-0 text-[#2e7d3a]" />
+                  <Check className="h-3 w-3 shrink-0 text-[var(--green)]" />
                 )}
                 <span className="truncate">{label}</span>
               </span>

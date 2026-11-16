@@ -24,6 +24,8 @@ const SCHEMA_V2_DDL = `
     training_years REAL,
     unit TEXT NOT NULL DEFAULT 'kg' CHECK (unit IN ('kg', 'lb')),
     timezone TEXT NOT NULL DEFAULT 'UTC',
+    theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art')),
+    theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark')),
     enable_set_quality INTEGER NOT NULL DEFAULT 0 CHECK (enable_set_quality IN (0, 1)),
     apple_fitness_enabled INTEGER NOT NULL DEFAULT 1 CHECK (apple_fitness_enabled IN (0, 1)),
     is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
@@ -295,6 +297,20 @@ export function syncExerciseCatalog(db: DatabaseSync): void {
  */
 export function initSchema(db: DatabaseSync): void {
   db.exec(SCHEMA_V2_DDL);
+  const userCols = db
+    .prepare('PRAGMA table_info(users)')
+    .all() as Array<{ name: string }>;
+  const colNames = new Set(userCols.map((c) => c.name));
+  if (!colNames.has('theme')) {
+    db.exec(
+      "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art'))",
+    );
+  }
+  if (!colNames.has('theme_variant')) {
+    db.exec(
+      "ALTER TABLE users ADD COLUMN theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark'))",
+    );
+  }
   const now = new Date().toISOString();
   db.prepare(
     'INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)',

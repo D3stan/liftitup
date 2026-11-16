@@ -103,7 +103,7 @@ export function ExerciseLibrary() {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 pb-28 pt-4">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="font-marker text-2xl text-[#1d1a16]">Exercises</h1>
+        <h1 className="font-marker text-2xl text-[var(--ink)]">Exercises</h1>
         <Link href="/exercises/new" className="btn">
           <Plus className="h-5 w-5" />
           <span>New</span>
@@ -112,21 +112,21 @@ export function ExerciseLibrary() {
 
       {/* Search */}
       <div className="relative flex items-center">
-        <Search className="pointer-events-none absolute left-3.5 h-5 w-5 text-[#5d5446]" />
+        <Search className="pointer-events-none absolute left-3.5 h-5 w-5 text-[var(--muted)]" />
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search exercises"
           aria-label="Search exercises"
-          className="min-h-[44px] w-full rounded-[6px] border-[3px] border-[#1d1a16] bg-[#fbf5e4] py-2 pl-10 pr-11 text-base text-[#1d1a16] shadow-[3px_3px_0_#1d1a16] outline-none focus:bg-[#fffef9]"
+          className="min-h-[44px] w-full rounded-[6px] border-[3px] border-[var(--line)] bg-[var(--card)] py-2 pl-10 pr-11 text-base text-[var(--ink)] shadow-[3px_3px_0_var(--shadow-color)] outline-none focus:bg-[var(--surface)]"
         />
         {query && (
           <button
             type="button"
             onClick={() => setQuery('')}
             aria-label="Clear search"
-            className="absolute right-1 flex h-11 w-11 items-center justify-center rounded-md text-[#5d5446]"
+            className="absolute right-1 flex h-11 w-11 items-center justify-center rounded-md text-[var(--muted)]"
           >
             <X className="h-5 w-5" />
           </button>
@@ -138,8 +138,10 @@ export function ExerciseLibrary() {
         <button
           type="button"
           onClick={() => setCategory('')}
-          className={`chip min-h-[44px] shrink-0 rounded-full border-[2.5px] border-[#1d1a16] px-3.5 text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${
-            category === '' ? 'bg-[#f2b632]' : 'bg-[#fbf5e4]'
+          className={`chip min-h-[44px] shrink-0 rounded-full border-[2.5px] border-[var(--line)] px-3.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+            category === ''
+              ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+              : 'bg-[var(--card)] text-[var(--ink)]'
           }`}
         >
           All
@@ -151,8 +153,10 @@ export function ExerciseLibrary() {
             onClick={() =>
               setCategory((prev) => (prev === cat.value ? '' : cat.value))
             }
-            className={`chip min-h-[44px] shrink-0 rounded-full border-[2.5px] border-[#1d1a16] px-3.5 text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${
-              category === cat.value ? 'bg-[#f2b632]' : 'bg-[#fbf5e4]'
+            className={`chip min-h-[44px] shrink-0 rounded-full border-[2.5px] border-[var(--line)] px-3.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+              category === cat.value
+                ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                : 'bg-[var(--card)] text-[var(--ink)]'
             }`}
           >
             {cat.label}
@@ -166,8 +170,10 @@ export function ExerciseLibrary() {
           type="button"
           onClick={() => setShowHidden((prev) => !prev)}
           aria-pressed={showHidden}
-          className={`chip flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border-[2.5px] border-[#1d1a16] px-3.5 text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${
-            showHidden ? 'bg-[#d4e3f7]' : 'bg-[#fbf5e4]'
+          className={`chip flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border-[2.5px] border-[var(--line)] px-3.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+            showHidden
+              ? 'bg-[var(--blue-bg)] text-[var(--ink)]'
+              : 'bg-[var(--card)] text-[var(--ink)]'
           }`}
         >
           {showHidden ? (
@@ -188,8 +194,10 @@ export function ExerciseLibrary() {
               onClick={() =>
                 setTrackingType((prev) => (prev === tt.value ? '' : tt.value))
               }
-              className={`chip flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border-[2.5px] border-[#1d1a16] px-3 text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${
-                active ? 'bg-[#f2b632]' : 'bg-[#fbf5e4]'
+              className={`chip flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border-[2.5px] border-[var(--line)] px-3 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+                active
+                  ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                  : 'bg-[var(--card)] text-[var(--ink)]'
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -201,9 +209,9 @@ export function ExerciseLibrary() {
 
       {/* List */}
       {loading ? (
-        <div className="card-sm text-center text-[#5d5446]">Loading…</div>
+        <div className="card-sm text-center text-[var(--muted)]">Loading…</div>
       ) : filtered.length === 0 ? (
-        <div className="card-sm text-center text-[#5d5446]">
+        <div className="card-sm text-center text-[var(--muted)]">
           No exercises found
         </div>
       ) : (
@@ -223,13 +231,13 @@ export function ExerciseLibrary() {
                     <span
                       title={meta.label}
                       aria-label={meta.label}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 border-[#1d1a16] bg-[#ece2c6]"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 border-[var(--line)] bg-[var(--paper)]"
                     >
-                      <Icon className="h-4 w-4 text-[#1d1a16]" />
+                      <Icon className="h-4 w-4 text-[var(--ink)]" />
                     </span>
                   )}
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                    <span className="truncate font-bold text-[#1d1a16]">
+                    <span className="truncate font-bold text-[var(--ink)]">
                       {ex.name}
                     </span>
                     {ex.isCustom && (

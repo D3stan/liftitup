@@ -156,7 +156,7 @@ export function ProgressCharts() {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pb-28 pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-marker text-2xl text-[#1d1a16]">Progress</h1>
+        <h1 className="font-marker text-2xl text-[var(--ink)]">Progress</h1>
         <div className="flex items-center gap-1.5" role="group" aria-label="Range">
           {RANGE_OPTIONS.map((opt) => {
             const active = range === opt.value;
@@ -165,10 +165,10 @@ export function ProgressCharts() {
                 key={opt.value}
                 type="button"
                 onClick={() => setRange(opt.value)}
-                className={`min-h-[44px] min-w-[48px] rounded-xl border-2 border-[#1d1a16] px-3 text-base font-bold transition ${
+                className={`min-h-[44px] min-w-[48px] rounded-xl border-2 border-[var(--line)] px-3 text-base font-bold transition ${
                   active
-                    ? 'bg-[#f2b632] text-[#1d1a16] shadow-[2px_2px_0_#1d1a16]'
-                    : 'bg-[#fbf5e4] text-[#6b6254]'
+                    ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)] shadow-[2px_2px_0_var(--shadow-color)]'
+                    : 'bg-[var(--card)] text-[var(--muted)]'
                 }`}
               >
                 {opt.label}
@@ -189,7 +189,7 @@ export function ProgressCharts() {
               id="progress-exercise-select"
               value={selected?.id ?? ''}
               onChange={(e) => setExerciseId(e.target.value)}
-              className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 py-2 text-base sm:max-w-xs"
+              className="min-h-[44px] w-full rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-base sm:max-w-xs"
             >
               {data.exercises.map((ex) => (
                 <option key={ex.id} value={ex.id}>
@@ -198,7 +198,7 @@ export function ProgressCharts() {
               ))}
             </select>
           ) : (
-            <span className="text-sm text-[#6b6254]">
+            <span className="text-sm text-[var(--muted)]">
               {loading ? 'Loading…' : 'No logged sets'}
             </span>
           )}
@@ -206,27 +206,27 @@ export function ProgressCharts() {
 
         {primaryMeta && (
           <div className="pt-1">
-            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               {primaryMeta.title}
             </div>
             <SvgLineChart
               points={primaryPoints}
               unitLabel={primaryMeta.unitLabel}
-              strokeColor="#d9412b"
+              strokeColor="var(--red)"
               emptyLabel="No sets in range"
             />
           </div>
         )}
 
         {supportsVolume && (
-          <div className="border-t border-[#1d1a16]/15 pt-3">
-            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+          <div className="border-t border-[var(--line)]/15 pt-3">
+            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               Session Volume ({unit})
             </div>
             <SvgLineChart
               points={volumePoints}
               unitLabel={unit}
-              strokeColor="#2b5fa8"
+              strokeColor="var(--blue)"
               emptyLabel="No volume in range"
             />
           </div>
@@ -235,33 +235,33 @@ export function ProgressCharts() {
 
       {/* Sessions Per Week */}
       <section className="card flex flex-col gap-2">
-        <h2 className="font-marker text-lg text-[#1d1a16]">Sessions / Week</h2>
+        <h2 className="font-marker text-lg text-[var(--ink)]">Sessions / Week</h2>
         <SvgBarChart
           points={weeklySessionPoints}
           unitLabel="sessions"
-          barColor="#2e7d3a"
+          barColor="var(--green)"
           emptyLabel="No sessions yet"
         />
       </section>
 
       {/* Weekly Sets */}
       <section className="card flex flex-col gap-2">
-        <h2 className="font-marker text-lg text-[#1d1a16]">Sets / Week</h2>
+        <h2 className="font-marker text-lg text-[var(--ink)]">Sets / Week</h2>
         <SvgBarChart
           points={weeklySetPoints}
           unitLabel="sets"
-          barColor="#2b5fa8"
+          barColor="var(--blue)"
           emptyLabel="No sets yet"
         />
       </section>
 
       {/* Body Weight */}
       <section className="card flex flex-col gap-2">
-        <h2 className="font-marker text-lg text-[#1d1a16]">Body Weight</h2>
+        <h2 className="font-marker text-lg text-[var(--ink)]">Body Weight</h2>
         <SvgLineChart
           points={bodyWeightPoints}
           unitLabel={unit}
-          strokeColor="#1d1a16"
+          strokeColor="var(--ink)"
           emptyLabel="No weight entries"
         />
       </section>

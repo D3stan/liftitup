@@ -192,7 +192,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-4">
-        <div className="card-sm text-center text-[#5d5446]">Loading…</div>
+        <div className="card-sm text-center text-[var(--muted)]">Loading…</div>
       </div>
     );
   }
@@ -202,13 +202,13 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 pb-28 pt-4">
         <Link
           href="/exercises"
-          className="inline-flex min-h-[44px] w-fit items-center gap-1.5 font-bold text-[#1d1a16]"
+          className="inline-flex min-h-[44px] w-fit items-center gap-1.5 font-bold text-[var(--ink)]"
         >
           <ArrowLeft className="h-5 w-5" />
           <span>Exercises</span>
         </Link>
         <div className="card flex flex-col gap-3">
-          <h1 className="font-marker text-2xl text-[#1d1a16]">
+          <h1 className="font-marker text-2xl text-[var(--ink)]">
             {existing.name}
           </h1>
           <span className="pill w-fit">Built-in</span>
@@ -239,12 +239,12 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
       <div className="flex items-center justify-between gap-2">
         <Link
           href="/exercises"
-          className="inline-flex min-h-[44px] items-center gap-1.5 font-bold text-[#1d1a16]"
+          className="inline-flex min-h-[44px] items-center gap-1.5 font-bold text-[var(--ink)]"
         >
           <ArrowLeft className="h-5 w-5" />
           <span>Exercises</span>
         </Link>
-        <h1 className="font-marker text-2xl text-[#1d1a16]">
+        <h1 className="font-marker text-2xl text-[var(--ink)]">
           {mode === 'create' ? 'New Exercise' : 'Edit Exercise'}
         </h1>
       </div>
@@ -252,7 +252,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
       <form onSubmit={handleSubmit} className="card flex flex-col gap-4">
         {/* Name */}
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-bold uppercase tracking-wide text-[#5d5446]">
+          <span className="text-sm font-bold uppercase tracking-wide text-[var(--muted)]">
             Name
           </span>
           <input
@@ -262,13 +262,13 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
             placeholder="Exercise name"
             maxLength={100}
             required
-            className="min-h-[44px] w-full rounded-[6px] border-[3px] border-[#1d1a16] bg-[#fffef9] px-3 py-2 text-base text-[#1d1a16] outline-none"
+            className="min-h-[44px] w-full rounded-[6px] border-[3px] border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-base text-[var(--ink)] outline-none"
           />
         </label>
 
         {/* Tracking type */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-bold uppercase tracking-wide text-[#5d5446]">
+          <span className="text-sm font-bold uppercase tracking-wide text-[var(--muted)]">
             Tracking type
           </span>
           <div className="grid grid-cols-2 gap-2">
@@ -281,8 +281,10 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
                   type="button"
                   onClick={() => setTrackingType(tt.value)}
                   aria-pressed={selected}
-                  className={`flex min-h-[44px] items-center gap-2 rounded-[6px] border-[2.5px] border-[#1d1a16] px-3 py-2 text-left text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${
-                    selected ? 'bg-[#f2b632]' : 'bg-[#fbf5e4]'
+                  className={`flex min-h-[44px] items-center gap-2 rounded-[6px] border-[2.5px] border-[var(--line)] px-3 py-2 text-left text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+                    selected
+                      ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                      : 'bg-[var(--card)] text-[var(--ink)]'
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -295,7 +297,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
 
         {/* Category */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-bold uppercase tracking-wide text-[#5d5446]">
+          <span className="text-sm font-bold uppercase tracking-wide text-[var(--muted)]">
             Category
           </span>
           <div className="flex flex-wrap gap-1.5">
@@ -307,8 +309,10 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
                   type="button"
                   onClick={() => setCategory(cat.value)}
                   aria-pressed={selected}
-                  className={`min-h-[44px] rounded-full border-[2.5px] border-[#1d1a16] px-3.5 text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${
-                    selected ? 'bg-[#f2b632]' : 'bg-[#fbf5e4]'
+                  className={`min-h-[44px] rounded-full border-[2.5px] border-[var(--line)] px-3.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+                    selected
+                      ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                      : 'bg-[var(--card)] text-[var(--ink)]'
                   }`}
                 >
                   {cat.label}
@@ -320,7 +324,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
 
         {/* Equipment */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-bold uppercase tracking-wide text-[#5d5446]">
+          <span className="text-sm font-bold uppercase tracking-wide text-[var(--muted)]">
             Equipment
           </span>
           <div className="flex flex-wrap gap-1.5">
@@ -332,8 +336,10 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
                   type="button"
                   onClick={() => setEquipment(eq.value)}
                   aria-pressed={selected}
-                  className={`min-h-[44px] rounded-full border-[2.5px] border-[#1d1a16] px-3.5 text-sm font-bold shadow-[2px_2px_0_#1d1a16] ${
-                    selected ? 'bg-[#f2b632]' : 'bg-[#fbf5e4]'
+                  className={`min-h-[44px] rounded-full border-[2.5px] border-[var(--line)] px-3.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+                    selected
+                      ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                      : 'bg-[var(--card)] text-[var(--ink)]'
                   }`}
                 >
                   {eq.label}
@@ -345,7 +351,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
 
         {/* Default rest */}
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-bold uppercase tracking-wide text-[#5d5446]">
+          <span className="text-sm font-bold uppercase tracking-wide text-[var(--muted)]">
             Default rest (sec)
           </span>
           <input
@@ -356,7 +362,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
             step={5}
             value={defaultRestSeconds}
             onChange={(e) => setDefaultRestSeconds(e.target.value)}
-            className="min-h-[44px] w-32 rounded-[6px] border-[3px] border-[#1d1a16] bg-[#fffef9] px-3 py-2 text-base text-[#1d1a16] outline-none"
+            className="min-h-[44px] w-32 rounded-[6px] border-[3px] border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-base text-[var(--ink)] outline-none"
           />
         </label>
 
@@ -391,7 +397,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
         <div className="flex flex-col gap-3">
           {referencedError ? (
             <>
-              <div className="rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#f6cfc4] p-3 text-base font-bold text-[#1d1a16]">
+              <div className="rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--red-bg)] p-3 text-base font-bold text-[var(--ink)]">
                 {referencedError}
               </div>
               <Button
@@ -405,7 +411,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
             </>
           ) : (
             <>
-              <p className="font-bold text-[#1d1a16]">{name}</p>
+              <p className="font-bold text-[var(--ink)]">{name}</p>
               <div className="flex items-center justify-end gap-2">
                 <Button
                   variant="alt"

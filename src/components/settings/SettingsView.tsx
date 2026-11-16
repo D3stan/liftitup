@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Check, Copy, Download, KeyRound, LogOut, RefreshCw } from 'lucide-react';
 import { ApiClientError, Button, apiFetch, toast } from '@/components/ui';
 import { AppleFitnessPanel } from '@/components/integrations/AppleFitnessPanel';
+import { ThemeSelector } from '@/components/settings/ThemeSelector';
 import { getMcpClientConfigSnippet, normalizeMcpEndpointUrl } from '@/lib/mcp/config';
 import type { ApiKeyInfo, UserProfile, WeightUnit } from '@/types/domain';
 
@@ -185,8 +186,8 @@ export function SettingsView() {
   if (loading || !user) {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pb-28 pt-6">
-        <h1 className="font-marker text-2xl text-[#1d1a16]">Settings</h1>
-        <div className="card text-sm text-[#6b6254]">
+        <h1 className="font-marker text-2xl text-[var(--ink)]">Settings</h1>
+        <div className="card text-sm text-[var(--muted)]">
           {loading ? 'Loading…' : 'Unavailable'}
         </div>
       </div>
@@ -199,20 +200,27 @@ export function SettingsView() {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 pb-28 pt-4">
       <div className="flex items-center justify-between">
-        <h1 className="font-marker text-2xl text-[#1d1a16]">Settings</h1>
+        <h1 className="font-marker text-2xl text-[var(--ink)]">Settings</h1>
         {user.isGuest && (
-          <span className="rounded-lg border-2 border-[#1d1a16] bg-[#f2b632] px-2.5 py-0.5 text-xs font-bold">
+          <span className="rounded-lg border-2 border-[var(--line)] bg-[var(--gold)] px-2.5 py-0.5 text-xs font-bold text-[var(--btn-gold-fg)]">
             SAMPLE
           </span>
         )}
       </div>
 
+      {/* Theme */}
+      <ThemeSelector
+        theme={user.theme}
+        themeVariant={user.themeVariant}
+        onUserUpdated={setUser}
+      />
+
       {/* Profile */}
       <form onSubmit={handleSaveProfile} className="card flex flex-col gap-3">
-        <h2 className="font-marker text-lg text-[#1d1a16]">Profile</h2>
+        <h2 className="font-marker text-lg text-[var(--ink)]">Profile</h2>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+          <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
             Name
           </span>
           <input
@@ -220,13 +228,13 @@ export function SettingsView() {
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             required
-            className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+            className="min-h-[44px] rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
           />
         </label>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               Weight ({unit})
             </span>
             <input
@@ -236,12 +244,12 @@ export function SettingsView() {
               value={weightInput}
               onChange={(e) => setWeightInput(e.target.value)}
               required
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+              className="min-h-[44px] rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               Height (cm)
             </span>
             <input
@@ -250,12 +258,12 @@ export function SettingsView() {
               inputMode="decimal"
               value={heightCm}
               onChange={(e) => setHeightCm(e.target.value)}
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+              className="min-h-[44px] rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               Age
             </span>
             <input
@@ -263,12 +271,12 @@ export function SettingsView() {
               inputMode="numeric"
               value={age}
               onChange={(e) => setAge(e.target.value)}
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+              className="min-h-[44px] rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               Training Years
             </span>
             <input
@@ -277,13 +285,13 @@ export function SettingsView() {
               inputMode="decimal"
               value={trainingYears}
               onChange={(e) => setTrainingYears(e.target.value)}
-              className="min-h-[44px] rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+              className="min-h-[44px] rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
             />
           </label>
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+          <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
             Unit
           </span>
           <div className="flex gap-1.5" role="group" aria-label="Weight unit">
@@ -292,10 +300,10 @@ export function SettingsView() {
                 key={u}
                 type="button"
                 onClick={() => handleUnitChange(u)}
-                className={`min-h-[44px] min-w-[54px] rounded-xl border-2 border-[#1d1a16] px-3 font-bold ${
+                className={`min-h-[44px] min-w-[54px] rounded-xl border-2 border-[var(--line)] px-3 font-bold ${
                   unit === u
-                    ? 'bg-[#f2b632] text-[#1d1a16]'
-                    : 'bg-[#fbf5e4] text-[#6b6254]'
+                    ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                    : 'bg-[var(--card)] text-[var(--muted)]'
                 }`}
               >
                 {u}
@@ -305,7 +313,7 @@ export function SettingsView() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+          <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
             Timezone
           </span>
           <div className="flex gap-2">
@@ -314,7 +322,7 @@ export function SettingsView() {
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               required
-              className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+              className="min-h-[44px] w-full rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
             />
             <Button
               variant="alt"
@@ -337,7 +345,7 @@ export function SettingsView() {
 
       {/* Execution Quality Toggle */}
       <section className="card flex items-center justify-between gap-3">
-        <span className="font-marker text-base text-[#1d1a16]">
+        <span className="font-marker text-base text-[var(--ink)]">
           Execution Quality %
         </span>
         <button
@@ -345,10 +353,10 @@ export function SettingsView() {
           role="switch"
           aria-checked={user.enableSetQuality}
           onClick={handleToggleSetQuality}
-          className={`min-h-[44px] min-w-[72px] rounded-xl border-2 border-[#1d1a16] px-3 text-sm font-bold transition ${
+          className={`min-h-[44px] min-w-[72px] rounded-xl border-2 border-[var(--line)] px-3 text-sm font-bold transition ${
             user.enableSetQuality
-              ? 'bg-[#cde6c0] text-[#1d1a16]'
-              : 'bg-[#e8dec1] text-[#6b6254]'
+              ? 'bg-[var(--green-bg)] text-[var(--ink)]'
+              : 'bg-[var(--surface-alt)] text-[var(--muted)]'
           }`}
         >
           {user.enableSetQuality ? 'ON' : 'OFF'}
@@ -358,12 +366,12 @@ export function SettingsView() {
       {/* MCP Section */}
       <section className="card flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-[#1d1a16]" />
-          <h2 className="font-marker text-lg text-[#1d1a16]">MCP</h2>
+          <KeyRound className="h-5 w-5 text-[var(--ink)]" />
+          <h2 className="font-marker text-lg text-[var(--ink)]">MCP</h2>
         </div>
 
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+          <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
             Endpoint
           </span>
           <div className="flex items-center gap-2">
@@ -372,7 +380,7 @@ export function SettingsView() {
               readOnly
               value={mcpUrl}
               aria-label="MCP Endpoint"
-              className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 text-base"
+              className="min-h-[44px] w-full rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 text-base"
             />
             <Button
               variant="alt"
@@ -392,7 +400,7 @@ export function SettingsView() {
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-col">
-            <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               API Key
             </span>
             <span className="font-mono text-sm">
@@ -411,8 +419,8 @@ export function SettingsView() {
         </div>
 
         {revealedKey && (
-          <div className="flex flex-col gap-1.5 rounded-xl border-2 border-[#1d1a16] bg-[#f2b632]/30 p-3">
-            <span className="text-xs font-bold uppercase tracking-wide text-[#1d1a16]">
+          <div className="flex flex-col gap-1.5 rounded-xl border-2 border-[var(--line)] bg-[var(--gold-bg)] p-3">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--ink)]">
               Copy Key Now
             </span>
             <div className="flex items-center gap-2">
@@ -421,7 +429,7 @@ export function SettingsView() {
                 readOnly
                 value={revealedKey}
                 aria-label="Generated API Key"
-                className="min-h-[44px] w-full rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] px-3 font-mono text-base"
+                className="min-h-[44px] w-full rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 font-mono text-base"
               />
               <Button
                 variant="primary"
@@ -442,7 +450,7 @@ export function SettingsView() {
 
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wide text-[#6b6254]">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
               Client Config
             </span>
             <Button
@@ -458,7 +466,7 @@ export function SettingsView() {
               Copy
             </Button>
           </div>
-          <pre className="overflow-x-auto rounded-xl border-2 border-[#1d1a16] bg-[#fffdf7] p-3 font-mono text-xs">
+          <pre className="overflow-x-auto rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] p-3 font-mono text-xs">
             {snippet}
           </pre>
         </div>
@@ -466,7 +474,7 @@ export function SettingsView() {
 
       {/* Export */}
       <section className="card flex flex-col gap-3">
-        <h2 className="font-marker text-lg text-[#1d1a16]">Export</h2>
+        <h2 className="font-marker text-lg text-[var(--ink)]">Export</h2>
         <div className="grid grid-cols-2 gap-3">
           <a
             href="/api/export?format=json"

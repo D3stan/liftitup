@@ -86,7 +86,7 @@ export function PlanActionsSheet({
     <Sheet open={open} onClose={onClose} title="Plan today">
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <div className="text-sm font-bold text-[#5d5446]">Postpone</div>
+          <div className="text-sm font-bold text-[var(--muted)]">Postpone</div>
           <div className="grid grid-cols-3 gap-2">
             {([1, 2, 3] as const).map((days) => (
               <Button
@@ -102,7 +102,7 @@ export function PlanActionsSheet({
         </div>
 
         <div className="space-y-1.5">
-          <div className="text-sm font-bold text-[#5d5446]">Jolly day</div>
+          <div className="text-sm font-bold text-[var(--muted)]">Jolly day</div>
           <input
             type="text"
             maxLength={60}

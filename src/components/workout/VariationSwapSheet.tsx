@@ -160,19 +160,19 @@ export default function VariationSwapSheet({
   return (
     <Sheet open={open} onClose={onClose} title="Swap Exercise">
       <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-[#5d5446]">
+        <div className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
           <ArrowLeftRight className="h-4 w-4 shrink-0" />
           <span className="truncate">{currentExerciseName}</span>
         </div>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5d5446]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search exercise..."
-            className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#fbf5e4] pl-9 pr-3 text-base font-bold outline-none"
+            className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--surface)] pl-9 pr-3 text-base font-bold outline-none"
           />
         </div>
 
@@ -189,37 +189,43 @@ export default function VariationSwapSheet({
                 key={ex.id}
                 type="button"
                 onClick={() => setSelectedId(ex.id)}
-                className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-[8px] border-[2.5px] border-[#1d1a16] px-3 py-2 text-left transition-colors ${
-                  isSelected ? 'bg-[#f2b632]' : 'bg-[#fbf5e4]'
+                className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-[8px] border-[2.5px] border-[var(--line)] px-3 py-2 text-left transition-colors ${
+                  isSelected
+                    ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                    : 'bg-[var(--card)] text-[var(--ink)]'
                 }`}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-bold text-[#1d1a16]">
-                    {ex.name}
-                  </div>
+                  <div className="truncate font-bold">{ex.name}</div>
                   {prevSummary && (
-                    <div className="text-xs font-bold text-[#5d5446]">
+                    <div
+                      className={`text-xs font-bold ${
+                        isSelected
+                          ? 'text-[var(--btn-gold-fg)]/80'
+                          : 'text-[var(--muted)]'
+                      }`}
+                    >
                       Last: {prevSummary}
                     </div>
                   )}
                 </div>
-                <span className="pill shrink-0 text-xs">
+                <span className="pill shrink-0 text-xs text-[var(--ink)]">
                   {getTrackingShortLabel(ex.trackingType)}
                 </span>
               </button>
             );
           })}
           {candidates.length === 0 && (
-            <p className="py-4 text-center text-base font-bold text-[#5d5446]">
+            <p className="py-4 text-center text-base font-bold text-[var(--muted)]">
               No matches
             </p>
           )}
         </div>
 
         {selectedExercise && (
-          <div className="rounded-[8px] border-[2.5px] border-[#1d1a16] bg-[#fbedba] px-3 py-2 text-sm font-bold">
+          <div className="rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--gold-bg)] px-3 py-2 text-sm font-bold">
             <div className="truncate">{selectedExercise.name}</div>
-            <div className="text-xs text-[#5d5446]">
+            <div className="text-xs text-[var(--muted)]">
               {selectedPrefillText
                 ? `Last logged: ${selectedPrefillText}`
                 : 'No prior logs'}
