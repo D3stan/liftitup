@@ -31,6 +31,7 @@ const SCHEMA_V2_DDL = `
     theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark')),
     enable_set_quality INTEGER NOT NULL DEFAULT 0 CHECK (enable_set_quality IN (0, 1)),
     rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown')),
+    default_workout_view TEXT NOT NULL DEFAULT 'list' CHECK (default_workout_view IN ('list', 'focus')),
     default_weight_step_kg DOUBLE PRECISION,
     apple_fitness_enabled INTEGER NOT NULL DEFAULT 1 CHECK (apple_fitness_enabled IN (0, 1)),
     apple_health_last_received_at TEXT,
@@ -425,6 +426,9 @@ export async function initSchema(
     );
     await client.query(
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown'))",
+    );
+    await client.query(
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS default_workout_view TEXT NOT NULL DEFAULT 'list' CHECK (default_workout_view IN ('list', 'focus'))",
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS default_weight_step_kg DOUBLE PRECISION',

@@ -7,6 +7,7 @@ import type {
   ScheduleDay,
   WeightUnit,
   WorkoutSession,
+  WorkoutViewMode,
 } from '@/types/domain';
 import type { QueueEvent } from '@/lib/schedule/queue';
 import type { ExerciseStepMeta } from '@/lib/exercises/repository';
@@ -20,6 +21,7 @@ export interface WorkoutDayViewResponse {
     weightKg: number;
     enableSetQuality: boolean;
     restClockMode: RestClockMode;
+    defaultWorkoutView: WorkoutViewMode;
     defaultWeightStepKg: number | null;
     timezone: string;
   };

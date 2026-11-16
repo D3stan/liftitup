@@ -6,6 +6,7 @@ import type {
   ThemeVariant,
   UserProfile,
   WeightUnit,
+  WorkoutViewMode,
 } from '@/types/domain';
 import {
   DEFAULT_THEME,
@@ -31,6 +32,7 @@ type DbUserRow = {
   theme_variant?: string;
   enable_set_quality: number;
   rest_clock_mode?: string;
+  default_workout_view?: string;
   default_weight_step_kg?: number | null;
   apple_fitness_enabled: number;
   apple_health_last_received_at?: string | null;
@@ -61,6 +63,7 @@ export interface CreateUserInput {
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
   restClockMode?: RestClockMode;
+  defaultWorkoutView?: WorkoutViewMode;
   defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
   isGuest?: boolean;
@@ -78,12 +81,17 @@ export interface UpdateUserSettingsInput {
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
   restClockMode?: RestClockMode;
+  defaultWorkoutView?: WorkoutViewMode;
   defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
 }
 
 export function isValidRestClockMode(val: unknown): val is RestClockMode {
   return val === 'stopwatch' || val === 'countdown';
+}
+
+export function isValidWorkoutViewMode(val: unknown): val is WorkoutViewMode {
+  return val === 'list' || val === 'focus';
 }
 
 export function mapUserRow(row: DbUserRow): UserProfile {
@@ -103,6 +111,8 @@ export function mapUserRow(row: DbUserRow): UserProfile {
       : DEFAULT_THEME_VARIANT,
     enableSetQuality: Boolean(row.enable_set_quality),
     restClockMode: row.rest_clock_mode === 'countdown' ? 'countdown' : 'stopwatch',
+    defaultWorkoutView:
+      row.default_workout_view === 'focus' ? 'focus' : 'list',
     defaultWeightStepKg:
       row.default_weight_step_kg === null || row.default_weight_step_kg === undefined
         ? null
@@ -194,6 +204,8 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
 
   const restClockMode: RestClockMode =
     input.restClockMode === 'countdown' ? 'countdown' : 'stopwatch';
+  const defaultWorkoutView: WorkoutViewMode =
+    input.defaultWorkoutView === 'focus' ? 'focus' : 'list';
 
   const row = await queryOne<DbUserRow>(
     `
@@ -201,9 +213,9 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       id, username, display_name, password_hash,
       height_cm, weight_kg, age, training_years,
       unit, timezone, theme, theme_variant,
-      enable_set_quality, rest_clock_mode, default_weight_step_kg,
+      enable_set_quality, rest_clock_mode, default_workout_view, default_weight_step_kg,
       apple_fitness_enabled, is_guest, last_active_at, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
     RETURNING *
     `,
     [
@@ -221,6 +233,7 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       themeVariant,
       input.enableSetQuality ? 1 : 0,
       restClockMode,
+      defaultWorkoutView,
       input.defaultWeightStepKg ?? null,
       input.appleFitnessEnabled === false ? 0 : 1,
       input.isGuest ? 1 : 0,
@@ -287,6 +300,10 @@ export async function updateUserSettings(
   if (patch.restClockMode !== undefined) {
     setClauses.push(`rest_clock_mode = $${idx++}`);
     params.push(patch.restClockMode === 'countdown' ? 'countdown' : 'stopwatch');
+  }
+  if (patch.defaultWorkoutView !== undefined) {
+    setClauses.push(`default_workout_view = $${idx++}`);
+    params.push(patch.defaultWorkoutView === 'focus' ? 'focus' : 'list');
   }
   if (patch.defaultWeightStepKg !== undefined) {
     setClauses.push(`default_weight_step_kg = $${idx++}`);

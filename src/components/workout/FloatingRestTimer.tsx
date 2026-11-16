@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -11,17 +11,15 @@ import {
   X,
 } from 'lucide-react';
 import {
-  computeRestClockState,
   formatClockSeconds,
-  shouldFireRestAlert,
   type DraftRestClock,
 } from '@/lib/workouts/clock';
 import {
   formatRestSeconds,
   type LastTimeRestMatch,
 } from '@/lib/workouts/rest';
-import { ensureAlertServiceWorker, fireRestAlert } from '@/lib/workouts/restAlerts';
 import type { RestClockMode } from '@/types/domain';
+import { useRestClockState } from './useRestClockState';
 
 export interface FloatingRestTimerProps {
   restClock: DraftRestClock | null | undefined;
@@ -46,80 +44,24 @@ export default function FloatingRestTimer({
   onDismiss,
   onAlertFired,
 }: FloatingRestTimerProps) {
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [minimized, setMinimized] = useState(false);
-  const firedKeyRef = useRef<string | null>(null);
-
-  const isClockActive = Boolean(restClock?.isActive);
-  const clockStartedAt = restClock?.startedAt ?? null;
-  const clockTargetSeconds = restClock?.targetSeconds ?? 0;
-  const clockLabel = restClock?.label ?? '';
-  const clockAlertFired = Boolean(restClock?.alertFired);
-
-  useEffect(() => {
-    if (!isClockActive || !clockStartedAt) {
-      firedKeyRef.current = null;
-      setMinimized(false);
-      return;
-    }
-
-    if (
-      typeof Notification !== 'undefined' &&
-      Notification.permission === 'granted'
-    ) {
-      void ensureAlertServiceWorker();
-    }
-
-    const runCheck = () => {
-      const current = Date.now();
-      setNowMs(current);
-
-      if (!restClock) return;
-      const fireKey = `${clockStartedAt}:${clockTargetSeconds}`;
-      if (
-        !clockAlertFired &&
-        firedKeyRef.current !== fireKey &&
-        shouldFireRestAlert(restClock, current)
-      ) {
-        firedKeyRef.current = fireKey;
-        onAlertFired(clockStartedAt);
-        void fireRestAlert({
-          title: 'Rest done',
-          body: clockLabel ? `Next set: ${clockLabel}` : 'Ready for next set',
-        });
-      }
-    };
-
-    runCheck();
-    const interval = window.setInterval(runCheck, 250);
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        runCheck();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', runCheck);
-
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', runCheck);
-    };
-  }, [
-    isClockActive,
-    clockStartedAt,
-    clockTargetSeconds,
-    clockLabel,
-    clockAlertFired,
+  const { state, isClockActive } = useRestClockState({
     restClock,
     onAlertFired,
-  ]);
+  });
+
+  const clockLabel = restClock?.label ?? '';
+
+  useEffect(() => {
+    if (!isClockActive) {
+      setMinimized(false);
+    }
+  }, [isClockActive]);
 
   if (!isClockActive && !isExpandedPicker) {
     return null;
   }
 
-  const state = computeRestClockState(restClock, nowMs);
   const isStopwatch = state.mode === 'stopwatch';
   const primaryReadout = isStopwatch
     ? formatClockSeconds(state.elapsedSeconds)

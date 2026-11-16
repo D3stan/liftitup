@@ -338,6 +338,7 @@ async function executeToolCall(
           timezone: user.timezone,
           enableSetQuality: user.enableSetQuality,
           restClockMode: user.restClockMode,
+          defaultWorkoutView: user.defaultWorkoutView,
           defaultWeightStepKg: user.defaultWeightStepKg,
           appleFitnessEnabled: user.appleFitnessEnabled,
           appleHealthLastReceivedAt: user.appleHealthLastReceivedAt,
