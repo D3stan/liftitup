@@ -5,6 +5,7 @@ import { recordBodyMetric } from '@/lib/db/bodyMetrics';
 import { withTransaction } from '@/lib/db/connection';
 import { getApiKeyByUserId } from '@/lib/db/sessions';
 import {
+  isValidRestClockMode,
   isValidTimezone,
   localDateForTimezone,
   updateUserSettings,
@@ -23,6 +24,7 @@ interface SettingsPatchBody {
   theme?: unknown;
   themeVariant?: unknown;
   enableSetQuality?: unknown;
+  restClockMode?: unknown;
   appleFitnessEnabled?: unknown;
 }
 
@@ -131,6 +133,15 @@ export const PATCH = withApiHandler(
         throw ApiError.validation('enableSetQuality must be a boolean');
       }
       patch.enableSetQuality = body.enableSetQuality;
+    }
+
+    if (body.restClockMode !== undefined) {
+      if (!isValidRestClockMode(body.restClockMode)) {
+        throw ApiError.validation(
+          'restClockMode must be "stopwatch" or "countdown"',
+        );
+      }
+      patch.restClockMode = body.restClockMode;
     }
 
     if (body.appleFitnessEnabled !== undefined) {

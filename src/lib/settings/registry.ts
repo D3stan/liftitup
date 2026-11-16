@@ -42,7 +42,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryMeta[] = [
   {
     id: 'training',
     title: 'Training',
-    description: 'Workout logging options such as execution quality.',
+    description: 'Rest clock mode, rest alerts, and execution quality.',
     href: '/settings/training',
   },
   {
@@ -173,6 +173,40 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   },
 
   // Training
+  {
+    id: 'training-rest-clock-mode',
+    title: 'Rest Clock Mode',
+    description: 'Choose Stopwatch (count up) or Countdown timer between sets.',
+    categoryId: 'training',
+    categoryTitle: 'Training',
+    href: '/settings/training#rest-clock',
+    keywords: [
+      'rest',
+      'clock',
+      'timer',
+      'stopwatch',
+      'countdown',
+      'between sets',
+      'training',
+    ],
+  },
+  {
+    id: 'training-rest-alerts',
+    title: 'Rest Alerts & Notifications',
+    description: 'Request notification permission and send a test rest alert.',
+    categoryId: 'training',
+    categoryTitle: 'Training',
+    href: '/settings/training#rest-alerts',
+    keywords: [
+      'rest',
+      'alerts',
+      'notifications',
+      'permission',
+      'test alert',
+      'vibration',
+      'training',
+    ],
+  },
   {
     id: 'training-execution-quality',
     title: 'Execution Quality %',

@@ -51,7 +51,7 @@ export const MCP_TOOLS_DEFINITIONS = [
   {
     name: 'get_profile',
     description:
-      'Returns the user profile (body stats, unit, timezone, set-quality setting) and recent bodyweight history.',
+      'Returns the user profile (body stats, unit, timezone, set-quality, rest-clock mode) and recent bodyweight history.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -327,6 +327,7 @@ async function executeToolCall(
           unit: user.unit,
           timezone: user.timezone,
           enableSetQuality: user.enableSetQuality,
+          restClockMode: user.restClockMode,
           appleFitnessEnabled: user.appleFitnessEnabled,
         },
         recentBodyMetrics,

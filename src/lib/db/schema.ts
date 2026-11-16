@@ -28,6 +28,7 @@ const SCHEMA_V2_DDL = `
     theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art')),
     theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark')),
     enable_set_quality INTEGER NOT NULL DEFAULT 0 CHECK (enable_set_quality IN (0, 1)),
+    rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown')),
     apple_fitness_enabled INTEGER NOT NULL DEFAULT 1 CHECK (apple_fitness_enabled IN (0, 1)),
     is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
     last_active_at TEXT NOT NULL,
@@ -376,6 +377,9 @@ export async function initSchema(
     );
     await client.query(
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark'))",
+    );
+    await client.query(
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown'))",
     );
 
     const now = new Date().toISOString();

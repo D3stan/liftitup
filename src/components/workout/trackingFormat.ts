@@ -5,6 +5,9 @@ import type {
   WeightUnit,
   WorkoutSet,
 } from '@/types/domain';
+import type { DraftRestClock } from '@/lib/workouts/clock';
+
+export type { DraftRestClock };
 
 export interface LoggerRepQuality {
   repIndex: number;
@@ -22,6 +25,10 @@ export interface LoggerSet {
   executionQualityPct: number | null;
   repQualities: LoggerRepQuality[];
   isCompleted: boolean;
+  /** ISO timestamp when this set was marked completed (consumed by Phase 3). */
+  completedAt?: string | null;
+  /** ISO timestamp when user explicitly stopped the rest clock after this set (consumed by Phase 3). */
+  restEndedAt?: string | null;
 }
 
 export interface LoggerExercise {
@@ -41,7 +48,12 @@ export interface WorkoutDraft {
   notes: string;
   isJolly: boolean;
   jollyMode: 'extra' | 'instead' | null;
-  startedAt: string;
+  /** ISO timestamp when user started the session (Start button or first completed set), or null before starting. */
+  startedAt: string | null;
+  /** How the session clock started, if started. */
+  sessionStartSource?: 'manual' | 'first_set' | null;
+  /** Persisted rest clock state (stopwatch or countdown) so reloads preserve elapsed/target/stop state. */
+  restClock?: DraftRestClock | null;
   exercises: LoggerExercise[];
   updatedAt: string;
 }
@@ -349,6 +361,8 @@ export function buildPrefilledSets(params: {
       executionQualityPct: null,
       repQualities: [],
       isCompleted: false,
+      completedAt: null,
+      restEndedAt: null,
     });
   }
 
