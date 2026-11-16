@@ -16,8 +16,19 @@ A notebook-styled, multi-user workout tracker PWA built on a **rotation queue** 
 
 ## Development
 
-Run the test suite with:
+Run the unit test suite (`pg-mem`) with:
 
 ```bash
 npm test
 ```
+
+Run the real-PostgreSQL integration suite (requires a running PostgreSQL instance, e.g. via `docker compose up -d postgres`):
+
+```bash
+npm run test:postgres
+```
+
+## Security & Backups
+
+- **Database backups contain private progress photos:** LiftItUp stores progress photos as binary data in PostgreSQL (`progress_photo_blobs`). Any `pg_dump`, volume snapshot (`liftitup-pgdata`), or database backup contains users' private progress photos and must be encrypted, stored, and shared accordingly.
+- **Set a real `POSTGRES_PASSWORD`:** `docker-compose.yml` falls back to a local development default (`liftitup`). Before deploying or exposing the database/app beyond local development, always set `POSTGRES_PASSWORD` (and matching `DATABASE_URL`) to a strong, unique secret.

@@ -36,6 +36,7 @@ const SCHEMA_V2_DDL = `
     apple_health_last_received_at TEXT,
     apple_health_last_received_kind TEXT CHECK (apple_health_last_received_kind IS NULL OR apple_health_last_received_kind IN ('workout', 'weight', 'both')),
     apple_health_last_received_linked INTEGER CHECK (apple_health_last_received_linked IS NULL OR apple_health_last_received_linked IN (0, 1)),
+    photo_quota INTEGER,
     is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
     last_active_at TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -264,6 +265,28 @@ const SCHEMA_V2_DDL = `
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS progress_photos (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    taken_on TEXT NOT NULL,
+    pose TEXT NOT NULL CHECK (pose IN ('front', 'side', 'back')),
+    weight_kg DOUBLE PRECISION,
+    byte_size INTEGER NOT NULL,
+    thumb_byte_size INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_progress_photos_user_date ON progress_photos (user_id, taken_on DESC, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS progress_photo_blobs (
+    photo_id TEXT PRIMARY KEY,
+    full_bytes BYTEA NOT NULL,
+    thumb_bytes BYTEA NOT NULL,
+    FOREIGN KEY (photo_id) REFERENCES progress_photos(id) ON DELETE CASCADE
+  );
 `;
 
 function defaultRestForCategory(category: string): number {
@@ -426,6 +449,9 @@ export async function initSchema(
     );
     await client.query(
       'ALTER TABLE apple_health_workouts ALTER COLUMN active_calories DROP NOT NULL',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_quota INTEGER',
     );
 
     // Approved Phase 5 non-additive cleanup: remove existing duplicate
