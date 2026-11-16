@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ChevronRight, Download, Sparkles } from 'lucide-react';
+import { Camera, ChevronRight, Download, Sparkles } from 'lucide-react';
 import { LiftitupRestoreSection } from './LiftitupRestoreSection';
 import { SettingsSubpageShell } from './SettingsSubpageShell';
 import { useSettingsData } from './useSettingsData';
@@ -19,7 +19,8 @@ export function SettingsDataView() {
               <h2 className="font-marker text-lg text-[var(--ink)]">Export</h2>
               <p className="mt-0.5 text-sm text-[var(--muted)]">
                 Download your workout sessions, active split, custom exercises,
-                and body metrics.
+                and body metrics. Progress photos are excluded and downloaded
+                separately below.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -41,6 +42,37 @@ export function SettingsDataView() {
               </a>
             </div>
           </section>
+
+          {!user.isGuest && (
+            <section id="photo-archive" className="card flex flex-col gap-3">
+              <div>
+                <h2 className="font-marker text-lg text-[var(--ink)]">
+                  Progress Photos Archive
+                </h2>
+                <p className="mt-0.5 text-sm text-[var(--muted)]">
+                  Download all your private progress photos as a ZIP archive
+                  named by date and pose, with an index of dates and weights.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <a
+                  href="/api/photos/archive"
+                  download
+                  className="btn alt min-h-[44px] flex-1 justify-center gap-2 no-underline"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Photos (ZIP)
+                </a>
+                <Link
+                  href="/body?tab=photos"
+                  className="btn alt min-h-[44px] justify-center gap-2 no-underline"
+                >
+                  <Camera className="h-4 w-4" />
+                  Open Gallery
+                </Link>
+              </div>
+            </section>
+          )}
 
           <LiftitupRestoreSection onUserUpdated={setUser} />
 

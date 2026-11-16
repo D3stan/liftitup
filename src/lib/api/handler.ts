@@ -51,6 +51,10 @@ export class ApiError extends Error {
     return new ApiError(405, 'METHOD_NOT_ALLOWED', message);
   }
 
+  static payloadTooLarge(message = 'Payload too large'): ApiError {
+    return new ApiError(413, 'PAYLOAD_TOO_LARGE', message);
+  }
+
   static internal(message = 'Internal server error'): ApiError {
     return new ApiError(500, 'INTERNAL_ERROR', message);
   }

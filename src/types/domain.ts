@@ -47,9 +47,30 @@ export interface UserProfile {
   appleHealthLastReceivedAt: string | null;
   appleHealthLastReceivedKind: AppleHealthReceiveKind | null;
   appleHealthLastReceivedLinked: boolean | null;
+  photoQuota?: number | null;
   isGuest: boolean;
   lastActiveAt: string;
   createdAt: string;
+}
+
+export type ProgressPhotoPose = 'front' | 'side' | 'back';
+
+export interface ProgressPhoto {
+  id: string;
+  userId: string;
+  takenOn: string; // YYYY-MM-DD
+  pose: ProgressPhotoPose;
+  weightKg: number | null;
+  byteSize: number;
+  thumbByteSize: number;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+}
+
+export interface ProgressPhotoQuota {
+  used: number;
+  limit: number;
 }
 
 export interface ApiKeyInfo {

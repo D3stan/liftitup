@@ -29,9 +29,9 @@ export const DANGER_ACTIONS: DangerActionMeta[] = [
   {
     id: 'delete_body',
     title: 'Delete all body data',
-    description: 'Erase body metric history and reset profile weight.',
+    description: 'Erase body metric history, progress photos, and reset profile weight.',
     removes:
-      'All recorded body metrics and resets your profile weight to the default (75 kg).',
+      'All recorded body metrics, all progress photos (including image data), and resets your profile weight to the default (75 kg).',
     keeps:
       'Workout history, split, custom exercises, and Apple Health workouts.',
     confirmationWord: 'DELETE',
@@ -53,7 +53,7 @@ export const DANGER_ACTIONS: DangerActionMeta[] = [
     title: 'Delete account',
     description: 'Permanently delete your account and all data.',
     removes:
-      'Everything belonging to your account (workouts, split, body data, custom exercises, Apple Health workouts, API key, and sessions), then logs you out.',
+      'Everything belonging to your account (workouts, split, body data, progress photos, custom exercises, Apple Health workouts, API key, and sessions), then logs you out.',
     keeps: 'Nothing.',
     confirmationWord: 'DELETE',
     buttonLabel: 'Delete account',

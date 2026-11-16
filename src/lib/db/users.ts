@@ -36,6 +36,7 @@ type DbUserRow = {
   apple_health_last_received_at?: string | null;
   apple_health_last_received_kind?: string | null;
   apple_health_last_received_linked?: number | null;
+  photo_quota?: number | null;
   is_guest: number;
   last_active_at: string;
   created_at: string;
@@ -119,6 +120,10 @@ export function mapUserRow(row: DbUserRow): UserProfile {
       row.apple_health_last_received_linked === undefined
         ? null
         : Boolean(row.apple_health_last_received_linked),
+    photoQuota:
+      row.photo_quota === null || row.photo_quota === undefined
+        ? null
+        : Number(row.photo_quota),
     isGuest: Boolean(row.is_guest),
     lastActiveAt: row.last_active_at,
     createdAt: row.created_at,
