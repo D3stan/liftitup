@@ -26,7 +26,7 @@ This is a brief for an implementing agent. It describes **what** to build and th
 | 3 | Actual rest recorded, fully editable logs, rest in history | 2 |
 | 4 | +/− steppers with per-exercise step sizes | 1 |
 | 5 | Apple Health section: strict ingest, bodyweight, last received, tests | 1 |
-| 6 | Imports: Strong, Hevy, Liftitup restore; AI import entry in Settings | 1, 3, 4 |
+| 6 | Imports: Liftitup restore; AI import entry in Settings | 1, 3, 4 |
 | 7 | Body tab with weight tracking; AI tab removed from the nav | 1, 4, 6 |
 | 8 | Progress photos: capture, overlay, compare, export | 7 |
 | 9 | Focus mode in the workout logger | 2, 3, 4 |
@@ -279,15 +279,13 @@ Each of these is built **once**, in the phase named, and reused by the others. A
 
 **AI import:** add an entry for the existing AI import screen under Settings › Data, and make `/ai` redirect there. **Do not remove the AI tab from the bottom navigation in this phase**; that happens in phase 7 together with adding Body, so the nav never has an empty slot.
 
-**New imports:**
+**New imports:** *(Strong and Hevy CSV imports are skipped/deferred for now.)*
 
 | Source | Input | Brings in |
 |--------|-------|-----------|
-| Strong | Its CSV export | Sessions, exercises, sets, notes |
-| Hevy | Its CSV export | Sessions, exercises, sets, notes |
 | Liftitup | This app's own JSON export | What the export contains: sessions, the active split, custom exercises, body metrics |
 
-**Behaviour, all three:**
+**Behaviour:**
 - Upload, then a **preview** before anything is written: number of sessions, date range, exercises found, rows that could not be read. Reuse the validate-then-confirm pattern and the exercise name matcher that the AI import already has (`src/lib/ai`, `AiImportView`).
 - **Exercise matching:** each imported name is matched against the catalog and the user's custom exercises by name, then alias. Unmatched names are listed for the user to map to an existing exercise or create as custom. Nothing is created silently.
 - Units are detected from the file or asked once.
@@ -306,12 +304,11 @@ Each of these is built **once**, in the phase named, and reused by the others. A
 **Sensitive:**
 - Uploaded files are untrusted: enforce an 8 MB limit before parsing (requests pass through middleware that caps bodies at 10 MB), parse defensively, and never let a field from the file choose the owner. Every row is written under the authenticated user, ignoring any user identifier inside the file.
 - The whole import is one transaction; a failure leaves nothing half-written. For Replace this is critical: the delete and the import are the **same** transaction, the file is fully validated before anything is deleted, and a failure at any point leaves the account exactly as it was. Replace reuses the deletion code of the phase 1 danger zone rather than a second implementation.
-- Verify the real column layout of current Strong and Hevy exports before writing the parsers. Do not rely on memory of the format; ask the user for sample files.
 - The restore must round-trip the fields added in phases 3 and 4 (actual rest, approximate flag, step sizes).
 
-**Tests:** a fixture file per source; second import of the same file is a no-op; Replace removes old data and a forced failure mid-import leaves the account unchanged; Replace never touches another user or photos; unmatched-exercise flow; a foreign user id inside a Liftitup export is ignored; ids in the file are not reused; imported sessions do not move the rotation; oversize and malformed files are rejected cleanly.
+**Tests:** a Liftitup export fixture file; second import of the same file is a no-op; Replace removes old data and a forced failure mid-import leaves the account unchanged; Replace never touches another user or photos; unmatched-exercise flow; a foreign user id inside a Liftitup export is ignored; ids in the file are not reused; imported sessions do not move the rotation; oversize and malformed files are rejected cleanly.
 
-**Done when:** each of the three files imports into a clean account with correct sessions, and a second import of the same file changes nothing.
+**Done when:** a Liftitup export file imports into a clean account with correct sessions, and a second import of the same file changes nothing.
 
 ---
 
@@ -553,7 +550,7 @@ Cover every capability the app offers after phases 1 to 9. Group and name the to
 | Body | Log, edit and delete a weight entry; read history and trend (phase 7) |
 | Photos | Work with the owner's photos in three steps (see "Photos through MCP" below): list by metadata, browse thumbnails, get a download link; delete a photo (two-step) |
 | Apple Health | Read status and last received; list Health workouts and their links; run a payload dry run; re-link or unlink a workout |
-| Imports and export | Validate then confirm a Strong, Hevy or Liftitup file, including the choice of merge or replace; export data (exists) |
+| Imports and export | Validate then confirm a Liftitup export file, including the choice of merge or replace; export data (exists) |
 | Danger zone | The four actions of phase 1, through the two-step confirmation below |
 
 ### Part B: admin tools (only when the key owner is an admin)
@@ -605,7 +602,7 @@ Everything the admin area of phase 10 shows and does:
 - Step sizes: default on the exercise, per-user override table, global default last.
 - Settings gets search and a danger zone.
 - Global narrowing of API-key access is not relevant now.
-- Imports in the first version: Strong, Hevy, Liftitup's own export. No generic CSV mapper. Ids from files are never reused; dedupe by `cid`.
+- Imports in the first version: Liftitup's own export/restore (Strong and Hevy CSV imports are skipped for now). No generic CSV mapper. Ids from files are never reused; dedupe by `cid`.
 - Apple Health is its own settings section; the ingest endpoint becomes strict, as specified in phase 5.
 - Photos are stored in Postgres; a user-mounted volume is the fallback only. The browser does the image work; the server enforces only size and a fixed JPEG content type.
 - Photos can be exported as an archive.
@@ -643,4 +640,4 @@ Everything the admin area of phase 10 shows and does:
 
 ## 4. Out of scope
 
-Generic CSV import, body measurements, plate calculator, goal weight line, heart-rate recovery analysis, weekly reminders, rest sound cue, screen wake lock, push notifications, offline mode, sharing workouts, native app or direct HealthKit access, global restriction of API-key access.
+Generic CSV import, Strong and Hevy CSV imports (skipped for now), body measurements, plate calculator, goal weight line, heart-rate recovery analysis, weekly reminders, rest sound cue, screen wake lock, push notifications, offline mode, sharing workouts, native app or direct HealthKit access, global restriction of API-key access.
