@@ -11,7 +11,8 @@ import {
   isValidAppTheme,
   isValidThemeVariant,
 } from '@/lib/theme';
-import { query, queryOne } from './connection';
+import { query, queryOne, withTransaction } from './connection';
+import { deleteUserAccountInTx } from './userDeletion';
 
 type DbUserRow = {
   id: string;
@@ -273,8 +274,9 @@ export async function touchUserLastActive(userId: string): Promise<void> {
 }
 
 /**
- * Deletes guest sandbox users inactive for longer than `olderThanHours`.
- * Returns the number of purged guest users (cascade cleans up all child rows).
+ * Deletes guest sandbox users inactive for longer than `olderThanHours`
+ * using explicit child-to-parent deletion order inside a transaction.
+ * Returns the number of purged guest users.
  */
 export async function deleteExpiredGuests(
   olderThanHours = 24,
@@ -282,9 +284,17 @@ export async function deleteExpiredGuests(
   const cutoffIso = new Date(
     Date.now() - olderThanHours * 60 * 60 * 1000,
   ).toISOString();
-  const res = await query(
-    'DELETE FROM users WHERE is_guest = 1 AND last_active_at < $1',
-    [cutoffIso],
-  );
-  return Number(res.rowCount ?? 0);
+  return withTransaction(async () => {
+    const res = await query<{ id: string }>(
+      'SELECT id FROM users WHERE is_guest = 1 AND last_active_at < $1',
+      [cutoffIso],
+    );
+    let deleted = 0;
+    for (const row of res.rows) {
+      if (await deleteUserAccountInTx(row.id)) {
+        deleted += 1;
+      }
+    }
+    return deleted;
+  });
 }

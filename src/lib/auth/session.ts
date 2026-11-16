@@ -128,6 +128,30 @@ export async function requireAuth(
 }
 
 /**
+ * Enforces authentication via session cookie only; rejects API-key callers (Bearer / x-api-key)
+ * with 403 and unauthenticated requests with 401.
+ */
+export async function requireSessionAuth(
+  req: NextRequest,
+  ctx?: { setUserId?: (id: string | null) => void },
+): Promise<AuthContext> {
+  if (
+    req.headers.get('authorization') !== null ||
+    req.headers.get('x-api-key') !== null
+  ) {
+    throw ApiError.forbidden(
+      'Session cookie authentication required; API keys are not allowed',
+    );
+  }
+  const auth = await optionalAuth(req);
+  if (!auth || auth.authMethod !== 'session') {
+    throw ApiError.unauthorized('Session authentication required');
+  }
+  ctx?.setUserId?.(auth.user.id);
+  return auth;
+}
+
+/**
  * Enforces Bearer API-key authentication only (for `/api/mcp`). Throws 401 otherwise.
  */
 export async function requireApiKeyAuth(

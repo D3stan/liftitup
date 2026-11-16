@@ -43,6 +43,7 @@ export {
 } from './connection';
 export { initSchema, syncExerciseCatalog, SCHEMA_VERSION } from './schema';
 export * from './users';
+export * from './userDeletion';
 export * from './sessions';
 export * from './bodyMetrics';
 export * from './exercises';

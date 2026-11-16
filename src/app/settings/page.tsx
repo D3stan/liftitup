@@ -1,6 +1,6 @@
 import React from 'react';
-import { SettingsView } from '@/components/settings/SettingsView';
+import { SettingsIndexView } from '@/components/settings/SettingsIndexView';
 
 export default function SettingsPage() {
-  return <SettingsView />;
+  return <SettingsIndexView />;
 }
