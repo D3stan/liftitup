@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type {
   AppTheme,
+  RestClockMode,
   ThemeVariant,
   UserProfile,
   WeightUnit,
@@ -28,6 +29,7 @@ type DbUserRow = {
   theme?: string;
   theme_variant?: string;
   enable_set_quality: number;
+  rest_clock_mode?: string;
   apple_fitness_enabled: number;
   is_guest: number;
   last_active_at: string;
@@ -52,6 +54,7 @@ export interface CreateUserInput {
   theme?: AppTheme;
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
+  restClockMode?: RestClockMode;
   appleFitnessEnabled?: boolean;
   isGuest?: boolean;
 }
@@ -67,7 +70,12 @@ export interface UpdateUserSettingsInput {
   theme?: AppTheme;
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
+  restClockMode?: RestClockMode;
   appleFitnessEnabled?: boolean;
+}
+
+export function isValidRestClockMode(val: unknown): val is RestClockMode {
+  return val === 'stopwatch' || val === 'countdown';
 }
 
 export function mapUserRow(row: DbUserRow): UserProfile {
@@ -86,6 +94,7 @@ export function mapUserRow(row: DbUserRow): UserProfile {
       ? row.theme_variant
       : DEFAULT_THEME_VARIANT,
     enableSetQuality: Boolean(row.enable_set_quality),
+    restClockMode: row.rest_clock_mode === 'countdown' ? 'countdown' : 'stopwatch',
     appleFitnessEnabled: Boolean(row.apple_fitness_enabled),
     isGuest: Boolean(row.is_guest),
     lastActiveAt: row.last_active_at,
@@ -155,15 +164,18 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
     ? input.themeVariant
     : DEFAULT_THEME_VARIANT;
 
+  const restClockMode: RestClockMode =
+    input.restClockMode === 'countdown' ? 'countdown' : 'stopwatch';
+
   const row = await queryOne<DbUserRow>(
     `
     INSERT INTO users (
       id, username, display_name, password_hash,
       height_cm, weight_kg, age, training_years,
       unit, timezone, theme, theme_variant,
-      enable_set_quality, apple_fitness_enabled,
+      enable_set_quality, rest_clock_mode, apple_fitness_enabled,
       is_guest, last_active_at, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
     RETURNING *
     `,
     [
@@ -180,6 +192,7 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       theme,
       themeVariant,
       input.enableSetQuality ? 1 : 0,
+      restClockMode,
       input.appleFitnessEnabled === false ? 0 : 1,
       input.isGuest ? 1 : 0,
       now,
@@ -241,6 +254,10 @@ export async function updateUserSettings(
   if (patch.enableSetQuality !== undefined) {
     setClauses.push(`enable_set_quality = $${idx++}`);
     params.push(patch.enableSetQuality ? 1 : 0);
+  }
+  if (patch.restClockMode !== undefined) {
+    setClauses.push(`rest_clock_mode = $${idx++}`);
+    params.push(patch.restClockMode === 'countdown' ? 'countdown' : 'stopwatch');
   }
   if (patch.appleFitnessEnabled !== undefined) {
     setClauses.push(`apple_fitness_enabled = $${idx++}`);

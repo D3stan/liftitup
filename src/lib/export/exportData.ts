@@ -1,6 +1,7 @@
 import type {
   BodyMetric,
   Exercise,
+  RestClockMode,
   RotationSchedule,
   ScheduleEvent,
   UserProfile,
@@ -29,6 +30,7 @@ export interface ExportJsonPayload {
     unit: 'kg' | 'lb';
     timezone: string;
     enableSetQuality: boolean;
+    restClockMode: RestClockMode;
   };
   activeSchedule: {
     id: string;
@@ -140,6 +142,7 @@ export async function buildUserExportJson(user: UserProfile): Promise<ExportJson
       unit: user.unit,
       timezone: user.timezone,
       enableSetQuality: user.enableSetQuality,
+      restClockMode: user.restClockMode,
     },
     activeSchedule: activeSchedule
       ? {

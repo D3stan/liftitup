@@ -3,6 +3,7 @@ import type {
   Exercise,
   ExercisePrefill,
   JollyMode,
+  RestClockMode,
   ScheduleDay,
   WeightUnit,
   WorkoutSession,
@@ -17,6 +18,7 @@ export interface WorkoutDayViewResponse {
     unit: WeightUnit;
     weightKg: number;
     enableSetQuality: boolean;
+    restClockMode: RestClockMode;
     timezone: string;
   };
   calendarDay: {

@@ -44,6 +44,7 @@ export interface ExerciseLoggerCardProps {
     setIndex: number,
     patch: Partial<LoggerSet>,
   ) => void;
+  onToggleSetComplete: (exIndex: number, setIndex: number) => void;
   onAddSet: (exIndex: number) => void;
   onRemoveSet: (exIndex: number, setIndex: number) => void;
   onCheckAll: (exIndex: number) => void;
@@ -62,6 +63,7 @@ export default function ExerciseLoggerCard({
   onOpenSwap,
   onChangeNotes,
   onUpdateSet,
+  onToggleSetComplete,
   onAddSet,
   onRemoveSet,
   onCheckAll,
@@ -252,16 +254,7 @@ export default function ExerciseLoggerCard({
 
                   <button
                     type="button"
-                    onClick={() => {
-                      const nextDone = !setRow.isCompleted;
-                      onUpdateSet(index, setIdx, { isCompleted: nextDone });
-                      if (nextDone) {
-                        onStartRestTimer(
-                          setRow.restSeconds ?? exercise.defaultRestSeconds,
-                          exercise.exerciseName,
-                        );
-                      }
-                    }}
+                    onClick={() => onToggleSetComplete(index, setIdx)}
                     aria-label={
                       setRow.isCompleted
                         ? `Uncheck set ${setIdx + 1}`

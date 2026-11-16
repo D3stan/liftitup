@@ -14,6 +14,8 @@ export type {
 
 export type WeightUnit = 'kg' | 'lb';
 
+export type RestClockMode = 'stopwatch' | 'countdown';
+
 export type AppTheme =
   | 'notebook'
   | 'cutecore'
@@ -37,6 +39,7 @@ export interface UserProfile {
   theme: AppTheme;
   themeVariant: ThemeVariant;
   enableSetQuality: boolean;
+  restClockMode: RestClockMode;
   appleFitnessEnabled: boolean;
   isGuest: boolean;
   lastActiveAt: string;

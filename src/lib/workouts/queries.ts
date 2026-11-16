@@ -190,6 +190,7 @@ export async function getWorkoutDayView(
       unit: user.unit,
       weightKg: user.weightKg,
       enableSetQuality: user.enableSetQuality,
+      restClockMode: user.restClockMode,
       timezone: user.timezone,
     },
     calendarDay: {

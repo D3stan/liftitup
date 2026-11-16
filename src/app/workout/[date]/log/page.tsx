@@ -6,6 +6,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   Check,
+  Clock,
+  Play,
   Plus,
   RotateCcw,
   Sparkles,
@@ -40,6 +42,16 @@ import ExercisePickerSheet from '@/components/workout/ExercisePickerSheet';
 import FloatingRestTimer from '@/components/workout/FloatingRestTimer';
 import VariationSwapSheet from '@/components/workout/VariationSwapSheet';
 import {
+  adjustRestClockTarget,
+  computeSessionDurationMinutes,
+  computeSessionElapsedSeconds,
+  createRestClock,
+  dismissRestClock,
+  formatClockSeconds,
+  resolveSessionStart,
+  stopRestClock,
+} from '@/lib/workouts/clock';
+import {
   buildPrefilledSets,
   displayToKg,
   formatDisplayDate,
@@ -64,6 +76,8 @@ function sessionToDraft(
     isJolly: session.isJolly,
     jollyMode: session.jollyMode,
     startedAt: session.startedAt,
+    sessionStartSource: null,
+    restClock: null,
     updatedAt: new Date().toISOString(),
     exercises: session.exercises.map((ex) => ({
       localId: makeLocalId('ex'),
@@ -90,6 +104,8 @@ function sessionToDraft(
               qualityPct: rq.qualityPct,
             })) ?? [],
           isCompleted: s.isCompleted,
+          completedAt: null,
+          restEndedAt: null,
         };
       }),
     })),
@@ -143,7 +159,9 @@ function buildInitialDraft(params: {
       notes: '',
       isJolly: true,
       jollyMode: mode,
-      startedAt: new Date().toISOString(),
+      startedAt: null,
+      sessionStartSource: null,
+      restClock: null,
       updatedAt: new Date().toISOString(),
       exercises: [],
     };
@@ -155,7 +173,9 @@ function buildInitialDraft(params: {
     notes: '',
     isJolly: false,
     jollyMode: null,
-    startedAt: new Date().toISOString(),
+    startedAt: null,
+    sessionStartSource: null,
+    restClock: null,
     updatedAt: new Date().toISOString(),
     exercises: plannedDay.exercises.map((slot) => {
       const t = slot.trackingType ?? 'weight_reps';
@@ -211,10 +231,8 @@ function WorkoutLoggerInner() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [swapTargetIdx, setSwapTargetIdx] = useState<number | null>(null);
 
-  const [timerEndMs, setTimerEndMs] = useState<number | null>(null);
-  const [timerTotalSec, setTimerTotalSec] = useState<number>(120);
-  const [timerLabel, setTimerLabel] = useState<string>('');
   const [timerPickerOpen, setTimerPickerOpen] = useState(false);
+  const [sessionNowMs, setSessionNowMs] = useState<number>(() => Date.now());
 
   const loadData = useCallback(
     async (ignoreSavedDraft = false) => {
@@ -249,9 +267,21 @@ function WorkoutLoggerInner() {
           : null;
 
         if (existingDraft && Array.isArray(existingDraft.exercises)) {
-          setDraft(existingDraft);
+          const normalizedDraft: WorkoutDraft = {
+            ...existingDraft,
+            startedAt:
+              typeof existingDraft.startedAt === 'string' &&
+              existingDraft.startedAt.trim()
+                ? existingDraft.startedAt
+                : editSession
+                  ? editSession.startedAt
+                  : null,
+            sessionStartSource: existingDraft.sessionStartSource ?? null,
+            restClock: existingDraft.restClock ?? null,
+          };
+          setDraft(normalizedDraft);
           setRestoredFromStorage(true);
-          setNoteOpen(existingDraft.notes.trim().length > 0);
+          setNoteOpen(normalizedDraft.notes.trim().length > 0);
         } else {
           const fresh = buildInitialDraft({
             dayView: dayRes,
@@ -288,8 +318,43 @@ function WorkoutLoggerInner() {
     });
   }, [draft, dayView, draftKey]);
 
-  const updateDraft = (updater: (prev: WorkoutDraft) => WorkoutDraft) => {
-    setDraft((prev) => (prev ? updater(prev) : prev));
+  const draftStartedAt = draft?.startedAt ?? null;
+  useEffect(() => {
+    if (sessionId || !draftStartedAt) return;
+    const syncNow = () => setSessionNowMs(Date.now());
+    syncNow();
+    const interval = window.setInterval(syncNow, 1000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') syncNow();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', syncNow);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', syncNow);
+    };
+  }, [sessionId, draftStartedAt]);
+
+  const updateDraft = useCallback(
+    (updater: (prev: WorkoutDraft) => WorkoutDraft) => {
+      setDraft((prev) => (prev ? updater(prev) : prev));
+    },
+    [],
+  );
+
+  const handleStartSession = () => {
+    if (sessionId) return;
+    const nowIso = new Date().toISOString();
+    setSessionNowMs(Date.now());
+    updateDraft((prev) => {
+      if (prev.startedAt) return prev;
+      return {
+        ...prev,
+        startedAt: resolveSessionStart(prev.startedAt, nowIso),
+        sessionStartSource: 'manual',
+      };
+    });
   };
 
   const handleMoveUp = (index: number) => {
@@ -345,6 +410,71 @@ function WorkoutLoggerInner() {
     }));
   };
 
+  const handleToggleSetComplete = (exIndex: number, setIndex: number) => {
+    if (!dayView) return;
+    const nowIso = new Date().toISOString();
+    setSessionNowMs(Date.now());
+    setTimerPickerOpen(false);
+    updateDraft((prev) => {
+      const ex = prev.exercises[exIndex];
+      const setRow = ex?.sets[setIndex];
+      if (!ex || !setRow) return prev;
+
+      const nextDone = !setRow.isCompleted;
+      const nextExercises = prev.exercises.map((item, i) => {
+        if (i !== exIndex) return item;
+        return {
+          ...item,
+          sets: item.sets.map((s, j) =>
+            j === setIndex
+              ? {
+                  ...s,
+                  isCompleted: nextDone,
+                  completedAt: nextDone ? nowIso : null,
+                  restEndedAt: null,
+                }
+              : s,
+          ),
+        };
+      });
+
+      let nextStartedAt = prev.startedAt;
+      let nextStartSource = prev.sessionStartSource ?? null;
+      let nextRestClock = prev.restClock ?? null;
+
+      if (nextDone) {
+        if (!sessionId) {
+          const resolved = resolveSessionStart(prev.startedAt, nowIso);
+          if (!prev.startedAt && resolved) {
+            nextStartSource = 'first_set';
+          }
+          nextStartedAt = resolved;
+        }
+        nextRestClock = createRestClock({
+          startedAt: nowIso,
+          targetSeconds: setRow.restSeconds ?? ex.defaultRestSeconds,
+          mode: dayView.user.restClockMode,
+          label: ex.exerciseName,
+          exerciseLocalId: ex.localId,
+          setLocalId: setRow.localId,
+        });
+      } else if (
+        nextRestClock?.isActive &&
+        nextRestClock.setLocalId === setRow.localId
+      ) {
+        nextRestClock = dismissRestClock(nextRestClock);
+      }
+
+      return {
+        ...prev,
+        startedAt: nextStartedAt,
+        sessionStartSource: nextStartSource,
+        restClock: nextRestClock,
+        exercises: nextExercises,
+      };
+    });
+  };
+
   const handleAddSet = (exIndex: number) => {
     updateDraft((prev) => ({
       ...prev,
@@ -362,6 +492,8 @@ function WorkoutLoggerInner() {
           executionQualityPct: null,
           repQualities: [],
           isCompleted: false,
+          completedAt: null,
+          restEndedAt: null,
         };
         return { ...ex, sets: [...ex.sets, nextSet] };
       }),
@@ -382,21 +514,42 @@ function WorkoutLoggerInner() {
   };
 
   const handleCheckAll = (exIndex: number) => {
-    if (!draft) return;
+    if (!draft || !dayView) return;
     const ex = draft.exercises[exIndex];
     if (!ex) return;
-    updateDraft((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((item, i) =>
-        i === exIndex
-          ? {
-              ...item,
-              sets: item.sets.map((s) => ({ ...s, isCompleted: true })),
-            }
-          : item,
-      ),
-    }));
-    startRestTimer(ex.defaultRestSeconds, ex.exerciseName);
+    const nowIso = new Date().toISOString();
+    setSessionNowMs(Date.now());
+    setTimerPickerOpen(false);
+    updateDraft((prev) => {
+      const nextStartedAt = sessionId
+        ? prev.startedAt
+        : resolveSessionStart(prev.startedAt, nowIso);
+      const nextStartSource =
+        !sessionId && !prev.startedAt && nextStartedAt
+          ? 'first_set'
+          : prev.sessionStartSource ?? null;
+      return {
+        ...prev,
+        startedAt: nextStartedAt,
+        sessionStartSource: nextStartSource,
+        restClock: createRestClock({
+          startedAt: nowIso,
+          targetSeconds: ex.defaultRestSeconds,
+          mode: dayView.user.restClockMode,
+          label: ex.exerciseName,
+          exerciseLocalId: ex.localId,
+          setLocalId: null,
+        }),
+        exercises: prev.exercises.map((item, i) =>
+          i === exIndex
+            ? {
+                ...item,
+                sets: item.sets.map((s) => ({ ...s, isCompleted: true })),
+              }
+            : item,
+        ),
+      };
+    });
   };
 
   const handleAddExercise = async (ex: Exercise) => {
@@ -468,23 +621,85 @@ function WorkoutLoggerInner() {
   };
 
   const startRestTimer = (seconds: number, label = '') => {
-    const safeSec = Math.max(5, Math.round(seconds || 90));
+    if (!dayView) return;
+    const nowIso = new Date().toISOString();
     setTimerPickerOpen(false);
-    setTimerTotalSec(safeSec);
-    setTimerLabel(label);
-    setTimerEndMs(Date.now() + safeSec * 1000);
+    updateDraft((prev) => ({
+      ...prev,
+      restClock: createRestClock({
+        startedAt: nowIso,
+        targetSeconds: seconds,
+        mode: dayView.user.restClockMode,
+        label,
+      }),
+    }));
   };
 
   const adjustRestTimer = (deltaSeconds: number) => {
-    setTimerEndMs((prev) => {
-      if (!prev) return null;
-      const next = Math.max(Date.now(), prev + deltaSeconds * 1000);
-      return next;
+    const nowMs = Date.now();
+    updateDraft((prev) => {
+      if (!prev.restClock || !prev.restClock.isActive) return prev;
+      return {
+        ...prev,
+        restClock: adjustRestClockTarget(prev.restClock, deltaSeconds, nowMs),
+      };
     });
-    if (deltaSeconds > 0) {
-      setTimerTotalSec((prev) => Math.max(15, prev + deltaSeconds));
-    }
   };
+
+  const handleStopRestForNextSet = () => {
+    const nowIso = new Date().toISOString();
+    setTimerPickerOpen(false);
+    updateDraft((prev) => {
+      if (!prev.restClock) return prev;
+      const stoppedClock = stopRestClock(prev.restClock, nowIso);
+      const targetExId = prev.restClock.exerciseLocalId;
+      const targetSetId = prev.restClock.setLocalId;
+      const nextExercises =
+        targetExId && targetSetId
+          ? prev.exercises.map((ex) => {
+              if (ex.localId !== targetExId) return ex;
+              return {
+                ...ex,
+                sets: ex.sets.map((s) =>
+                  s.localId === targetSetId ? { ...s, restEndedAt: nowIso } : s,
+                ),
+              };
+            })
+          : prev.exercises;
+      return {
+        ...prev,
+        restClock: stoppedClock,
+        exercises: nextExercises,
+      };
+    });
+  };
+
+  const handleDismissRestClock = () => {
+    setTimerPickerOpen(false);
+    updateDraft((prev) => ({
+      ...prev,
+      restClock: prev.restClock ? dismissRestClock(prev.restClock) : null,
+    }));
+  };
+
+  const handleRestAlertFired = useCallback(
+    (startedAt: string) => {
+      updateDraft((prev) => {
+        if (
+          !prev.restClock ||
+          prev.restClock.startedAt !== startedAt ||
+          prev.restClock.alertFired
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          restClock: { ...prev.restClock, alertFired: true },
+        };
+      });
+    },
+    [updateDraft],
+  );
 
   const handleSave = async () => {
     if (!draft || !dayView) return;
@@ -546,9 +761,12 @@ function WorkoutLoggerInner() {
         });
         toast.success('Workout updated');
       } else {
-        const elapsedMin = Math.max(
-          1,
-          Math.round((Date.now() - Date.parse(draft.startedAt)) / 60000),
+        const completedAtIso = new Date().toISOString();
+        const effectiveStartedAt =
+          resolveSessionStart(draft.startedAt, completedAtIso) ?? completedAtIso;
+        const durationMinutes = computeSessionDurationMinutes(
+          effectiveStartedAt,
+          completedAtIso,
         );
         const scheduleDayId =
           !draft.isJolly && dayView.calendarDay.plannedDay
@@ -563,9 +781,9 @@ function WorkoutLoggerInner() {
             isJolly: draft.isJolly,
             jollyMode: draft.isJolly ? draft.jollyMode ?? 'extra' : null,
             title,
-            startedAt: draft.startedAt,
-            completedAt: new Date().toISOString(),
-            durationMinutes: Number.isFinite(elapsedMin) ? elapsedMin : null,
+            startedAt: effectiveStartedAt,
+            completedAt: completedAtIso,
+            durationMinutes,
             userWeightKg: dayView.user.weightKg,
             notes: draft.notes.trim(),
             cid: draft.cid,
@@ -623,10 +841,12 @@ function WorkoutLoggerInner() {
     0,
   );
 
+  const restClockActive = Boolean(draft.restClock?.isActive);
+
   return (
     <main
       className={`mx-auto max-w-xl space-y-4 px-4 pt-4 ${
-        timerEndMs || timerPickerOpen ? 'pb-64' : 'pb-48'
+        restClockActive || timerPickerOpen ? 'pb-64' : 'pb-48'
       }`}
     >
       {/* Top Bar */}
@@ -644,9 +864,8 @@ function WorkoutLoggerInner() {
           <button
             type="button"
             onClick={() => {
-              if (timerEndMs) {
-                setTimerEndMs(null);
-                setTimerPickerOpen(false);
+              if (restClockActive) {
+                handleDismissRestClock();
               } else {
                 setTimerPickerOpen((v) => !v);
               }
@@ -658,6 +877,58 @@ function WorkoutLoggerInner() {
           </button>
         </div>
       </div>
+
+      {/* User-Driven Session Clock (new workouts only) */}
+      {!sessionId && (
+        <section
+          aria-label="Session clock"
+          className="card-sm flex items-center justify-between gap-3"
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[var(--line)] ${
+                draft.startedAt
+                  ? 'bg-[var(--green-bg)] text-[var(--ink)]'
+                  : 'bg-[var(--surface-alt)] text-[var(--muted)]'
+              }`}
+            >
+              <Clock className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-marker text-xl tracking-wider text-[var(--ink)]">
+                  {formatClockSeconds(
+                    computeSessionElapsedSeconds(draft.startedAt, sessionNowMs),
+                  )}
+                </span>
+                <span
+                  className={`pill px-2 py-0.5 text-xs ${
+                    draft.startedAt ? 'green' : ''
+                  }`}
+                >
+                  {draft.startedAt ? 'Session active' : 'Not started'}
+                </span>
+              </div>
+              {!draft.startedAt && (
+                <p className="truncate text-xs font-bold text-[var(--muted)]">
+                  Tap Start or complete your first set
+                </p>
+              )}
+            </div>
+          </div>
+
+          {!draft.startedAt && (
+            <button
+              type="button"
+              onClick={handleStartSession}
+              className="btn green !min-h-[44px] shrink-0 !px-4 text-base"
+            >
+              <Play className="h-4 w-4" />
+              <span>Start</span>
+            </button>
+          )}
+        </section>
+      )}
 
       {/* Restored Draft Pill */}
       {restoredFromStorage && (
@@ -781,6 +1052,7 @@ function WorkoutLoggerInner() {
             onOpenSwap={(i) => setSwapTargetIdx(i)}
             onChangeNotes={handleChangeExNotes}
             onUpdateSet={handleUpdateSet}
+            onToggleSetComplete={handleToggleSetComplete}
             onAddSet={handleAddSet}
             onRemoveSet={handleRemoveSet}
             onCheckAll={handleCheckAll}
@@ -858,16 +1130,14 @@ function WorkoutLoggerInner() {
       )}
 
       <FloatingRestTimer
-        endTimeMs={timerEndMs}
-        totalSeconds={timerTotalSec}
-        label={timerLabel}
+        restClock={draft.restClock}
+        preferredMode={dayView.user.restClockMode}
         isExpandedPicker={timerPickerOpen}
-        onAdjustSeconds={adjustRestTimer}
+        onAdjustTarget={adjustRestTimer}
         onStartPreset={startRestTimer}
-        onDismiss={() => {
-          setTimerEndMs(null);
-          setTimerPickerOpen(false);
-        }}
+        onStopForNextSet={handleStopRestForNextSet}
+        onDismiss={handleDismissRestClock}
+        onAlertFired={handleRestAlertFired}
       />
 
       <Sheet
