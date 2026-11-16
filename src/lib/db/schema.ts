@@ -246,7 +246,10 @@ function defaultRestForCategory(category: string): number {
 }
 
 function isPool(client: Pool | PoolClient): client is Pool {
-  return typeof (client as Pool).connect === 'function';
+  return (
+    typeof (client as Pool).connect === 'function' &&
+    typeof (client as PoolClient).release !== 'function'
+  );
 }
 
 async function withDirectClient<T>(
