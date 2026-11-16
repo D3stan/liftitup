@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Check, Copy, Download, KeyRound, LogOut, RefreshCw } from 'lucide-react';
 import { ApiClientError, Button, apiFetch, toast } from '@/components/ui';
 import { AppleFitnessPanel } from '@/components/integrations/AppleFitnessPanel';
-import { getMcpClientConfigSnippet, normalizeMcpEndpointUrl } from '@/lib/mcp';
+import { getMcpClientConfigSnippet, normalizeMcpEndpointUrl } from '@/lib/mcp/config';
 import type { ApiKeyInfo, UserProfile, WeightUnit } from '@/types/domain';
 
 interface SettingsPayload {
