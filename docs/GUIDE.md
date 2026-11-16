@@ -266,11 +266,14 @@ print(bench.groupby("session_date")["weight_kg"].max())
 
 ---
 
-## 8. Apple Health (`/settings` → Apple Health)
+## 8. Apple Health (`/settings/apple-health`)
 
-- Toggle Apple Health **ON / OFF**.
-- **Webhook URL**: `POST /api/integrations/apple-health` (requires your session cookie or `Authorization: Bearer <API_KEY>` / `x-api-key` header) for iOS Shortcuts automation.
-- **Import XML / JSON / CSV**: upload an Apple Health `export.xml` or a `.json`/`.csv` workout file directly from your device (up to 25 workouts per import).
+- Toggle Apple Health **ON / OFF** (when paused, webhook requests return `403` `"Apple Health integration disabled"`, while toggle and session-authenticated file import stay available).
+- **Webhook URL**: `POST /api/integrations/apple-health` (requires your session cookie or `Authorization: Bearer <API_KEY>` / `x-api-key` header). Note: your single API key is shared with MCP — regenerating it breaks the other until updated.
+- **Strict validation (breaking change)**: every item must be either a workout (`startedAt` + positive `durationMinutes`) or a weight reading (`bodyweightKg` between 25–300 kg + `measuredOn`/`date`/`startedAt`). Older Shortcuts relying on lenient defaults now receive `400` errors. Calories (`activeCalories`) and heart rate (`avgHeartRate`, `maxHeartRate`) are optional and stored as `null` when absent.
+- **Dry run (`dryRun: true`)**: validates payload and API key ownership (`"ok, key belongs to <name>, payload valid"`) without writing any rows.
+- **Bidirectional session linking**: matches workouts and sessions by time overlap (±15 minutes tolerance) regardless of whether the Shortcut or workout save arrives first, and updates **Last Received** status.
+- **Import XML / JSON / CSV**: upload an Apple Health `export.xml` or a `.json`/`.csv` file directly from your device (up to 100 items per import, validated strictly).
 
 ---
 

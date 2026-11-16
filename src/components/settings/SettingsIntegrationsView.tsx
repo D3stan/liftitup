@@ -97,24 +97,31 @@ export function SettingsIntegrationsView() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-col">
-              <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
-                API Key
-              </span>
-              <span className="font-mono text-sm">
-                {apiKeyInfo ? `${apiKeyInfo.keyPrefix}••••` : 'None'}
-              </span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
+                  API Key
+                </span>
+                <span className="font-mono text-sm">
+                  {apiKeyInfo ? `${apiKeyInfo.keyPrefix}••••` : 'None'}
+                </span>
+              </div>
+              <Button
+                variant="alt"
+                loading={regenBusy}
+                onClick={handleRegenerateKey}
+                className="min-h-[44px] gap-1.5"
+              >
+                <RefreshCw className="h-4 w-4" />
+                {apiKeyInfo ? 'Regenerate' : 'Generate Key'}
+              </Button>
             </div>
-            <Button
-              variant="alt"
-              loading={regenBusy}
-              onClick={handleRegenerateKey}
-              className="min-h-[44px] gap-1.5"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Regenerate
-            </Button>
+            <p className="text-xs text-[var(--muted)]">
+              Your single API key is shared between MCP and the Apple Health
+              Shortcut. Regenerating it for one immediately breaks the other
+              until you update it there.
+            </p>
           </div>
 
           {revealedKey && (

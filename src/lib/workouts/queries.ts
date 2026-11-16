@@ -21,6 +21,7 @@ import {
   getExerciseById,
   getExerciseStepMetaByIds,
 } from '@/lib/exercises/repository';
+import { linkBestUnlinkedHealthWorkoutToSessionInTx } from '@/lib/integrations/appleHealth';
 import { projectCalendar } from '@/lib/schedule/queue';
 import { MAX_MEASURED_REST_SECONDS } from './rest';
 import type {
@@ -608,6 +609,13 @@ export async function saveWorkoutSession(
     );
 
     await insertSessionExercises(sessionId, exercises, nowIso);
+
+    await linkBestUnlinkedHealthWorkoutToSessionInTx(userId, {
+      id: sessionId,
+      startedAt,
+      completedAt,
+      durationMinutes,
+    });
   });
 
   const saved = await getWorkoutSessionById(userId, sessionId);

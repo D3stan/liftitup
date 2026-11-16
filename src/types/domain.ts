@@ -16,6 +16,8 @@ export type WeightUnit = 'kg' | 'lb';
 
 export type RestClockMode = 'stopwatch' | 'countdown';
 
+export type AppleHealthReceiveKind = 'workout' | 'weight' | 'both';
+
 export type AppTheme =
   | 'notebook'
   | 'cutecore'
@@ -42,6 +44,9 @@ export interface UserProfile {
   restClockMode: RestClockMode;
   defaultWeightStepKg: number | null;
   appleFitnessEnabled: boolean;
+  appleHealthLastReceivedAt: string | null;
+  appleHealthLastReceivedKind: AppleHealthReceiveKind | null;
+  appleHealthLastReceivedLinked: boolean | null;
   isGuest: boolean;
   lastActiveAt: string;
   createdAt: string;
@@ -221,7 +226,7 @@ export interface AppleHealthWorkout {
   workoutType: string;
   startedAt: string;
   durationMinutes: number;
-  activeCalories: number;
+  activeCalories: number | null;
   avgHeartRate: number | null;
   maxHeartRate: number | null;
   bodyweightKg: number | null;
