@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { requireAuth } from '@/lib/auth/session';
 import {
   applyAiImport,
@@ -39,6 +40,15 @@ export const POST = withApiHandler('ai.import', async (req: NextRequest, ctx) =>
   if (!result.valid) {
     throw ApiError.validation('Invalid AI plan JSON', { errors: result.errors });
   }
+
+  await safeRecordEvent({
+    userId: user.id,
+    eventType: 'ai_import',
+    detail: {
+      dayCount: result.schedule?.days.length ?? 0,
+      customExerciseCount: result.createdCustomExercises?.length ?? 0,
+    },
+  });
 
   return NextResponse.json(result);
 });

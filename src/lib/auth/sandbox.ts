@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import type { TrackingType, UserProfile } from '@/types/domain';
-import { query, withTransaction } from '@/lib/db/connection';
+import { isPgMemActive, query, withTransaction } from '@/lib/db/connection';
+import { recordGuestPurgeRun } from '@/lib/admin/metrics';
+import { ensureDailySnapshotIfDue } from '@/lib/admin/snapshot';
 import {
   recordBodyMetric,
   syncUserProfileWeightFromBodyMetrics,
@@ -30,8 +32,12 @@ export async function purgeExpiredGuestsIfDue(force = false): Promise<number> {
   lastPurgeAtMs = now;
   try {
     const purged = await deleteExpiredGuests(GUEST_TTL_HOURS);
+    await recordGuestPurgeRun(purged);
     if (purged > 0) {
       logger.info('purged expired guest sandboxes', { purgedCount: purged });
+    }
+    if (!force && !isPgMemActive()) {
+      await ensureDailySnapshotIfDue();
     }
     return purged;
   } catch (err) {

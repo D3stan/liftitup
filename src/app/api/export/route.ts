@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { requireAuth } from '@/lib/auth/session';
 import {
   buildUserExportCsv,
@@ -20,6 +21,11 @@ export const GET = withApiHandler('export.get', async (req: NextRequest, ctx) =>
 
   if (format === 'csv') {
     const csv = await buildUserExportCsv(user);
+    await safeRecordEvent({
+      userId: user.id,
+      eventType: 'export',
+      detail: { format: 'csv' },
+    });
     return new NextResponse(csv, {
       status: 200,
       headers: {
@@ -31,6 +37,11 @@ export const GET = withApiHandler('export.get', async (req: NextRequest, ctx) =>
   }
 
   const payload = await buildUserExportJson(user);
+  await safeRecordEvent({
+    userId: user.id,
+    eventType: 'export',
+    detail: { format: 'json' },
+  });
   return new NextResponse(JSON.stringify(payload, null, 2), {
     status: 200,
     headers: {

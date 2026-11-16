@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, parseJsonBody, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { requireAuth } from '@/lib/auth/session';
 import {
   syncUserProfileWeightFromBodyMetrics,
@@ -202,6 +203,28 @@ export const PATCH = withApiHandler(
       }
       return nextUser;
     });
+
+    if (patch.theme !== undefined || patch.themeVariant !== undefined) {
+      await safeRecordEvent({
+        userId: user.id,
+        eventType: 'theme_changed',
+        detail: { theme: updated.theme, themeVariant: updated.themeVariant },
+      });
+    }
+    if (patch.restClockMode !== undefined) {
+      await safeRecordEvent({
+        userId: user.id,
+        eventType: 'rest_clock_mode_changed',
+        detail: { restClockMode: updated.restClockMode },
+      });
+    }
+    if (patch.defaultWorkoutView !== undefined) {
+      await safeRecordEvent({
+        userId: user.id,
+        eventType: 'workout_view_mode_changed',
+        detail: { defaultWorkoutView: updated.defaultWorkoutView },
+      });
+    }
 
     const apiKey = await getApiKeyByUserId(user.id);
     return NextResponse.json({ user: updated, apiKey });

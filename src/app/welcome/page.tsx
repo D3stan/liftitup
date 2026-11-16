@@ -207,6 +207,11 @@ function WelcomeContent() {
           <Sparkles className="h-5 w-5" />
           {busy === 'guest' ? 'Loading…' : 'Explore as sample user'}
         </Button>
+
+        <p className="text-center text-xs text-[var(--muted)]">
+          Basic usage and reliability metrics are collected to keep the app
+          running smoothly; workout logs, notes, and photos stay private.
+        </p>
       </div>
     </div>
   );

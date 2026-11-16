@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
+import { recordAppleHealthIngestOutcome } from '@/lib/admin/metrics';
 import { requireAuth } from '@/lib/auth/session';
 import { updateUserSettings } from '@/lib/db/users';
 import {
@@ -55,7 +57,13 @@ export const POST = withApiHandler(
   'integrations.appleHealth.post',
   async (req: NextRequest, ctx) => {
     const auth = await requireAuth(req, ctx);
-    const body = await parseJsonOrArrayBody(req);
+    let body: unknown;
+    try {
+      body = await parseJsonOrArrayBody(req);
+    } catch (err) {
+      await recordAppleHealthIngestOutcome('rejected');
+      throw err;
+    }
 
     if (!Array.isArray(body)) {
       const obj = body as Record<string, unknown>;
@@ -81,9 +89,35 @@ export const POST = withApiHandler(
       }
     }
 
-    const result = await ingestAppleHealthPayload(auth.user, body, {
-      authMethod: auth.authMethod,
-    });
+    let result: Awaited<ReturnType<typeof ingestAppleHealthPayload>>;
+    try {
+      result = await ingestAppleHealthPayload(auth.user, body, {
+        authMethod: auth.authMethod,
+      });
+    } catch (err) {
+      await recordAppleHealthIngestOutcome('rejected');
+      throw err;
+    }
+
+    if (!result.dryRun) {
+      await recordAppleHealthIngestOutcome('received');
+      const isFileImport =
+        auth.authMethod === 'session' &&
+        !Array.isArray(body) &&
+        typeof body === 'object' &&
+        body !== null &&
+        (body as Record<string, unknown>).source === 'file_import';
+      await safeRecordEvent({
+        userId: auth.user.id,
+        eventType: isFileImport ? 'file_import' : 'apple_health_ingest',
+        detail: {
+          source: isFileImport ? 'apple_health_file' : auth.authMethod,
+          workoutCount: result.workoutCount,
+          weightCount: result.weightCount,
+          linkedCount: result.linkedCount,
+        },
+      });
+    }
     return NextResponse.json(result, { headers: CORS_HEADERS });
   },
 );

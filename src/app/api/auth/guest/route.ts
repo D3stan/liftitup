@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { createGuestSandbox } from '@/lib/auth/sandbox';
 import { createSessionCookieForUser } from '@/lib/auth/session';
 
@@ -28,6 +29,11 @@ export const POST = withApiHandler('auth.guest', async (req: NextRequest, ctx) =
 
   const user = await createGuestSandbox(timezone);
   ctx.setUserId(user.id);
+  await safeRecordEvent({
+    userId: user.id,
+    eventType: 'guest_created',
+    detail: { timezone: user.timezone },
+  });
   const res = NextResponse.json({ user }, { status: 201 });
   return await createSessionCookieForUser(res, user.id);
 });

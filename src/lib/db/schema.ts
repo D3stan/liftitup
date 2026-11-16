@@ -39,6 +39,8 @@ const SCHEMA_V2_DDL = `
     apple_health_last_received_linked INTEGER CHECK (apple_health_last_received_linked IS NULL OR apple_health_last_received_linked IN (0, 1)),
     photo_quota INTEGER,
     is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
+    is_disabled INTEGER NOT NULL DEFAULT 0 CHECK (is_disabled IN (0, 1)),
+    must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1)),
     last_active_at TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
@@ -288,6 +290,73 @@ const SCHEMA_V2_DDL = `
     thumb_bytes BYTEA NOT NULL,
     FOREIGN KEY (photo_id) REFERENCES progress_photos(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    detail_json TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_events_user_created ON events (user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_events_type_created ON events (event_type, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    actor_user_id TEXT,
+    actor_label TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('admin_web', 'cli', 'mcp')),
+    action TEXT NOT NULL,
+    target_user_id TEXT,
+    reason TEXT,
+    detail_json TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log (created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_target ON audit_log (target_user_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS daily_snapshots (
+    snapshot_date TEXT PRIMARY KEY,
+    computed_at TEXT NOT NULL,
+    total_db_bytes BIGINT NOT NULL,
+    table_sizes_json TEXT NOT NULL,
+    overview_json TEXT NOT NULL,
+    per_user_storage_json TEXT NOT NULL,
+    cohorts_json TEXT NOT NULL,
+    catalog_usage_json TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS request_metric_buckets (
+    bucket_start TEXT NOT NULL,
+    route TEXT NOT NULL,
+    method TEXT NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    error_4xx_count INTEGER NOT NULL DEFAULT 0,
+    error_5xx_count INTEGER NOT NULL DEFAULT 0,
+    total_duration_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    max_duration_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (bucket_start, route, method)
+  );
+  CREATE INDEX IF NOT EXISTS idx_req_metrics_updated ON request_metric_buckets (bucket_start DESC);
+
+  CREATE TABLE IF NOT EXISTS app_errors (
+    id TEXT PRIMARY KEY,
+    route TEXT NOT NULL,
+    method TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    error_code TEXT,
+    message TEXT NOT NULL,
+    request_id TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_app_errors_created ON app_errors (created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `;
 
 function defaultRestForCategory(category: string): number {
@@ -409,12 +478,16 @@ export async function initSchema(
       const statements = SCHEMA_V2_DDL.split(';')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
+      const pending: string[] = [];
       for (const stmt of statements) {
         const match = /^CREATE TABLE IF NOT EXISTS ([a-z_]+)\b/i.exec(stmt);
         if (match && existingTables.has(match[1].toLowerCase())) {
           continue;
         }
-        await client.query(stmt);
+        pending.push(stmt);
+      }
+      if (pending.length > 0) {
+        await client.query(pending.join(';\n'));
       }
     }
 
@@ -456,6 +529,12 @@ export async function initSchema(
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_quota INTEGER',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled INTEGER NOT NULL DEFAULT 0 CHECK (is_disabled IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1))',
     );
 
     // Approved Phase 5 non-additive cleanup: remove existing duplicate

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, withApiHandler } from '@/lib/api/handler';
+import { safeRecordEvent } from '@/lib/admin/events';
 import { requireSessionAuth } from '@/lib/auth/session';
 import { isValidIsoDate, resolveWeightForDate } from '@/lib/body/weight';
 import { listBodyMetrics } from '@/lib/db/bodyMetrics';
@@ -180,6 +181,12 @@ export const POST = withApiHandler('photos.create', async (req: NextRequest, ctx
     thumbBytes,
     width,
     height,
+  });
+
+  await safeRecordEvent({
+    userId: user.id,
+    eventType: 'photo_uploaded',
+    detail: { pose },
   });
 
   return NextResponse.json(created, {

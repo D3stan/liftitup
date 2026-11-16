@@ -1093,6 +1093,7 @@ function WorkoutLoggerInner() {
             userWeightKg: dayView.user.weightKg,
             notes: draft.notes.trim(),
             cid: draft.cid,
+            viewMode: draft.viewMode === 'focus' ? 'focus' : 'list',
             exercises: exercisesPayload,
           }),
         });
