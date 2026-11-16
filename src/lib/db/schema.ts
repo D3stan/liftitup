@@ -357,7 +357,171 @@ const SCHEMA_V2_DDL = `
     value_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS mcp_confirmations (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    api_key_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_mcp_confirmations_user ON mcp_confirmations (user_id, expires_at);
 `;
+
+const REPORTING_VIEWS: ReadonlyArray<{ name: string; selectSql: string }> = [
+  {
+    name: 'v_admin_user_activity',
+    selectSql: `
+      SELECT
+        u.id AS user_id,
+        u.username,
+        u.is_guest,
+        u.is_disabled,
+        u.unit,
+        u.theme,
+        u.theme_variant,
+        u.rest_clock_mode,
+        u.default_workout_view,
+        u.apple_fitness_enabled,
+        CASE WHEN ak.id IS NOT NULL THEN 1 ELSE 0 END AS has_api_key,
+        ak.last_used_at AS api_key_last_used_at,
+        u.created_at,
+        u.last_active_at,
+        COALESCE(ws_agg.session_count, 0)::int AS session_count,
+        ws_agg.last_session_date,
+        COALESCE(pp_agg.photo_count, 0)::int AS photo_count,
+        COALESCE(pp_agg.photo_bytes, 0)::bigint AS photo_bytes
+      FROM users u
+      LEFT JOIN api_keys ak ON ak.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*)::int AS session_count, MAX(session_date) AS last_session_date
+        FROM workout_sessions
+        GROUP BY user_id
+      ) ws_agg ON ws_agg.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*)::int AS photo_count, COALESCE(SUM(byte_size + thumb_byte_size), 0)::bigint AS photo_bytes
+        FROM progress_photos
+        GROUP BY user_id
+      ) pp_agg ON pp_agg.user_id = u.id
+    `,
+  },
+  {
+    name: 'v_admin_daily_workouts',
+    selectSql: `
+      SELECT
+        ws.session_date,
+        COUNT(*)::int AS session_count,
+        COUNT(DISTINCT ws.user_id)::int AS unique_user_count,
+        COALESCE(SUM(CASE WHEN ws.is_jolly = 1 THEN 1 ELSE 0 END), 0)::int AS jolly_session_count,
+        AVG(ws.duration_minutes) AS avg_duration_minutes
+      FROM workout_sessions ws
+      GROUP BY ws.session_date
+    `,
+  },
+  {
+    name: 'v_admin_exercise_usage',
+    selectSql: `
+      SELECT
+        e.id AS exercise_id,
+        e.slug,
+        CASE WHEN e.is_custom = 0 THEN e.name ELSE NULL END AS catalog_name,
+        e.tracking_type,
+        e.equipment,
+        e.category,
+        e.is_custom,
+        COUNT(we.id)::int AS log_count,
+        COUNT(DISTINCT ws.user_id)::int AS distinct_user_count
+      FROM exercises e
+      LEFT JOIN workout_exercises we ON we.exercise_id = e.id
+      LEFT JOIN workout_sessions ws ON ws.id = we.session_id
+      GROUP BY e.id, e.slug, e.name, e.tracking_type, e.equipment, e.category, e.is_custom
+    `,
+  },
+  {
+    name: 'v_admin_photo_storage',
+    selectSql: `
+      SELECT
+        u.id AS user_id,
+        u.username,
+        u.is_guest,
+        COALESCE(u.photo_quota, 300)::int AS effective_quota,
+        COUNT(pp.id)::int AS photo_count,
+        COALESCE(SUM(pp.byte_size), 0)::bigint AS total_full_bytes,
+        COALESCE(SUM(pp.thumb_byte_size), 0)::bigint AS total_thumb_bytes,
+        COALESCE(SUM(pp.byte_size + pp.thumb_byte_size), 0)::bigint AS total_bytes,
+        MIN(pp.created_at) AS first_photo_at,
+        MAX(pp.created_at) AS last_photo_at
+      FROM users u
+      LEFT JOIN progress_photos pp ON pp.user_id = u.id
+      GROUP BY u.id, u.username, u.is_guest, u.photo_quota
+    `,
+  },
+  {
+    name: 'v_admin_route_health',
+    selectSql: `
+      SELECT
+        bucket_start,
+        route,
+        method,
+        request_count,
+        error_4xx_count,
+        error_5xx_count,
+        total_duration_ms,
+        max_duration_ms,
+        updated_at
+      FROM request_metric_buckets
+    `,
+  },
+  {
+    name: 'v_admin_event_counts',
+    selectSql: `
+      SELECT
+        event_type,
+        COUNT(*)::int AS event_count,
+        COUNT(DISTINCT user_id)::int AS distinct_user_count,
+        MIN(created_at) AS first_at,
+        MAX(created_at) AS last_at
+      FROM events
+      GROUP BY event_type
+    `,
+  },
+];
+
+async function syncReportingViews(client: PoolClient): Promise<void> {
+  let isRealPostgres = false;
+  try {
+    await client.query('SELECT 1 FROM pg_views LIMIT 0');
+    isRealPostgres = true;
+  } catch {
+    isRealPostgres = false;
+  }
+
+  for (const view of REPORTING_VIEWS) {
+    if (isRealPostgres) {
+      await client.query(
+        `CREATE OR REPLACE VIEW ${view.name} AS ${view.selectSql}`,
+      );
+      continue;
+    }
+
+    // pg-mem does not implement View.drop() for CREATE OR REPLACE VIEW when a view already exists.
+    let existsInPgMem = false;
+    try {
+      await client.query(`SELECT 1 FROM ${view.name} LIMIT 0`);
+      existsInPgMem = true;
+    } catch {
+      existsInPgMem = false;
+    }
+    if (!existsInPgMem) {
+      await client.query(`CREATE VIEW ${view.name} AS ${view.selectSql}`);
+    }
+  }
+}
 
 function defaultRestForCategory(category: string): number {
   if (category === 'core' || category === 'cardio') return 60;
@@ -536,6 +700,9 @@ export async function initSchema(
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1))',
     );
+    await client.query(
+      'ALTER TABLE workout_sessions ADD COLUMN IF NOT EXISTS is_jolly INTEGER NOT NULL DEFAULT 0 CHECK (is_jolly IN (0, 1))',
+    );
 
     // Approved Phase 5 non-additive cleanup: remove existing duplicate
     // (user_id, started_at, workout_type) rows keeping the newest (created_at DESC, id DESC)
@@ -600,5 +767,6 @@ export async function initSchema(
     );
 
     await syncExerciseCatalog(client);
+    await syncReportingViews(client);
   });
 }

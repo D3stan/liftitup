@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   BarChart3,
   FileText,
   HardDrive,
   HeartPulse,
+  KeyRound,
   ShieldCheck,
 } from 'lucide-react';
 import { ChangePasswordGate } from '@/components/shell/ChangePasswordGate';
@@ -107,7 +109,29 @@ export function AdminShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-3 py-4 pb-12">
+      <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-3 py-4 pb-12">
+        <div
+          role="note"
+          className="flex flex-col gap-2 rounded-xl border-2 border-[var(--line)] bg-[var(--gold-bg)] p-3 text-xs text-[var(--ink)] sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--red)]" />
+            <div>
+              <span className="font-bold">API Key &amp; Shortcut Security:</span>{' '}
+              Your single personal API key (also shared with your Apple Health
+              iOS Shortcut) grants full admin power over this instance via MCP.
+              Anyone who obtains that Shortcut&apos;s key holds admin access.
+            </div>
+          </div>
+          <Link
+            href="/settings/integrations"
+            className="btn alt !min-h-[44px] shrink-0 gap-1.5 !px-3 text-xs font-bold no-underline"
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            <span>Regenerate in Settings › Integrations</span>
+          </Link>
+        </div>
+
         {children}
       </main>
     </div>

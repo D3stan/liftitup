@@ -174,12 +174,15 @@ export async function upsertApiKey(
 
 export async function getUserByApiKeyHash(
   keyHash: string,
-): Promise<{ user: UserProfile; apiKeyId: string } | null> {
+): Promise<{ user: UserProfile; apiKeyId: string; apiKeyPrefix: string } | null> {
   const row = await queryOne<
-    Parameters<typeof mapUserRow>[0] & { _api_key_id: string }
+    Parameters<typeof mapUserRow>[0] & {
+      _api_key_id: string;
+      _api_key_prefix: string;
+    }
   >(
     `
-    SELECT u.*, k.id AS _api_key_id
+    SELECT u.*, k.id AS _api_key_id, k.key_prefix AS _api_key_prefix
     FROM api_keys k
     JOIN users u ON u.id = k.user_id
     WHERE k.key_hash = $1
@@ -189,9 +192,11 @@ export async function getUserByApiKeyHash(
 
   if (!row) return null;
   const apiKeyId = row._api_key_id;
+  const apiKeyPrefix = row._api_key_prefix;
   return {
     user: mapUserRow(row),
     apiKeyId,
+    apiKeyPrefix,
   };
 }
 

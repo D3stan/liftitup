@@ -29,6 +29,7 @@ export async function resetUserPassword(input: {
   actorUserId?: string | null;
   actorLabel: string;
   reason?: string | null;
+  auditDetail?: Record<string, unknown>;
 }): Promise<ResetUserPasswordResult> {
   const identifier = input.targetUserId ?? input.username ?? '';
   const lookupBy = input.targetUserId ? 'id' : 'username';
@@ -46,6 +47,7 @@ export async function resetUserPassword(input: {
           actorUserId: input.actorUserId ?? null,
           actorLabel: input.actorLabel,
           reason: input.reason ?? null,
+          auditDetail: input.auditDetail,
         },
       ),
     )) as ResetUserPasswordResult;

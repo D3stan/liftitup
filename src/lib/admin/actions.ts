@@ -16,7 +16,12 @@ import {
   getExportFilename,
   type ExportJsonPayload,
 } from '@/lib/export';
-import { recordAuditLog, safeRecordEvent, type AdminActor } from './events';
+import {
+  mergeActorAuditDetail,
+  recordAuditLog,
+  safeRecordEvent,
+  type AdminActor,
+} from './events';
 import { computeAndSaveDailySnapshot } from './snapshot';
 
 export async function setUserDisabledState(input: {
@@ -47,7 +52,7 @@ export async function setUserDisabledState(input: {
       action: input.disabled ? 'disable_user' : 'enable_user',
       targetUserId: input.targetUserId,
       reason: input.reason ?? null,
-      detail: { revokedSessions },
+      detail: mergeActorAuditDetail(input.actor, { revokedSessions }),
     });
 
     return {
@@ -75,7 +80,7 @@ export async function forceLogoutUser(input: {
       source: input.actor.source,
       action: 'force_logout',
       targetUserId: input.targetUserId,
-      detail: { revokedSessions },
+      detail: mergeActorAuditDetail(input.actor, { revokedSessions }),
     });
     return { userId: input.targetUserId, revokedSessions, auditId: audit.id };
   });
@@ -97,7 +102,7 @@ export async function revokeUserApiKey(input: {
       source: input.actor.source,
       action: 'revoke_api_key',
       targetUserId: input.targetUserId,
-      detail: { revoked },
+      detail: mergeActorAuditDetail(input.actor, { revoked }),
     });
     return { userId: input.targetUserId, revoked, auditId: audit.id };
   });
@@ -133,10 +138,10 @@ export async function adjustUserPhotoQuota(input: {
       source: input.actor.source,
       action: 'adjust_photo_quota',
       targetUserId: input.targetUserId,
-      detail: {
+      detail: mergeActorAuditDetail(input.actor, {
         previousQuota: existing.photoQuota ?? null,
         newQuota: updated?.photoQuota ?? null,
-      },
+      }),
     });
     return {
       userId: input.targetUserId,
@@ -169,10 +174,10 @@ export async function adminDeleteUser(input: {
       source: input.actor.source,
       action: 'delete_user',
       targetUserId: input.targetUserId,
-      detail: {
+      detail: mergeActorAuditDetail(input.actor, {
         username: existing.username,
         isGuest: existing.isGuest,
-      },
+      }),
     });
     return { userId: input.targetUserId, deleted, auditId: audit.id };
   });
@@ -187,7 +192,7 @@ export async function adminPurgeExpiredGuests(input: {
     actorLabel: input.actor.actorLabel,
     source: input.actor.source,
     action: 'purge_guests',
-    detail: { purgedCount },
+    detail: mergeActorAuditDetail(input.actor, { purgedCount }),
   });
   return { purgedCount, auditId: audit.id };
 }
@@ -201,7 +206,9 @@ export async function adminRefreshDailySnapshot(input: {
     actorLabel: input.actor.actorLabel,
     source: input.actor.source,
     action: 'refresh_snapshot',
-    detail: { snapshotDate: snapshot.snapshotDate },
+    detail: mergeActorAuditDetail(input.actor, {
+      snapshotDate: snapshot.snapshotDate,
+    }),
   });
   return {
     snapshotDate: snapshot.snapshotDate,
@@ -247,7 +254,9 @@ export async function adminExportUserData(input: {
     action: 'export_user_data',
     targetUserId: user.id,
     reason: trimmedReason,
-    detail: { sessionCount: data.sessions.length },
+    detail: mergeActorAuditDetail(input.actor, {
+      sessionCount: data.sessions.length,
+    }),
   });
 
   await safeRecordEvent({

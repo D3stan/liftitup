@@ -22,6 +22,8 @@ export interface AuthContext {
   user: UserProfile;
   authMethod: 'session' | 'api_key';
   sessionTokenHash?: string;
+  apiKeyId?: string;
+  apiKeyPrefix?: string;
 }
 
 export function generateRawToken(): string {
@@ -60,7 +62,12 @@ async function resolveFromApiKey(rawKey: string): Promise<AuthContext | null> {
   await touchApiKeyLastUsed(match.apiKeyId);
   await touchUserLastActive(match.user.id);
   await recordThrottledActivityEvent(match.user.id, 'api_key');
-  return { user: match.user, authMethod: 'api_key' };
+  return {
+    user: match.user,
+    authMethod: 'api_key',
+    apiKeyId: match.apiKeyId,
+    apiKeyPrefix: match.apiKeyPrefix,
+  };
 }
 
 /**

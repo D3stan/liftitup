@@ -86,7 +86,13 @@ export async function resetUserPasswordInTx(tx, input) {
   const actorUserId = input.actorUserId ?? null;
   const actorLabel = String(input.actorLabel || source);
   const reason = input.reason ? String(input.reason).trim() : null;
-  const detailJson = JSON.stringify({ revokedSessions });
+  const extraDetail =
+    input.auditDetail &&
+    typeof input.auditDetail === 'object' &&
+    !Array.isArray(input.auditDetail)
+      ? input.auditDetail
+      : {};
+  const detailJson = JSON.stringify({ revokedSessions, ...extraDetail });
 
   await tx.query(
     `
