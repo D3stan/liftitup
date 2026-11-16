@@ -35,6 +35,39 @@ This is a brief for an implementing agent. It describes **what** to build and th
 
 ---
 
+## 1b. Shared building blocks
+
+Each of these is built **once**, in the phase named, and reused by the others. A later phase must call the existing piece, not write its own. When a phase creates one, record its actual name and location in the pull request so later workers can find it.
+
+| Building block | Created in | Reused by |
+|----------------|-----------|-----------|
+| "Session cookie only" auth check | 1 | 8, 10 |
+| Per-user data deletion, in explicit child-to-parent order | 1 | 6 (replace-mode restore), 10 (delete user, guest purge), 11 |
+| User-scoped draft keys and draft clearing | 1 | 2, 3, 9 |
+| Settings search list (static list of settings and keywords) | 1 | 2, 4, 5, 6, 9 |
+| Stored rest start and session start in the draft | 2 | 3, 9 |
+| Rest computation at save, and round-trip of per-set data through edit | 3 | 6, 9, 11 |
+| Stepper control and step-size lookup (override, exercise, global) | 4 | 7, 9, 11 |
+| Health-to-session match by time overlap | 5 | 11 |
+| Ingest validation with dry run | 5 | 11 |
+| Validate-then-confirm import flow and exercise name matching (already exists in the AI import) | existing | 6, 11 |
+| "Resolve the day's weight" function and profile-weight sync | 7 | 5 (weights from the Shortcut), 8, 11 |
+| Real-Postgres test set-up | 8 | 10 |
+| Photo byte size stored in metadata; thumbnail rendition | 8 | 10, 11 |
+| Events table and audit log | 10 | 11 |
+| Two-step confirmation for destructive actions | 11 | all destructive MCP tools |
+
+**Files that many phases edit.** Two phases touching the same one must not run in parallel:
+
+| File | Phases |
+|------|--------|
+| `src/lib/db/schema.ts` | 1, 3, 4, 5, 7, 8, 10, 11 |
+| `src/app/workout/[date]/log/page.tsx`, `src/components/workout/ExerciseLoggerCard.tsx` | 1, 2, 3, 4, 9 |
+| `src/lib/mcp/server.ts`, `src/lib/export/exportData.ts`, `src/types/domain.ts` | nearly all |
+| Settings pages and the settings search list | 1, 2, 4, 5, 6, 9 |
+
+---
+
 ## Phase 0: Clean-up
 
 **Goal:** remove code that misleads, before building on top of it.
