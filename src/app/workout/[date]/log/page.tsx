@@ -622,7 +622,11 @@ function WorkoutLoggerInner() {
   );
 
   return (
-    <main className="mx-auto max-w-xl space-y-4 px-4 pb-36 pt-4">
+    <main
+      className={`mx-auto max-w-xl space-y-4 px-4 pt-4 ${
+        timerEndMs || timerPickerOpen ? 'pb-64' : 'pb-48'
+      }`}
+    >
       {/* Top Bar */}
       <div className="flex items-center justify-between gap-2">
         <Link

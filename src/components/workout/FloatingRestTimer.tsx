@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Timer, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Timer, X } from 'lucide-react';
 
 export interface FloatingRestTimerProps {
   endTimeMs: number | null;
@@ -30,11 +30,13 @@ export default function FloatingRestTimer({
   onDismiss,
 }: FloatingRestTimerProps) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [minimized, setMinimized] = useState(false);
   const firedDoneRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!endTimeMs) {
       firedDoneRef.current = null;
+      setMinimized(false);
       return;
     }
 
@@ -79,6 +81,36 @@ export default function FloatingRestTimer({
           Math.max(0, ((totalSeconds - remainingSec) / totalSeconds) * 100),
         )
       : 0;
+
+  if (endTimeMs && minimized) {
+    return (
+      <div
+        className="fixed right-3 z-40"
+        style={{
+          bottom: 'calc(var(--tabbar) + var(--sab) + 10px)',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setMinimized(false)}
+          aria-label="Expand rest timer"
+          className={`btn !min-h-[44px] !px-3.5 !py-1.5 ${
+            isFinished ? 'green animate-pulse' : ''
+          }`}
+        >
+          {isFinished ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          ) : (
+            <Timer className="h-4 w-4 shrink-0" />
+          )}
+          <span className="font-marker text-lg tracking-wider">
+            {isFinished ? 'GO!' : formatClock(remainingSec)}
+          </span>
+          <ChevronUp className="h-4 w-4 shrink-0" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -181,6 +213,14 @@ export default function FloatingRestTimer({
                   }`}
                 >
                   {isFinished ? 'Done' : 'Skip'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMinimized(true)}
+                  aria-label="Minimize rest timer"
+                  className="btn alt icon !h-[44px] !w-[44px]"
+                >
+                  <ChevronDown className="h-5 w-5" />
                 </button>
               </div>
             </div>

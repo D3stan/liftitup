@@ -246,7 +246,7 @@ export default function WorkoutDayPage() {
                   className="rounded-[10px] border-[2.5px] border-[#1d1a16] bg-[#ece2c6]/60 p-3 space-y-2"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="pill bg-[#1d1a16] px-2 py-0 text-xs text-[#fbf5e4]">
+                    <span className="pill !bg-[#1d1a16] px-2 py-0 text-xs !text-[#fbf5e4]">
                       #{idx + 1}
                     </span>
                     <h2 className="font-bold text-lg leading-snug text-[#1d1a16]">
@@ -319,7 +319,7 @@ export default function WorkoutDayPage() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="pill shrink-0 bg-[#1d1a16] px-2 py-0 text-xs text-[#fbf5e4]">
+                    <span className="pill shrink-0 !bg-[#1d1a16] px-2 py-0 text-xs !text-[#fbf5e4]">
                       #{idx + 1}
                     </span>
                     <span className="truncate font-bold text-lg text-[#1d1a16]">

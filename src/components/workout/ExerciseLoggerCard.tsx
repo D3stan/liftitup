@@ -115,7 +115,7 @@ export default function ExerciseLoggerCard({
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="pill shrink-0 bg-[#1d1a16] px-2.5 py-0.5 font-marker text-xs text-[#fbf5e4]">
+            <span className="pill shrink-0 !bg-[#1d1a16] px-2.5 py-0.5 font-marker text-xs !text-[#fbf5e4]">
               #{index + 1}
             </span>
             <h3 className="min-w-0 flex-1 font-marker text-xl leading-tight text-[#1d1a16]">

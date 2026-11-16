@@ -285,10 +285,10 @@ export function getQualityRowColor(
 }
 
 export function getQualityBadgeColor(qualityPct: number | null): string {
-  if (qualityPct === null || qualityPct === 100) return 'bg-[#cde6c0]';
-  if (qualityPct >= 80) return 'bg-[#fef0c3]';
-  if (qualityPct >= 50) return 'bg-[#fbd5b5]';
-  return 'bg-[#f9c6bf]';
+  if (qualityPct === null || qualityPct === 100) return '!bg-[#cde6c0]';
+  if (qualityPct >= 80) return '!bg-[#fef0c3]';
+  if (qualityPct >= 50) return '!bg-[#fbd5b5]';
+  return '!bg-[#f9c6bf]';
 }
 
 export function localTodayYmd(): string {
