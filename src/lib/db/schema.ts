@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { EXERCISE_CATALOG } from '@/lib/exercises/catalog';
+import { logger } from '@/lib/logger';
 import { deriveCatalogWeightStepKg } from '@/lib/workouts/stepSize';
 
 /**
@@ -32,6 +33,9 @@ const SCHEMA_V2_DDL = `
     rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown')),
     default_weight_step_kg DOUBLE PRECISION,
     apple_fitness_enabled INTEGER NOT NULL DEFAULT 1 CHECK (apple_fitness_enabled IN (0, 1)),
+    apple_health_last_received_at TEXT,
+    apple_health_last_received_kind TEXT CHECK (apple_health_last_received_kind IS NULL OR apple_health_last_received_kind IN ('workout', 'weight', 'both')),
+    apple_health_last_received_linked INTEGER CHECK (apple_health_last_received_linked IS NULL OR apple_health_last_received_linked IN (0, 1)),
     is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
     last_active_at TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -239,7 +243,7 @@ const SCHEMA_V2_DDL = `
     workout_type TEXT NOT NULL,
     started_at TEXT NOT NULL,
     duration_minutes INTEGER NOT NULL,
-    active_calories INTEGER NOT NULL,
+    active_calories INTEGER,
     avg_heart_rate INTEGER,
     max_heart_rate INTEGER,
     bodyweight_kg DOUBLE PRECISION,
@@ -410,6 +414,74 @@ export async function initSchema(
     );
     await client.query(
       'ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS rest_approximate INTEGER NOT NULL DEFAULT 0 CHECK (rest_approximate IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_last_received_at TEXT',
+    );
+    await client.query(
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_last_received_kind TEXT CHECK (apple_health_last_received_kind IS NULL OR apple_health_last_received_kind IN ('workout', 'weight', 'both'))",
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_last_received_linked INTEGER CHECK (apple_health_last_received_linked IS NULL OR apple_health_last_received_linked IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE apple_health_workouts ALTER COLUMN active_calories DROP NOT NULL',
+    );
+
+    // Approved Phase 5 non-additive cleanup: remove existing duplicate
+    // (user_id, started_at, workout_type) rows keeping the newest (created_at DESC, id DESC)
+    // before enforcing the unique index. Idempotent across both PostgreSQL and pg-mem.
+    const allAhRes = await client.query<{
+      id: string;
+      user_id: string;
+      started_at: string;
+      workout_type: string;
+      created_at: string;
+    }>(
+      `SELECT id, user_id, started_at, workout_type, created_at
+       FROM apple_health_workouts
+       ORDER BY created_at DESC, id DESC`,
+    );
+
+    const seenAhKeys = new Map<string, Map<string, Set<string>>>();
+    const duplicateIds: string[] = [];
+    for (const row of allAhRes.rows) {
+      let byStart = seenAhKeys.get(row.user_id);
+      if (!byStart) {
+        byStart = new Map();
+        seenAhKeys.set(row.user_id, byStart);
+      }
+      let types = byStart.get(row.started_at);
+      if (!types) {
+        types = new Set();
+        byStart.set(row.started_at, types);
+      }
+      if (types.has(row.workout_type)) {
+        duplicateIds.push(row.id);
+      } else {
+        types.add(row.workout_type);
+      }
+    }
+
+    let removedDuplicates = 0;
+    const batchSize = 500;
+    for (let i = 0; i < duplicateIds.length; i += batchSize) {
+      const chunk = duplicateIds.slice(i, i + batchSize);
+      const placeholders = chunk.map((_, idx) => `$${idx + 1}`).join(',');
+      const delRes = await client.query(
+        `DELETE FROM apple_health_workouts WHERE id IN (${placeholders})`,
+        chunk,
+      );
+      removedDuplicates += delRes.rowCount ?? chunk.length;
+    }
+
+    if (removedDuplicates > 0) {
+      logger.info('removed duplicate apple_health_workouts rows', {
+        removedCount: removedDuplicates,
+      });
+    }
+    await client.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_apple_health_user_start_type ON apple_health_workouts (user_id, started_at, workout_type)',
     );
 
     const now = new Date().toISOString();

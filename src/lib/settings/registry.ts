@@ -55,7 +55,8 @@ export const SETTINGS_CATEGORIES: SettingsCategoryMeta[] = [
   {
     id: 'apple-health',
     title: 'Apple Health',
-    description: 'Toggle Apple Health sync, copy webhook URL, or import files.',
+    description:
+      'Shortcut setup guide, sync status, webhook dry run, and file import.',
     href: '/settings/apple-health',
   },
   {
@@ -259,8 +260,9 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   // Apple Health
   {
     id: 'apple-health-integration',
-    title: 'Apple Health Sync & Import',
-    description: 'Enable or pause sync, copy webhook URL, or import XML/JSON/CSV.',
+    title: 'Apple Health Sync, Shortcut Guide & Import',
+    description:
+      'Guided iOS Shortcut setup, last received status, payload dry run, and XML/JSON/CSV import.',
     categoryId: 'apple-health',
     categoryTitle: 'Apple Health',
     href: '/settings/apple-health',
@@ -270,8 +272,16 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
       'watch',
       'webhook',
       'shortcut',
+      'ios',
+      'automation',
+      'dry run',
+      'last received',
+      'bodyweight',
+      'weight',
       'import',
       'xml',
+      'json',
+      'csv',
       'heart rate',
       'calories',
     ],

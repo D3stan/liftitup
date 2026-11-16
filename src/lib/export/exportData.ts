@@ -1,4 +1,5 @@
 import type {
+  AppleHealthReceiveKind,
   BodyMetric,
   Exercise,
   RestClockMode,
@@ -35,6 +36,10 @@ export interface ExportJsonPayload {
     enableSetQuality: boolean;
     restClockMode: RestClockMode;
     defaultWeightStepKg: number | null;
+    appleFitnessEnabled: boolean;
+    appleHealthLastReceivedAt: string | null;
+    appleHealthLastReceivedKind: AppleHealthReceiveKind | null;
+    appleHealthLastReceivedLinked: boolean | null;
   };
   activeSchedule: {
     id: string;
@@ -168,6 +173,10 @@ export async function buildUserExportJson(user: UserProfile): Promise<ExportJson
       enableSetQuality: user.enableSetQuality,
       restClockMode: user.restClockMode,
       defaultWeightStepKg: user.defaultWeightStepKg,
+      appleFitnessEnabled: user.appleFitnessEnabled,
+      appleHealthLastReceivedAt: user.appleHealthLastReceivedAt,
+      appleHealthLastReceivedKind: user.appleHealthLastReceivedKind,
+      appleHealthLastReceivedLinked: user.appleHealthLastReceivedLinked,
     },
     activeSchedule: activeSchedule
       ? {

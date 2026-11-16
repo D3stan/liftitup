@@ -19,6 +19,7 @@ import {
   updateCustomExercise,
 } from '@/lib/exercises/repository';
 import { buildUserExportJson } from '@/lib/export';
+import { linkBestUnlinkedHealthWorkoutToSessionInTx } from '@/lib/integrations/appleHealth';
 import { projectCalendar } from '@/lib/schedule/queue';
 import { MAX_MEASURED_REST_SECONDS } from '@/lib/workouts/rest';
 
@@ -339,6 +340,9 @@ async function executeToolCall(
           restClockMode: user.restClockMode,
           defaultWeightStepKg: user.defaultWeightStepKg,
           appleFitnessEnabled: user.appleFitnessEnabled,
+          appleHealthLastReceivedAt: user.appleHealthLastReceivedAt,
+          appleHealthLastReceivedKind: user.appleHealthLastReceivedKind,
+          appleHealthLastReceivedLinked: user.appleHealthLastReceivedLinked,
         },
         recentBodyMetrics,
       });
@@ -946,6 +950,13 @@ async function handleLogWorkoutSession(
         }
       }
     }
+
+    await linkBestUnlinkedHealthWorkoutToSessionInTx(user.id, {
+      id: sessionId,
+      startedAt: now,
+      completedAt: now,
+      durationMinutes,
+    });
 
     return await getWorkoutSessionById(user.id, sessionId);
   });

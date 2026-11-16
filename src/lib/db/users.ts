@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type {
   AppTheme,
+  AppleHealthReceiveKind,
   RestClockMode,
   ThemeVariant,
   UserProfile,
@@ -32,6 +33,9 @@ type DbUserRow = {
   rest_clock_mode?: string;
   default_weight_step_kg?: number | null;
   apple_fitness_enabled: number;
+  apple_health_last_received_at?: string | null;
+  apple_health_last_received_kind?: string | null;
+  apple_health_last_received_linked?: number | null;
   is_guest: number;
   last_active_at: string;
   created_at: string;
@@ -103,6 +107,18 @@ export function mapUserRow(row: DbUserRow): UserProfile {
         ? null
         : Number(row.default_weight_step_kg),
     appleFitnessEnabled: Boolean(row.apple_fitness_enabled),
+    appleHealthLastReceivedAt: row.apple_health_last_received_at ?? null,
+    appleHealthLastReceivedKind:
+      row.apple_health_last_received_kind === 'workout' ||
+      row.apple_health_last_received_kind === 'weight' ||
+      row.apple_health_last_received_kind === 'both'
+        ? row.apple_health_last_received_kind
+        : null,
+    appleHealthLastReceivedLinked:
+      row.apple_health_last_received_linked === null ||
+      row.apple_health_last_received_linked === undefined
+        ? null
+        : Boolean(row.apple_health_last_received_linked),
     isGuest: Boolean(row.is_guest),
     lastActiveAt: row.last_active_at,
     createdAt: row.created_at,
@@ -284,6 +300,31 @@ export async function updateUserSettings(
   const row = await queryOne<DbUserRow>(
     `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
     params,
+  );
+  return row ? mapUserRow(row) : null;
+}
+
+export async function recordAppleHealthLastReceived(
+  userId: string,
+  input: {
+    receivedAt: string;
+    kind: AppleHealthReceiveKind;
+    linked: boolean | null;
+  },
+): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>(
+    `UPDATE users
+     SET apple_health_last_received_at = $1,
+         apple_health_last_received_kind = $2,
+         apple_health_last_received_linked = $3
+     WHERE id = $4
+     RETURNING *`,
+    [
+      input.receivedAt,
+      input.kind,
+      input.linked === null ? null : input.linked ? 1 : 0,
+      userId,
+    ],
   );
   return row ? mapUserRow(row) : null;
 }
