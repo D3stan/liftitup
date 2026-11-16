@@ -149,6 +149,7 @@ export async function deleteUserAccountInTx(userId: string): Promise<boolean> {
   await query('DELETE FROM apple_health_workouts WHERE user_id = $1', [userId]);
   await query('DELETE FROM body_metrics WHERE user_id = $1', [userId]);
   await query('DELETE FROM hidden_exercises WHERE user_id = $1', [userId]);
+  await query('DELETE FROM user_exercise_prefs WHERE user_id = $1', [userId]);
   await query('DELETE FROM exercises WHERE user_id = $1 AND is_custom = 1', [
     userId,
   ]);

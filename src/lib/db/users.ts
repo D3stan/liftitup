@@ -30,6 +30,7 @@ type DbUserRow = {
   theme_variant?: string;
   enable_set_quality: number;
   rest_clock_mode?: string;
+  default_weight_step_kg?: number | null;
   apple_fitness_enabled: number;
   is_guest: number;
   last_active_at: string;
@@ -55,6 +56,7 @@ export interface CreateUserInput {
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
   restClockMode?: RestClockMode;
+  defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
   isGuest?: boolean;
 }
@@ -71,6 +73,7 @@ export interface UpdateUserSettingsInput {
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
   restClockMode?: RestClockMode;
+  defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
 }
 
@@ -95,6 +98,10 @@ export function mapUserRow(row: DbUserRow): UserProfile {
       : DEFAULT_THEME_VARIANT,
     enableSetQuality: Boolean(row.enable_set_quality),
     restClockMode: row.rest_clock_mode === 'countdown' ? 'countdown' : 'stopwatch',
+    defaultWeightStepKg:
+      row.default_weight_step_kg === null || row.default_weight_step_kg === undefined
+        ? null
+        : Number(row.default_weight_step_kg),
     appleFitnessEnabled: Boolean(row.apple_fitness_enabled),
     isGuest: Boolean(row.is_guest),
     lastActiveAt: row.last_active_at,
@@ -173,9 +180,9 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       id, username, display_name, password_hash,
       height_cm, weight_kg, age, training_years,
       unit, timezone, theme, theme_variant,
-      enable_set_quality, rest_clock_mode, apple_fitness_enabled,
-      is_guest, last_active_at, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      enable_set_quality, rest_clock_mode, default_weight_step_kg,
+      apple_fitness_enabled, is_guest, last_active_at, created_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     RETURNING *
     `,
     [
@@ -193,6 +200,7 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       themeVariant,
       input.enableSetQuality ? 1 : 0,
       restClockMode,
+      input.defaultWeightStepKg ?? null,
       input.appleFitnessEnabled === false ? 0 : 1,
       input.isGuest ? 1 : 0,
       now,
@@ -258,6 +266,10 @@ export async function updateUserSettings(
   if (patch.restClockMode !== undefined) {
     setClauses.push(`rest_clock_mode = $${idx++}`);
     params.push(patch.restClockMode === 'countdown' ? 'countdown' : 'stopwatch');
+  }
+  if (patch.defaultWeightStepKg !== undefined) {
+    setClauses.push(`default_weight_step_kg = $${idx++}`);
+    params.push(patch.defaultWeightStepKg);
   }
   if (patch.appleFitnessEnabled !== undefined) {
     setClauses.push(`apple_fitness_enabled = $${idx++}`);

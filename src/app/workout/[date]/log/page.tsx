@@ -55,6 +55,7 @@ import {
   computeActualRestForWorkoutSets,
   getLastTimeRestForCompletedSet,
 } from '@/lib/workouts/rest';
+import { resolveDisplayWeightStep } from '@/lib/workouts/stepSize';
 import {
   buildPrefilledSets,
   displayToKg,
@@ -818,6 +819,67 @@ function WorkoutLoggerInner() {
     [updateDraft],
   );
 
+  const exerciseByIdMap = useMemo(() => {
+    const map = new Map<string, Exercise>();
+    for (const ex of exercisesCatalog) {
+      map.set(ex.id, ex);
+    }
+    return map;
+  }, [exercisesCatalog]);
+
+  const handleChangeWeightStep = useCallback(
+    async (exerciseId: string, weightStepKg: number | null) => {
+      try {
+        const res =
+          weightStepKg === null
+            ? await apiFetch<{ exercise: Exercise }>(
+                `/api/exercises/${encodeURIComponent(exerciseId)}/step`,
+                { method: 'DELETE' },
+              )
+            : await apiFetch<{ exercise: Exercise }>(
+                `/api/exercises/${encodeURIComponent(exerciseId)}/step`,
+                {
+                  method: 'PUT',
+                  body: JSON.stringify({ weightStepKg }),
+                },
+              );
+
+        const updated = res.exercise;
+        setExercisesCatalog((prev) => {
+          const exists = prev.some((e) => e.id === updated.id);
+          if (exists) {
+            return prev.map((e) => (e.id === updated.id ? updated : e));
+          }
+          return updated.isHidden ? prev : [...prev, updated];
+        });
+        setDayView((prev) =>
+          prev
+            ? {
+                ...prev,
+                exerciseStepsById: {
+                  ...(prev.exerciseStepsById ?? {}),
+                  [updated.id]: {
+                    isCustom: updated.isCustom,
+                    weightStepKg: updated.weightStepKg,
+                    userWeightStepKg: updated.userWeightStepKg ?? null,
+                  },
+                },
+              }
+            : prev,
+        );
+        toast.success(
+          weightStepKg === null
+            ? 'Weight step reset to default'
+            : 'Weight step updated',
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to update step');
+        throw err;
+      }
+    },
+    [],
+  );
+
   const handleSave = async () => {
     if (!draft || !dayView) return;
 
@@ -1281,28 +1343,58 @@ function WorkoutLoggerInner() {
 
       {/* Exercises */}
       <div className="space-y-3">
-        {draft.exercises.map((ex, idx) => (
-          <ExerciseLoggerCard
-            key={ex.localId}
-            exercise={ex}
-            index={idx}
-            totalCount={draft.exercises.length}
-            unit={dayView.user.unit}
-            enableSetQuality={dayView.user.enableSetQuality}
-            isEditing={Boolean(sessionId)}
-            onMoveUp={handleMoveUp}
-            onMoveDown={handleMoveDown}
-            onDeleteExercise={handleDeleteExercise}
-            onOpenSwap={(i) => setSwapTargetIdx(i)}
-            onChangeNotes={handleChangeExNotes}
-            onUpdateSet={handleUpdateSet}
-            onToggleSetComplete={handleToggleSetComplete}
-            onAddSet={handleAddSet}
-            onRemoveSet={handleRemoveSet}
-            onCheckAll={handleCheckAll}
-            onStartRestTimer={startRestTimer}
-          />
-        ))}
+        {draft.exercises.map((ex, idx) => {
+          const catalogEx = exerciseByIdMap.get(ex.exerciseId);
+          const stepMeta = dayView.exerciseStepsById?.[ex.exerciseId];
+          const isCustomExercise =
+            catalogEx?.isCustom ?? stepMeta?.isCustom ?? false;
+          const exerciseDefaultKg =
+            catalogEx?.weightStepKg ?? stepMeta?.weightStepKg ?? null;
+          const userOverrideKg =
+            catalogEx?.userWeightStepKg ?? stepMeta?.userWeightStepKg ?? null;
+          const resolvedStep = resolveDisplayWeightStep({
+            userOverrideKg,
+            exerciseDefaultKg,
+            userGlobalDefaultKg: dayView.user.defaultWeightStepKg,
+            unit: dayView.user.unit,
+          });
+          const exPrefill =
+            extraPrefills[ex.exerciseId] ??
+            dayView.prefillByExerciseId[ex.exerciseId] ??
+            null;
+
+          return (
+            <ExerciseLoggerCard
+              key={ex.localId}
+              exercise={ex}
+              index={idx}
+              totalCount={draft.exercises.length}
+              unit={dayView.user.unit}
+              enableSetQuality={dayView.user.enableSetQuality}
+              isEditing={Boolean(sessionId)}
+              weightStepDisplay={resolvedStep.displayStep}
+              weightStepSource={resolvedStep.source}
+              isCustomExercise={isCustomExercise}
+              hasUserStepOverride={userOverrideKg !== null}
+              hasCustomExerciseStep={
+                isCustomExercise && exerciseDefaultKg !== null
+              }
+              prefill={exPrefill}
+              onChangeWeightStep={handleChangeWeightStep}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
+              onDeleteExercise={handleDeleteExercise}
+              onOpenSwap={(i) => setSwapTargetIdx(i)}
+              onChangeNotes={handleChangeExNotes}
+              onUpdateSet={handleUpdateSet}
+              onToggleSetComplete={handleToggleSetComplete}
+              onAddSet={handleAddSet}
+              onRemoveSet={handleRemoveSet}
+              onCheckAll={handleCheckAll}
+              onStartRestTimer={startRestTimer}
+            />
+          );
+        })}
 
         {draft.exercises.length === 0 && (
           <div className="card py-6 text-center font-bold text-[var(--muted)]">

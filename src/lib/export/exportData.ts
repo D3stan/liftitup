@@ -15,7 +15,10 @@ import {
   listScheduleEvents,
   listWorkoutSessions,
 } from '@/lib/db/workouts';
-import { listExercises } from '@/lib/exercises/repository';
+import {
+  listExercises,
+  listUserExercisePrefs,
+} from '@/lib/exercises/repository';
 
 export interface ExportJsonPayload {
   schemaVersion: 2;
@@ -31,6 +34,7 @@ export interface ExportJsonPayload {
     timezone: string;
     enableSetQuality: boolean;
     restClockMode: RestClockMode;
+    defaultWeightStepKg: number | null;
   };
   activeSchedule: {
     id: string;
@@ -49,6 +53,11 @@ export interface ExportJsonPayload {
     custom: Exercise[];
     hiddenIds: string[];
   };
+  exerciseStepPrefs: Array<{
+    exerciseId: string;
+    weightStepKg: number;
+    updatedAt: string;
+  }>;
   bodyMetrics: BodyMetric[];
   scheduleEvents: ScheduleEvent[];
   sessions: Array<{
@@ -127,6 +136,17 @@ export async function buildUserExportJson(user: UserProfile): Promise<ExportJson
   const allExercises = await listExercises(user.id, { includeHidden: true });
   const customExercises = allExercises.filter((ex) => ex.isCustom);
   const hiddenIds = allExercises.filter((ex) => ex.isHidden).map((ex) => ex.id);
+  const rawStepPrefs = await listUserExercisePrefs(user.id);
+  const exerciseStepPrefs = rawStepPrefs
+    .filter(
+      (p): p is { userId: string; exerciseId: string; weightStepKg: number; updatedAt: string } =>
+        p.weightStepKg !== null && Number.isFinite(p.weightStepKg),
+    )
+    .map((p) => ({
+      exerciseId: p.exerciseId,
+      weightStepKg: p.weightStepKg,
+      updatedAt: p.updatedAt,
+    }));
   const scheduleEvents = activeSchedule
     ? await listScheduleEvents(user.id, activeSchedule.id)
     : [];
@@ -147,6 +167,7 @@ export async function buildUserExportJson(user: UserProfile): Promise<ExportJson
       timezone: user.timezone,
       enableSetQuality: user.enableSetQuality,
       restClockMode: user.restClockMode,
+      defaultWeightStepKg: user.defaultWeightStepKg,
     },
     activeSchedule: activeSchedule
       ? {
@@ -167,6 +188,7 @@ export async function buildUserExportJson(user: UserProfile): Promise<ExportJson
       custom: customExercises,
       hiddenIds,
     },
+    exerciseStepPrefs,
     bodyMetrics,
     scheduleEvents,
     sessions: sessions.map(mapExportSession),

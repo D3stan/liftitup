@@ -9,6 +9,7 @@ import type {
   WorkoutSession,
 } from '@/types/domain';
 import type { QueueEvent } from '@/lib/schedule/queue';
+import type { ExerciseStepMeta } from '@/lib/exercises/repository';
 
 export interface WorkoutDayViewResponse {
   date: string;
@@ -19,6 +20,7 @@ export interface WorkoutDayViewResponse {
     weightKg: number;
     enableSetQuality: boolean;
     restClockMode: RestClockMode;
+    defaultWeightStepKg: number | null;
     timezone: string;
   };
   calendarDay: {
@@ -30,6 +32,7 @@ export interface WorkoutDayViewResponse {
   };
   sessions: WorkoutSession[];
   prefillByExerciseId: Record<string, ExercisePrefill>;
+  exerciseStepsById?: Record<string, ExerciseStepMeta>;
 }
 
 export interface SaveWorkoutRepQualityInput {

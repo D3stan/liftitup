@@ -40,6 +40,7 @@ export interface UserProfile {
   themeVariant: ThemeVariant;
   enableSetQuality: boolean;
   restClockMode: RestClockMode;
+  defaultWeightStepKg: number | null;
   appleFitnessEnabled: boolean;
   isGuest: boolean;
   lastActiveAt: string;
@@ -72,6 +73,8 @@ export interface Exercise {
   equipment: ExerciseEquipment | string;
   category: ExerciseCategory | string;
   defaultRestSeconds: number;
+  weightStepKg: number | null;
+  userWeightStepKg?: number | null;
   isCustom: boolean;
   isHidden: boolean;
   aliases: string[];

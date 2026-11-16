@@ -25,6 +25,7 @@ interface SettingsPatchBody {
   themeVariant?: unknown;
   enableSetQuality?: unknown;
   restClockMode?: unknown;
+  defaultWeightStepKg?: unknown;
   appleFitnessEnabled?: unknown;
 }
 
@@ -142,6 +143,23 @@ export const PATCH = withApiHandler(
         );
       }
       patch.restClockMode = body.restClockMode;
+    }
+
+    if (body.defaultWeightStepKg !== undefined) {
+      if (body.defaultWeightStepKg === null) {
+        patch.defaultWeightStepKg = null;
+      } else if (
+        typeof body.defaultWeightStepKg !== 'number' ||
+        !Number.isFinite(body.defaultWeightStepKg) ||
+        body.defaultWeightStepKg <= 0 ||
+        body.defaultWeightStepKg > 100
+      ) {
+        throw ApiError.validation(
+          'defaultWeightStepKg must be a positive number up to 100, or null',
+        );
+      } else {
+        patch.defaultWeightStepKg = body.defaultWeightStepKg;
+      }
     }
 
     if (body.appleFitnessEnabled !== undefined) {
