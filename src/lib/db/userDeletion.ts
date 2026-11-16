@@ -196,6 +196,7 @@ export async function deleteUserAccountInTx(userId: string): Promise<boolean> {
   await resetUserAccountDataForRestoreInTx(userId);
   await deleteUserPhotosInTx(userId);
   await query('DELETE FROM apple_health_workouts WHERE user_id = $1', [userId]);
+  await query('DELETE FROM mcp_confirmations WHERE user_id = $1', [userId]);
   await query('DELETE FROM api_keys WHERE user_id = $1', [userId]);
   await query('DELETE FROM auth_sessions WHERE user_id = $1', [userId]);
   const res = await query('DELETE FROM users WHERE id = $1', [userId]);

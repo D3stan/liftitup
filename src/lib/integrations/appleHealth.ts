@@ -524,3 +524,111 @@ export async function ingestAppleHealthPayload(
     workouts,
   };
 }
+
+/**
+ * Explicitly links an Apple Health workout owned by `userId` to a workout session
+ * owned by `userId`, or unlinks it when `sessionId` is `null`.
+ * Updates `workout_sessions` Apple Watch HR/calories cleanly on both old and new links.
+ */
+export async function relinkAppleHealthWorkout(
+  userId: string,
+  healthWorkoutId: string,
+  sessionId: string | null,
+): Promise<AppleHealthWorkout> {
+  const cleanHealthId = healthWorkoutId.trim();
+  if (!cleanHealthId) {
+    throw ApiError.validation('healthWorkoutId is required');
+  }
+
+  return await withTransaction(async () => {
+    const ahRow = await queryOne<DbAppleHealthRow>(
+      'SELECT * FROM apple_health_workouts WHERE id = $1 AND user_id = $2',
+      [cleanHealthId, userId],
+    );
+    if (!ahRow) {
+      throw ApiError.notFound('Apple Health workout not found');
+    }
+
+    const previousSessionId = ahRow.linked_session_id;
+
+    if (sessionId !== null) {
+      const cleanSessionId = sessionId.trim();
+      if (!cleanSessionId) {
+        throw ApiError.validation('sessionId must be a non-empty string or null');
+      }
+      const sessRow = await queryOne<{ id: string }>(
+        'SELECT id FROM workout_sessions WHERE id = $1 AND user_id = $2',
+        [cleanSessionId, userId],
+      );
+      if (!sessRow) {
+        throw ApiError.notFound('Target workout session not found');
+      }
+
+      if (previousSessionId && previousSessionId !== cleanSessionId) {
+        await query(
+          `UPDATE workout_sessions
+           SET apple_watch_kcal = NULL,
+               apple_watch_avg_hr = NULL,
+               apple_watch_max_hr = NULL
+           WHERE id = $1 AND user_id = $2`,
+          [previousSessionId, userId],
+        );
+      }
+
+      // Unlink any other health workout previously linked to target session
+      await query(
+        `UPDATE apple_health_workouts
+         SET linked_session_id = NULL
+         WHERE user_id = $1 AND linked_session_id = $2 AND id <> $3`,
+        [userId, cleanSessionId, cleanHealthId],
+      );
+
+      const updatedAh = await queryOne<DbAppleHealthRow>(
+        `UPDATE apple_health_workouts
+         SET linked_session_id = $1
+         WHERE id = $2 AND user_id = $3
+         RETURNING *`,
+        [cleanSessionId, cleanHealthId, userId],
+      );
+
+      await query(
+        `UPDATE workout_sessions
+         SET apple_watch_kcal = $1,
+             apple_watch_avg_hr = $2,
+             apple_watch_max_hr = $3
+         WHERE id = $4 AND user_id = $5`,
+        [
+          ahRow.active_calories,
+          ahRow.avg_heart_rate,
+          ahRow.max_heart_rate,
+          cleanSessionId,
+          userId,
+        ],
+      );
+
+      return mapAppleHealthRow(updatedAh!);
+    }
+
+    // Unlink
+    const updatedAh = await queryOne<DbAppleHealthRow>(
+      `UPDATE apple_health_workouts
+       SET linked_session_id = NULL
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [cleanHealthId, userId],
+    );
+
+    if (previousSessionId) {
+      await query(
+        `UPDATE workout_sessions
+         SET apple_watch_kcal = NULL,
+             apple_watch_avg_hr = NULL,
+             apple_watch_max_hr = NULL
+         WHERE id = $1 AND user_id = $2`,
+        [previousSessionId, userId],
+      );
+    }
+
+    return mapAppleHealthRow(updatedAh!);
+  });
+}

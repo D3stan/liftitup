@@ -6,8 +6,8 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "test": "node --test src/lib/admin/__tests__/phase10Admin.test.ts src/lib/ai/__tests__/importSchema.test.ts src/lib/body/__tests__/phase7BodyWeight.test.ts src/lib/db/__tests__/v1wipe.test.ts src/lib/imports/__tests__/phase6Imports.test.ts src/lib/integrations/__tests__/appleHealth.test.ts src/lib/offline/__tests__/outbox.test.ts src/lib/photos/__tests__/phase8Photos.test.ts src/lib/schedule/__tests__/queue.test.ts src/lib/settings/__tests__/phase1.test.ts src/lib/workouts/__tests__/phase2Clock.test.ts src/lib/workouts/__tests__/phase3ActualRest.test.ts src/lib/workouts/__tests__/phase4Steppers.test.ts src/lib/workouts/__tests__/phase9Focus.test.ts src/lib/workouts/__tests__/workouts.test.ts",
-    "test:postgres": "node --test src/lib/photos/__tests__/phase8RealPostgres.test.ts src/lib/admin/__tests__/phase10RealPostgres.test.ts",
+    "test": "node --test src/lib/admin/__tests__/phase10Admin.test.ts src/lib/ai/__tests__/importSchema.test.ts src/lib/body/__tests__/phase7BodyWeight.test.ts src/lib/db/__tests__/v1wipe.test.ts src/lib/imports/__tests__/phase6Imports.test.ts src/lib/integrations/__tests__/appleHealth.test.ts src/lib/mcp/__tests__/phase11Mcp.test.ts src/lib/offline/__tests__/outbox.test.ts src/lib/photos/__tests__/phase8Photos.test.ts src/lib/schedule/__tests__/queue.test.ts src/lib/settings/__tests__/phase1.test.ts src/lib/workouts/__tests__/phase2Clock.test.ts src/lib/workouts/__tests__/phase3ActualRest.test.ts src/lib/workouts/__tests__/phase4Steppers.test.ts src/lib/workouts/__tests__/phase9Focus.test.ts src/lib/workouts/__tests__/workouts.test.ts",
+    "test:postgres": "node --test src/lib/photos/__tests__/phase8RealPostgres.test.ts src/lib/admin/__tests__/phase10RealPostgres.test.ts src/lib/mcp/__tests__/phase11RealPostgres.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

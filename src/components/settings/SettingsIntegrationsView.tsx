@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Check, Copy, KeyRound, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, Copy, KeyRound, RefreshCw } from 'lucide-react';
 import { Button, apiFetch, toast } from '@/components/ui';
 import { getMcpClientConfigSnippet, normalizeMcpEndpointUrl } from '@/lib/mcp/config';
 import type { ApiKeyInfo } from '@/types/domain';
@@ -117,11 +117,27 @@ export function SettingsIntegrationsView() {
                 {apiKeyInfo ? 'Regenerate' : 'Generate Key'}
               </Button>
             </div>
-            <p className="text-xs text-[var(--muted)]">
-              Your single API key is shared between MCP and the Apple Health
-              Shortcut. Regenerating it for one immediately breaks the other
-              until you update it there.
-            </p>
+            <div
+              role="note"
+              className="flex items-start gap-2 rounded-xl border-2 border-[var(--line)] bg-[var(--gold-bg)] p-2.5 text-xs text-[var(--ink)]"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--red)]" />
+              <div className="space-y-1">
+                <p>
+                  Your single API key is shared between MCP and the Apple Health
+                  Shortcut. Regenerating it immediately revokes the previous key
+                  (breaking the Shortcut/MCP client until updated) and
+                  invalidates pending MCP confirmations.
+                </p>
+                <p className="font-bold">
+                  Admin warning: if your user ID is listed in{' '}
+                  <code className="font-mono">ADMIN_USER_IDS</code>, this key
+                  (including inside the iOS Shortcut) grants full admin power
+                  over the instance via MCP. Regenerate it here immediately if
+                  ever exposed.
+                </p>
+              </div>
+            </div>
           </div>
 
           {revealedKey && (

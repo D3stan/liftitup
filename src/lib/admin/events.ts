@@ -28,6 +28,21 @@ export interface AdminActor {
   actorUserId?: string | null;
   actorLabel: string;
   source: AuditSource;
+  auditDetail?: Record<string, unknown>;
+}
+
+export function mergeActorAuditDetail(
+  actor: AdminActor,
+  detail?: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const hasExtra =
+    actor.auditDetail && Object.keys(actor.auditDetail).length > 0;
+  const hasDetail = detail && Object.keys(detail).length > 0;
+  if (!hasExtra && !hasDetail) return null;
+  return {
+    ...(detail ?? {}),
+    ...(actor.auditDetail ?? {}),
+  };
 }
 
 const ACTIVITY_THROTTLE_MS = 15 * 60 * 1000;

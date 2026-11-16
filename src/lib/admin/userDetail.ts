@@ -11,6 +11,7 @@ import {
 } from '@/lib/schedule/queue';
 import {
   listEventsForUser,
+  mergeActorAuditDetail,
   recordAuditLog,
   type AdminActor,
   type AdminEventRecord,
@@ -211,6 +212,7 @@ export async function getAdminUserDetail(
     source: actor.source,
     action: 'view_user_detail',
     targetUserId: userRow.id,
+    detail: mergeActorAuditDetail(actor, null),
     createdAt: nowIso,
   });
 

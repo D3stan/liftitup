@@ -264,23 +264,102 @@ async function computePerUserStorage(
 
   if (usersRes.rows.length === 0) return [];
 
-  const countsSql = pgMem
-    ? `
-      SELECT
-        u.id AS user_id,
-        (SELECT COUNT(*)::int FROM workout_sessions s WHERE s.user_id = u.id) AS sessions_cnt,
-        (SELECT COUNT(*)::int FROM workout_exercises we JOIN workout_sessions s ON s.id = we.session_id WHERE s.user_id = u.id) AS session_exercises_cnt,
-        (SELECT COUNT(*)::int FROM workout_sets ws JOIN workout_exercises we ON we.id = ws.workout_exercise_id JOIN workout_sessions s ON s.id = we.session_id WHERE s.user_id = u.id) AS sets_cnt,
-        (SELECT COUNT(*)::int FROM workout_set_rep_qualities rq JOIN workout_sets ws ON ws.id = rq.workout_set_id JOIN workout_exercises we ON we.id = ws.workout_exercise_id JOIN workout_sessions s ON s.id = we.session_id WHERE s.user_id = u.id) AS rep_qualities_cnt,
-        (SELECT COUNT(*)::int FROM exercises ex WHERE ex.user_id = u.id AND ex.is_custom = 1) AS custom_exercises_cnt,
-        (SELECT COUNT(*)::int FROM schedules sc WHERE sc.user_id = u.id) AS schedules_cnt,
-        (SELECT COUNT(*)::int FROM body_metrics bm WHERE bm.user_id = u.id) AS body_metrics_cnt,
-        (SELECT COUNT(*)::int FROM apple_health_workouts ah WHERE ah.user_id = u.id) AS apple_health_cnt,
-        (SELECT COUNT(*)::int FROM progress_photos pp WHERE pp.user_id = u.id) AS photo_cnt,
-        (SELECT COALESCE(SUM(pp.byte_size + pp.thumb_byte_size), 0)::bigint FROM progress_photos pp WHERE pp.user_id = u.id) AS photo_bytes
-      FROM users u
-    `
-    : `
+  type UserCountsRow = {
+    user_id: string;
+    sessions_cnt: number;
+    session_exercises_cnt: number;
+    sets_cnt: number;
+    rep_qualities_cnt: number;
+    custom_exercises_cnt: number;
+    schedules_cnt: number;
+    body_metrics_cnt: number;
+    apple_health_cnt: number;
+    photo_cnt: number;
+    photo_bytes: string | number;
+    est_db_bytes?: string | number;
+  };
+
+  let byUserId: Map<string, UserCountsRow>;
+
+  if (pgMem) {
+    // pg-mem does not support correlated outer column references inside SELECT subqueries.
+    const [
+      sessRows,
+      wexRows,
+      wsetRows,
+      rqRows,
+      cexRows,
+      schedRows,
+      bmRows,
+      ahRows,
+      photoRows,
+    ] = await Promise.all([
+      query<{ user_id: string; cnt: number }>(
+        `SELECT user_id, COUNT(*)::int AS cnt FROM workout_sessions GROUP BY user_id`,
+      ),
+      query<{ user_id: string; cnt: number }>(
+        `SELECT s.user_id, COUNT(*)::int AS cnt FROM workout_exercises we JOIN workout_sessions s ON s.id = we.session_id GROUP BY s.user_id`,
+      ),
+      query<{ user_id: string; cnt: number }>(
+        `SELECT s.user_id, COUNT(*)::int AS cnt FROM workout_sets ws JOIN workout_exercises we ON we.id = ws.workout_exercise_id JOIN workout_sessions s ON s.id = we.session_id GROUP BY s.user_id`,
+      ),
+      query<{ user_id: string; cnt: number }>(
+        `SELECT s.user_id, COUNT(*)::int AS cnt FROM workout_set_rep_qualities rq JOIN workout_sets ws ON ws.id = rq.workout_set_id JOIN workout_exercises we ON we.id = ws.workout_exercise_id JOIN workout_sessions s ON s.id = we.session_id GROUP BY s.user_id`,
+      ),
+      query<{ user_id: string; cnt: number }>(
+        `SELECT user_id, COUNT(*)::int AS cnt FROM exercises WHERE user_id IS NOT NULL AND is_custom = 1 GROUP BY user_id`,
+      ),
+      query<{ user_id: string; cnt: number }>(
+        `SELECT user_id, COUNT(*)::int AS cnt FROM schedules GROUP BY user_id`,
+      ),
+      query<{ user_id: string; cnt: number }>(
+        `SELECT user_id, COUNT(*)::int AS cnt FROM body_metrics GROUP BY user_id`,
+      ),
+      query<{ user_id: string; cnt: number }>(
+        `SELECT user_id, COUNT(*)::int AS cnt FROM apple_health_workouts GROUP BY user_id`,
+      ),
+      query<{ user_id: string; cnt: number; photo_bytes: string | number }>(
+        `SELECT user_id, COUNT(*)::int AS cnt, COALESCE(SUM(byte_size + thumb_byte_size), 0)::bigint AS photo_bytes FROM progress_photos GROUP BY user_id`,
+      ),
+    ]);
+
+    byUserId = new Map<string, UserCountsRow>();
+    const ensureRow = (uid: string): UserCountsRow => {
+      let row = byUserId.get(uid);
+      if (!row) {
+        row = {
+          user_id: uid,
+          sessions_cnt: 0,
+          session_exercises_cnt: 0,
+          sets_cnt: 0,
+          rep_qualities_cnt: 0,
+          custom_exercises_cnt: 0,
+          schedules_cnt: 0,
+          body_metrics_cnt: 0,
+          apple_health_cnt: 0,
+          photo_cnt: 0,
+          photo_bytes: 0,
+        };
+        byUserId.set(uid, row);
+      }
+      return row;
+    };
+
+    for (const r of sessRows.rows) ensureRow(r.user_id).sessions_cnt = Number(r.cnt);
+    for (const r of wexRows.rows) ensureRow(r.user_id).session_exercises_cnt = Number(r.cnt);
+    for (const r of wsetRows.rows) ensureRow(r.user_id).sets_cnt = Number(r.cnt);
+    for (const r of rqRows.rows) ensureRow(r.user_id).rep_qualities_cnt = Number(r.cnt);
+    for (const r of cexRows.rows) ensureRow(r.user_id).custom_exercises_cnt = Number(r.cnt);
+    for (const r of schedRows.rows) ensureRow(r.user_id).schedules_cnt = Number(r.cnt);
+    for (const r of bmRows.rows) ensureRow(r.user_id).body_metrics_cnt = Number(r.cnt);
+    for (const r of ahRows.rows) ensureRow(r.user_id).apple_health_cnt = Number(r.cnt);
+    for (const r of photoRows.rows) {
+      const target = ensureRow(r.user_id);
+      target.photo_cnt = Number(r.cnt);
+      target.photo_bytes = r.photo_bytes;
+    }
+  } else {
+    const countsSql = `
       WITH
         sess AS (
           SELECT user_id, COUNT(*)::int AS cnt, COALESCE(SUM(pg_column_size(workout_sessions.*) + 28), 0)::bigint AS bytes
@@ -420,22 +499,9 @@ async function computePerUserStorage(
       LEFT JOIN swp ON swp.user_id = u.id
     `;
 
-  const countsRes = await query<{
-    user_id: string;
-    sessions_cnt: number;
-    session_exercises_cnt: number;
-    sets_cnt: number;
-    rep_qualities_cnt: number;
-    custom_exercises_cnt: number;
-    schedules_cnt: number;
-    body_metrics_cnt: number;
-    apple_health_cnt: number;
-    photo_cnt: number;
-    photo_bytes: string | number;
-    est_db_bytes?: string | number;
-  }>(countsSql);
-
-  const byUserId = new Map(countsRes.rows.map((r) => [r.user_id, r]));
+    const countsRes = await query<UserCountsRow>(countsSql);
+    byUserId = new Map(countsRes.rows.map((r) => [r.user_id, r]));
+  }
 
   const out: SnapshotPerUserStorage[] = [];
   for (const u of usersRes.rows) {
@@ -1007,6 +1073,10 @@ export async function ensureDailySnapshotIfDue(
     logger.warn('failed to run opportunistic daily snapshot', { err });
     return null;
   }
+}
+
+export async function getLiveCatalogUsage(): Promise<SnapshotCatalogUsage> {
+  return await computeCatalogUsage(isPgMemActive());
 }
 
 export async function listSnapshotTrends(

@@ -12,6 +12,7 @@ export interface ResetUserPasswordCoreInput {
   actorUserId?: string | null;
   actorLabel?: string;
   reason?: string | null;
+  auditDetail?: Record<string, unknown>;
 }
 
 export interface ResetUserPasswordResult {

@@ -15,6 +15,22 @@ export const LB_WEIGHT_STEP_OPTIONS = [1, 2.5, 5, 10] as const;
 export type WeightStepSource = 'override' | 'exercise' | 'global' | 'default';
 
 /**
+ * Validates a nullable per-exercise or global weight step increment (0 < step <= 100 kg, or null).
+ */
+export function parseNullableWeightStepKg(value: unknown): number | null {
+  if (value === null) return null;
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    value > 100
+  ) {
+    throw new Error('weightStepKg must be a positive number up to 100, or null');
+  }
+  return value;
+}
+
+/**
  * Rounds a kg step value to 2 decimal places without floating-point noise.
  */
 export function roundStepKg(value: number): number {

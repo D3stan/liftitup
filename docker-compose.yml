@@ -34,6 +34,7 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgres://liftitup:liftitup@postgres:5432/liftitup}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-https://lift.0xpuddu.com}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS:-}
+      - PHOTO_DOWNLOAD_SECRET=${PHOTO_DOWNLOAD_SECRET:-}
 
 volumes:
   liftitup-pgdata:
