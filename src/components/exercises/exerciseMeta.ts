@@ -60,9 +60,3 @@ export const EQUIPMENT_OPTIONS: OptionItem[] = [
   { value: 'smith', label: 'Smith' },
   { value: 'other', label: 'Other' },
 ];
-
-export function formatOptionLabel(value: string, options: OptionItem[]): string {
-  const found = options.find((o) => o.value === value);
-  if (found) return found.label;
-  return value ? value.replace(/_/g, ' ') : 'Other';
-}

@@ -93,10 +93,6 @@ export async function deleteAuthSession(tokenHash: string): Promise<void> {
   await query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
 }
 
-export async function deleteUserAuthSessions(userId: string): Promise<void> {
-  await query('DELETE FROM auth_sessions WHERE user_id = $1', [userId]);
-}
-
 export async function getApiKeyByUserId(
   userId: string,
 ): Promise<ApiKeyInfo | null> {

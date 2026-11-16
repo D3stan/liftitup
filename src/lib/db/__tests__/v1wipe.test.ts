@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import module from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Pool } from 'pg';
 import { newDb } from 'pg-mem';
 
@@ -21,7 +22,7 @@ module.registerHooks({
       !specifier.endsWith('.ts') &&
       !specifier.endsWith('.tsx')
     ) {
-      const parentDir = path.dirname(new URL(context.parentURL).pathname);
+      const parentDir = path.dirname(fileURLToPath(context.parentURL));
       target = path.resolve(parentDir, specifier);
     }
     if (target !== specifier) {
@@ -31,7 +32,7 @@ module.registerHooks({
         path.join(target, 'index.ts'),
       ]) {
         if (fs.existsSync(candidate)) {
-          return nextResolve(new URL(`file://${candidate}`).href, context);
+          return nextResolve(pathToFileURL(candidate).href, context);
         }
       }
     }

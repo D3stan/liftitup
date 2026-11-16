@@ -14,7 +14,6 @@ import {
   listWorkoutSessions,
 } from '@/lib/db/workouts';
 import {
-  getPointerForDate,
   projectCalendar,
   type QueueDay,
   type QueueEvent,
@@ -215,38 +214,6 @@ export async function projectUserCalendar(opts: {
   }));
 
   return { schedule, days: hydrated, today, rangeStart, rangeEnd };
-}
-
-/**
- * Computes the queue pointer entering `targetDate` for a user's active schedule.
- */
-export async function getUserPointerForDate(opts: {
-  userId: string;
-  today: string;
-  targetDate: string;
-}) {
-  const schedule = await getActiveSchedule(opts.userId);
-  if (!schedule) return null;
-
-  const events = await listScheduleEvents(opts.userId, schedule.id, {
-    from: schedule.rotationAnchorDate,
-    to: opts.targetDate,
-  });
-  const sessions = await listWorkoutSessions(opts.userId, {
-    from: schedule.rotationAnchorDate,
-    to: opts.targetDate,
-    includeExercises: false,
-  });
-
-  return getPointerForDate({
-    queue: toQueueDays(schedule.days),
-    anchorDate: schedule.rotationAnchorDate,
-    anchorIndex: schedule.rotationAnchorIndex,
-    events: toQueueEvents(events),
-    sessions: toQueueSessions(sessions),
-    today: opts.today,
-    targetDate: opts.targetDate,
-  });
 }
 
 export interface CreateScheduleEventInput {

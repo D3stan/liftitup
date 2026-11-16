@@ -3501,28 +3501,3 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
     primaryMuscles: ['quads', 'glutes', 'calves'],
   },
 ];
-
-const CATALOG_BY_ID = new Map<string, CatalogExercise>(
-  EXERCISE_CATALOG.map((exercise) => [exercise.id, exercise]),
-);
-
-export function getCatalogExercise(id: string): CatalogExercise | undefined {
-  return CATALOG_BY_ID.get(id);
-}
-
-export function searchCatalog(query: string): CatalogExercise[] {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    return EXERCISE_CATALOG;
-  }
-
-  return EXERCISE_CATALOG.filter((exercise) => {
-    if (exercise.name.toLowerCase().includes(normalized)) {
-      return true;
-    }
-    return (
-      exercise.aliases?.some((alias) => alias.toLowerCase().includes(normalized)) ??
-      false
-    );
-  });
-}

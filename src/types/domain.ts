@@ -222,13 +222,6 @@ export interface AppleHealthWorkout {
   createdAt: string;
 }
 
-export interface SessionSwap {
-  userId: string;
-  dateKey: string;
-  scheduleDayExerciseId: string;
-  exerciseId: string;
-}
-
 export interface ExercisePrefill {
   exerciseId: string;
   lastSessionDate: string;
