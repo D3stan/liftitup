@@ -11,6 +11,14 @@ import {
   type RestAlertSupportInfo,
 } from '@/lib/workouts/restAlerts';
 import type { RestClockMode } from '@/types/domain';
+import {
+  DEFAULT_WEIGHT_STEP_KG,
+  DEFAULT_WEIGHT_STEP_LB,
+  displayStepToKg,
+  KG_WEIGHT_STEP_OPTIONS,
+  LB_WEIGHT_STEP_OPTIONS,
+  stepKgToDisplay,
+} from '@/lib/workouts/stepSize';
 import { SettingsSubpageShell } from './SettingsSubpageShell';
 import { type SettingsPayload, useSettingsData } from './useSettingsData';
 
@@ -39,6 +47,7 @@ const STATUS_BADGE: Record<
 export function SettingsTrainingView() {
   const { user, setUser, loading } = useSettingsData();
   const [savingMode, setSavingMode] = useState(false);
+  const [savingWeightStep, setSavingWeightStep] = useState(false);
   const [alertInfo, setAlertInfo] = useState<RestAlertSupportInfo>(() =>
     getRestAlertSupportInfo(),
   );
@@ -142,7 +151,37 @@ export function SettingsTrainingView() {
     }
   }
 
+  async function handleSelectDefaultWeightStep(nextStepKg: number | null) {
+    if (!user || savingWeightStep) return;
+    setSavingWeightStep(true);
+    try {
+      const res = await apiFetch<SettingsPayload>('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ defaultWeightStepKg: nextStepKg }),
+      });
+      setUser(res.user);
+      if (nextStepKg === null) {
+        toast.success('Weight step reset to app default');
+      } else {
+        const label = stepKgToDisplay(nextStepKg, res.user.unit);
+        toast.success(`Default weight step set to ±${label} ${res.user.unit}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setSavingWeightStep(false);
+    }
+  }
+
   const badge = STATUS_BADGE[alertInfo.status];
+  const weightStepOptions = user
+    ? user.unit === 'lb'
+      ? LB_WEIGHT_STEP_OPTIONS
+      : KG_WEIGHT_STEP_OPTIONS
+    : KG_WEIGHT_STEP_OPTIONS;
+  const activeWeightStepDisplay = user
+    ? stepKgToDisplay(user.defaultWeightStepKg, user.unit)
+    : DEFAULT_WEIGHT_STEP_KG;
 
   return (
     <SettingsSubpageShell title="Training" user={user} loading={loading}>
@@ -326,6 +365,77 @@ export function SettingsTrainingView() {
                 ? 'iOS Safari has no vibration, and alerts do not fire while the phone is locked without push. Returning to the app always shows the colour change.'
                 : 'Alerts fire when the app is open; nothing fires while a phone is locked without push notifications. The colour change in-app is always guaranteed.'}
             </p>
+          </section>
+
+          {/* Default Weight Step */}
+          <section id="weight-step" className="card space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-marker text-base text-[var(--ink)]">
+                  Default Weight Step
+                </h2>
+                <p className="mt-0.5 text-sm text-[var(--muted)]">
+                  Fallback increment for the +/− weight steppers when an
+                  exercise has no custom step.
+                </p>
+              </div>
+              <span className="pill gold shrink-0 text-xs">
+                ±{activeWeightStepDisplay} {user.unit}
+              </span>
+            </div>
+
+            <div
+              role="radiogroup"
+              aria-label="Default weight step"
+              className="flex flex-wrap gap-2"
+            >
+              {weightStepOptions.map((option) => {
+                const selected = activeWeightStepDisplay === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={savingWeightStep}
+                    onClick={() =>
+                      void handleSelectDefaultWeightStep(
+                        displayStepToKg(option, user.unit),
+                      )
+                    }
+                    className={`min-h-[44px] min-w-[72px] rounded-xl border-[2.5px] border-[var(--line)] px-3 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] transition ${
+                      selected
+                        ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                        : 'bg-[var(--card)] text-[var(--ink)]'
+                    }`}
+                  >
+                    ±{option} {user.unit}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-[var(--muted)]">
+                {user.defaultWeightStepKg === null
+                  ? `Using app default (±${
+                      user.unit === 'lb'
+                        ? DEFAULT_WEIGHT_STEP_LB
+                        : DEFAULT_WEIGHT_STEP_KG
+                    } ${user.unit}).`
+                  : 'Custom global default active.'}
+              </p>
+              {user.defaultWeightStepKg !== null && (
+                <button
+                  type="button"
+                  disabled={savingWeightStep}
+                  onClick={() => void handleSelectDefaultWeightStep(null)}
+                  className="btn alt !min-h-[44px] !px-3 text-xs"
+                >
+                  Reset to default
+                </button>
+              )}
+            </div>
           </section>
 
           {/* Execution Quality % */}

@@ -17,7 +17,10 @@ import {
   listScheduleEvents,
   listWorkoutSessions,
 } from '@/lib/db/workouts';
-import { getExerciseById } from '@/lib/exercises/repository';
+import {
+  getExerciseById,
+  getExerciseStepMetaByIds,
+} from '@/lib/exercises/repository';
 import { projectCalendar } from '@/lib/schedule/queue';
 import { MAX_MEASURED_REST_SECONDS } from './rest';
 import type {
@@ -177,11 +180,11 @@ export async function getWorkoutDayView(
     }
   }
 
-  const prefillByExerciseId = await getLastPerformanceByExerciseIds(
-    userId,
-    Array.from(exerciseIds),
-    addDaysYmd(date, -1),
-  );
+  const exIdList = Array.from(exerciseIds);
+  const [prefillByExerciseId, exerciseStepsById] = await Promise.all([
+    getLastPerformanceByExerciseIds(userId, exIdList, addDaysYmd(date, -1)),
+    getExerciseStepMetaByIds(userId, exIdList),
+  ]);
 
   return {
     date,
@@ -192,6 +195,7 @@ export async function getWorkoutDayView(
       weightKg: user.weightKg,
       enableSetQuality: user.enableSetQuality,
       restClockMode: user.restClockMode,
+      defaultWeightStepKg: user.defaultWeightStepKg,
       timezone: user.timezone,
     },
     calendarDay: {
@@ -203,6 +207,7 @@ export async function getWorkoutDayView(
     },
     sessions,
     prefillByExerciseId,
+    exerciseStepsById,
   };
 }
 

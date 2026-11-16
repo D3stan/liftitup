@@ -207,6 +207,11 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   color: var(--btn-gold-fg);
 }
 
+.stepper-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* Sticky Notes with Masking Tape */
 .note {
   position: relative;

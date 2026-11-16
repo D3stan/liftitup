@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { EXERCISE_CATALOG } from '@/lib/exercises/catalog';
+import { deriveCatalogWeightStepKg } from '@/lib/workouts/stepSize';
 
 /**
  * Informational schema revision recorded in `schema_version` on initSchema().
@@ -29,6 +30,7 @@ const SCHEMA_V2_DDL = `
     theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark')),
     enable_set_quality INTEGER NOT NULL DEFAULT 0 CHECK (enable_set_quality IN (0, 1)),
     rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown')),
+    default_weight_step_kg DOUBLE PRECISION,
     apple_fitness_enabled INTEGER NOT NULL DEFAULT 1 CHECK (apple_fitness_enabled IN (0, 1)),
     is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
     last_active_at TEXT NOT NULL,
@@ -81,6 +83,7 @@ const SCHEMA_V2_DDL = `
     equipment TEXT NOT NULL DEFAULT 'other',
     category TEXT NOT NULL DEFAULT 'other',
     default_rest_seconds INTEGER NOT NULL DEFAULT 120,
+    weight_step_kg DOUBLE PRECISION,
     is_custom INTEGER NOT NULL DEFAULT 0 CHECK (is_custom IN (0, 1)),
     aliases_json TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
@@ -97,6 +100,17 @@ const SCHEMA_V2_DDL = `
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS user_exercise_prefs (
+    user_id TEXT NOT NULL,
+    exercise_id TEXT NOT NULL,
+    weight_step_kg DOUBLE PRECISION,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, exercise_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_ex_prefs_user ON user_exercise_prefs (user_id);
 
   CREATE TABLE IF NOT EXISTS schedules (
     id TEXT PRIMARY KEY,
@@ -297,7 +311,7 @@ export async function syncExerciseCatalog(
         for (const ex of chunk) {
           const base = params.length;
           valuesSql.push(
-            `($${base + 1}, NULL, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, 0, $${base + 8}, $${base + 9})`,
+            `($${base + 1}, NULL, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, 0, $${base + 9}, $${base + 10})`,
           );
           params.push(
             ex.id,
@@ -307,6 +321,7 @@ export async function syncExerciseCatalog(
             ex.equipment,
             ex.category,
             defaultRestForCategory(ex.category),
+            deriveCatalogWeightStepKg(ex),
             JSON.stringify(ex.aliases ?? []),
             now,
           );
@@ -316,7 +331,7 @@ export async function syncExerciseCatalog(
           `
           INSERT INTO exercises (
             id, user_id, slug, name, tracking_type, equipment, category,
-            default_rest_seconds, is_custom, aliases_json, created_at
+            default_rest_seconds, weight_step_kg, is_custom, aliases_json, created_at
           ) VALUES ${valuesSql.join(', ')}
           ON CONFLICT (id) DO UPDATE SET
             slug = EXCLUDED.slug,
@@ -324,6 +339,7 @@ export async function syncExerciseCatalog(
             tracking_type = EXCLUDED.tracking_type,
             equipment = EXCLUDED.equipment,
             category = EXCLUDED.category,
+            weight_step_kg = EXCLUDED.weight_step_kg,
             aliases_json = EXCLUDED.aliases_json
           WHERE exercises.is_custom = 0
           `,
@@ -382,6 +398,12 @@ export async function initSchema(
     );
     await client.query(
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown'))",
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS default_weight_step_kg DOUBLE PRECISION',
+    );
+    await client.query(
+      'ALTER TABLE exercises ADD COLUMN IF NOT EXISTS weight_step_kg DOUBLE PRECISION',
     );
     await client.query(
       'ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS actual_rest_seconds INTEGER',

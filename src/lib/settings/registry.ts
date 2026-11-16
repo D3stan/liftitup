@@ -42,7 +42,8 @@ export const SETTINGS_CATEGORIES: SettingsCategoryMeta[] = [
   {
     id: 'training',
     title: 'Training',
-    description: 'Rest clock mode, rest alerts, and execution quality.',
+    description:
+      'Rest clock mode, rest alerts, default weight step, and execution quality.',
     href: '/settings/training',
   },
   {
@@ -204,6 +205,26 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
       'permission',
       'test alert',
       'vibration',
+      'training',
+    ],
+  },
+  {
+    id: 'training-default-weight-step',
+    title: 'Default Weight Step',
+    description: 'Set the default +/- stepper increment for weight fields.',
+    categoryId: 'training',
+    categoryTitle: 'Training',
+    href: '/settings/training#weight-step',
+    keywords: [
+      'weight step',
+      'step',
+      'step size',
+      'increment',
+      'stepper',
+      'plus',
+      'minus',
+      'kg',
+      'lb',
       'training',
     ],
   },

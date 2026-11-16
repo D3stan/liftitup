@@ -11,7 +11,14 @@ import {
   Sheet,
   toast,
 } from '@/components/ui';
-import type { Exercise, TrackingType } from '@/types/domain';
+import type { Exercise, TrackingType, UserProfile, WeightUnit } from '@/types/domain';
+import { trackingUsesWeight } from '@/components/workout/trackingFormat';
+import {
+  displayStepToKg,
+  KG_WEIGHT_STEP_OPTIONS,
+  LB_WEIGHT_STEP_OPTIONS,
+  stepKgToDisplay,
+} from '@/lib/workouts/stepSize';
 import {
   CATEGORY_OPTIONS,
   EQUIPMENT_OPTIONS,
@@ -37,11 +44,29 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
   const [referencedError, setReferencedError] = useState<string | null>(null);
 
   const [existing, setExisting] = useState<Exercise | null>(null);
+  const [unit, setUnit] = useState<WeightUnit>('kg');
   const [name, setName] = useState('');
   const [trackingType, setTrackingType] = useState<TrackingType>('weight_reps');
   const [category, setCategory] = useState('push');
   const [equipment, setEquipment] = useState('barbell');
   const [defaultRestSeconds, setDefaultRestSeconds] = useState('120');
+  const [weightStepKg, setWeightStepKg] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ user: UserProfile }>('/api/auth/me')
+      .then((res) => {
+        if (active && res.user?.unit) {
+          setUnit(res.user.unit);
+        }
+      })
+      .catch(() => {
+        // Non-critical fallback to kg
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (mode !== 'edit' || !exerciseId) return;
@@ -61,6 +86,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
         setCategory(ex.category || 'other');
         setEquipment(ex.equipment || 'other');
         setDefaultRestSeconds(String(ex.defaultRestSeconds ?? 120));
+        setWeightStepKg(ex.weightStepKg ?? null);
       } catch (err) {
         if (!active) return;
         if (err instanceof ApiClientError && err.status === 401) {
@@ -108,6 +134,7 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
         category,
         equipment,
         defaultRestSeconds: parsedRest,
+        weightStepKg: trackingUsesWeight(trackingType) ? weightStepKg : null,
       };
 
       if (mode === 'create') {
@@ -365,6 +392,54 @@ export function ExerciseForm({ mode, exerciseId }: ExerciseFormProps) {
             className="min-h-[44px] w-32 rounded-[6px] border-[3px] border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-base text-[var(--ink)] outline-none"
           />
         </label>
+
+        {/* Weight step */}
+        {(trackingUsesWeight(trackingType) || weightStepKg !== null) && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-bold uppercase tracking-wide text-[var(--muted)]">
+              Weight step ({unit})
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setWeightStepKg(null)}
+                aria-pressed={weightStepKg === null}
+                className={`min-h-[44px] rounded-full border-[2.5px] border-[var(--line)] px-3.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+                  weightStepKg === null
+                    ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                    : 'bg-[var(--card)] text-[var(--ink)]'
+                }`}
+              >
+                Global default
+              </button>
+              {(unit === 'lb'
+                ? LB_WEIGHT_STEP_OPTIONS
+                : KG_WEIGHT_STEP_OPTIONS
+              ).map((option) => {
+                const selected =
+                  weightStepKg !== null &&
+                  (unit === 'lb'
+                    ? stepKgToDisplay(weightStepKg, 'lb') === option
+                    : Math.abs(weightStepKg - option) < 0.001);
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setWeightStepKg(displayStepToKg(option, unit))}
+                    aria-pressed={selected}
+                    className={`min-h-[44px] rounded-full border-[2.5px] border-[var(--line)] px-3.5 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+                      selected
+                        ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                        : 'bg-[var(--card)] text-[var(--ink)]'
+                    }`}
+                  >
+                    ±{option} {unit}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">

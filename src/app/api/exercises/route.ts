@@ -6,7 +6,7 @@ import {
   listExercises,
 } from '@/lib/exercises/repository';
 import type { TrackingType } from '@/types/domain';
-import { isValidTrackingType } from './_validation';
+import { isValidTrackingType, parseNullableWeightStepKg } from './_validation';
 
 interface CreateExerciseBody {
   name?: unknown;
@@ -14,6 +14,7 @@ interface CreateExerciseBody {
   equipment?: unknown;
   category?: unknown;
   defaultRestSeconds?: unknown;
+  weightStepKg?: unknown;
 }
 
 export const GET = withApiHandler('exercises.list', async (req: NextRequest, ctx) => {
@@ -88,12 +89,18 @@ export const POST = withApiHandler('exercises.create', async (req: NextRequest, 
     defaultRestSeconds = body.defaultRestSeconds;
   }
 
+  const weightStepKg =
+    body.weightStepKg !== undefined
+      ? parseNullableWeightStepKg(body.weightStepKg)
+      : null;
+
   const exercise = await createCustomExercise(user.id, {
     name,
     trackingType: body.trackingType,
     equipment,
     category,
     defaultRestSeconds,
+    weightStepKg,
   });
 
   ctx.log.info('Created custom exercise', { exerciseId: exercise.id });

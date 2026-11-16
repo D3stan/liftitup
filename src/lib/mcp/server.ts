@@ -140,6 +140,12 @@ export const MCP_TOOLS_DEFINITIONS = [
         equipment: { type: 'string' },
         category: { type: 'string' },
         defaultRestSeconds: { type: 'integer', minimum: 0, maximum: 600 },
+        weightStepKg: {
+          type: ['number', 'null'],
+          minimum: 0.05,
+          maximum: 100,
+          description: 'Optional weight stepper increment in kg (null uses global default).',
+        },
         aliases: { type: 'array', items: { type: 'string' } },
       },
       required: ['name', 'trackingType'],
@@ -331,6 +337,7 @@ async function executeToolCall(
           timezone: user.timezone,
           enableSetQuality: user.enableSetQuality,
           restClockMode: user.restClockMode,
+          defaultWeightStepKg: user.defaultWeightStepKg,
           appleFitnessEnabled: user.appleFitnessEnabled,
         },
         recentBodyMetrics,
@@ -513,6 +520,25 @@ async function executeToolCall(
         ? args.aliases.filter((a): a is string => typeof a === 'string')
         : undefined;
 
+      let weightStepKg: number | null | undefined;
+      if (args.weightStepKg !== undefined) {
+        if (args.weightStepKg === null) {
+          weightStepKg = null;
+        } else if (
+          typeof args.weightStepKg !== 'number' ||
+          !Number.isFinite(args.weightStepKg) ||
+          args.weightStepKg <= 0 ||
+          args.weightStepKg > 100
+        ) {
+          return wrapToolResult(
+            { error: 'weightStepKg must be a positive number <= 100 or null' },
+            true,
+          );
+        } else {
+          weightStepKg = args.weightStepKg;
+        }
+      }
+
       if (typeof args.id === 'string' && args.id.trim()) {
         const updated = await updateCustomExercise(user.id, args.id.trim(), {
           name: rawName,
@@ -520,6 +546,7 @@ async function executeToolCall(
           equipment,
           category,
           defaultRestSeconds,
+          weightStepKg,
           aliases,
         });
         if (!updated) {
@@ -539,6 +566,7 @@ async function executeToolCall(
           equipment,
           category,
           defaultRestSeconds,
+          weightStepKg,
           aliases,
         });
         return wrapToolResult({ created: false, exercise: updated });
@@ -550,6 +578,7 @@ async function executeToolCall(
         equipment,
         category,
         defaultRestSeconds,
+        weightStepKg,
         aliases,
       });
       return wrapToolResult({ created: true, exercise: created });

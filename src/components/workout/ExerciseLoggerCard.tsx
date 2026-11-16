@@ -13,14 +13,28 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { WeightUnit } from '@/types/domain';
+import type { ExercisePrefill, WeightUnit } from '@/types/domain';
+import { Button, NumberStepper, Sheet } from '@/components/ui';
 import { parseRestInput } from '@/lib/workouts/rest';
+import {
+  DEFAULT_DISTANCE_STEP_M,
+  DEFAULT_REPS_STEP,
+  DEFAULT_TIME_STEP_SECONDS,
+  DEFAULT_WEIGHT_STEP_KG,
+  DEFAULT_WEIGHT_STEP_LB,
+  displayStepToKg,
+  KG_WEIGHT_STEP_OPTIONS,
+  LB_WEIGHT_STEP_OPTIONS,
+  type WeightStepSource,
+} from '@/lib/workouts/stepSize';
 import SetQualityPopover from './SetQualityPopover';
 import {
   getQualityBadgeColor,
   getQualityRowColor,
   getWeightFieldLabel,
+  kgToDisplay,
   parseOptionalInt,
+  parseOptionalNum,
   trackingUsesDistance,
   trackingUsesReps,
   trackingUsesTime,
@@ -36,6 +50,16 @@ export interface ExerciseLoggerCardProps {
   unit: WeightUnit;
   enableSetQuality: boolean;
   isEditing?: boolean;
+  weightStepDisplay?: number;
+  weightStepSource?: WeightStepSource;
+  isCustomExercise?: boolean;
+  hasUserStepOverride?: boolean;
+  hasCustomExerciseStep?: boolean;
+  prefill?: ExercisePrefill | null;
+  onChangeWeightStep?: (
+    exerciseId: string,
+    weightStepKg: number | null,
+  ) => Promise<void>;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
   onDeleteExercise: (index: number) => void;
@@ -53,6 +77,55 @@ export interface ExerciseLoggerCardProps {
   onStartRestTimer: (seconds: number, label: string) => void;
 }
 
+type NumericFieldKey = 'weightDisplay' | 'reps' | 'timeSeconds' | 'distanceM';
+
+function getFieldFallbackValue(
+  setIdx: number,
+  field: NumericFieldKey,
+  sets: LoggerSet[],
+  prefill: ExercisePrefill | null | undefined,
+  unit: WeightUnit,
+): number {
+  for (let j = setIdx - 1; j >= 0; j -= 1) {
+    const raw = sets[j]?.[field] ?? '';
+    const parsed =
+      field === 'reps' || field === 'timeSeconds'
+        ? parseOptionalInt(raw)
+        : parseOptionalNum(raw);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  const prefillSet =
+    prefill?.sets[setIdx] ??
+    (prefill && prefill.sets.length > 0
+      ? prefill.sets[prefill.sets.length - 1]
+      : null);
+
+  if (prefillSet) {
+    if (field === 'weightDisplay') {
+      const w = kgToDisplay(prefillSet.weightKg, unit);
+      if (w !== null) return w;
+    } else if (field === 'reps' && prefillSet.reps !== null) {
+      return prefillSet.reps;
+    } else if (field === 'timeSeconds' && prefillSet.timeSeconds !== null) {
+      return prefillSet.timeSeconds;
+    } else if (field === 'distanceM' && prefillSet.distanceM !== null) {
+      return prefillSet.distanceM;
+    }
+  }
+
+  return 0;
+}
+
+const STEP_SOURCE_LABEL: Record<WeightStepSource, string> = {
+  override: 'Personal override for this exercise',
+  exercise: 'Exercise default step',
+  global: 'Your Training default step',
+  default: 'App default step',
+};
+
 export default function ExerciseLoggerCard({
   exercise,
   index,
@@ -60,6 +133,13 @@ export default function ExerciseLoggerCard({
   unit,
   enableSetQuality,
   isEditing = false,
+  weightStepDisplay,
+  weightStepSource = 'default',
+  isCustomExercise = false,
+  hasUserStepOverride = false,
+  hasCustomExerciseStep = false,
+  prefill = null,
+  onChangeWeightStep,
   onMoveUp,
   onMoveDown,
   onDeleteExercise,
@@ -74,7 +154,18 @@ export default function ExerciseLoggerCard({
 }: ExerciseLoggerCardProps) {
   const [noteOpen, setNoteOpen] = useState(exercise.notes.trim().length > 0);
   const [qualitySetIdx, setQualitySetIdx] = useState<number | null>(null);
+  const [stepSheetOpen, setStepSheetOpen] = useState(false);
+  const [savingStep, setSavingStep] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const effectiveWeightStep =
+    weightStepDisplay ??
+    (unit === 'lb' ? DEFAULT_WEIGHT_STEP_LB : DEFAULT_WEIGHT_STEP_KG);
+  const weightStepOptions =
+    unit === 'lb' ? LB_WEIGHT_STEP_OPTIONS : KG_WEIGHT_STEP_OPTIONS;
+  const canResetStep = isCustomExercise
+    ? hasCustomExerciseStep
+    : hasUserStepOverride;
 
   const t = exercise.trackingType;
   const usesWeight = trackingUsesWeight(t);
@@ -99,7 +190,16 @@ export default function ExerciseLoggerCard({
     }
   };
 
-  const startLongPress = (setIdx: number) => {
+  const startLongPress = (
+    setIdx: number,
+    e: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (
+      e.target instanceof HTMLElement &&
+      e.target.closest('button, input, textarea')
+    ) {
+      return;
+    }
     const targetSet = exercise.sets[setIdx];
     const allowQuality =
       enableSetQuality ||
@@ -112,6 +212,17 @@ export default function ExerciseLoggerCard({
     longPressTimerRef.current = setTimeout(() => {
       setQualitySetIdx(setIdx);
     }, 480);
+  };
+
+  const handleSelectWeightStep = async (nextStepKg: number | null) => {
+    if (!onChangeWeightStep || savingStep) return;
+    setSavingStep(true);
+    try {
+      await onChangeWeightStep(exercise.exerciseId, nextStepKg);
+      setStepSheetOpen(false);
+    } finally {
+      setSavingStep(false);
+    }
   };
 
   const activeQualitySet =
@@ -134,6 +245,21 @@ export default function ExerciseLoggerCard({
               {exercise.exerciseName}
             </h3>
           </div>
+          {usesWeight && onChangeWeightStep && (
+            <button
+              type="button"
+              onClick={() => setStepSheetOpen(true)}
+              aria-label={`Weight step for ${exercise.exerciseName}: plus or minus ${effectiveWeightStep} ${unit}`}
+              className={`btn alt !min-h-[44px] shrink-0 !px-2.5 text-xs ${
+                canResetStep ? '!bg-[var(--gold-bg)]' : ''
+              }`}
+            >
+              <span>
+                ±{effectiveWeightStep}
+                {unit}
+              </span>
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -230,7 +356,7 @@ export default function ExerciseLoggerCard({
           return (
             <div
               key={setRow.localId}
-              onPointerDown={() => startLongPress(setIdx)}
+              onPointerDown={(e) => startLongPress(setIdx, e)}
               onPointerUp={cancelLongPress}
               onPointerLeave={cancelLongPress}
               onPointerCancel={cancelLongPress}
@@ -284,88 +410,122 @@ export default function ExerciseLoggerCard({
                 </div>
               </div>
 
-              {/* Stacked/2-col wide inputs (>=16px font, zero overlap) */}
+              {/* Full-width steppers at 375px, 2-col on sm+ (>=16px font, >=44px targets) */}
               <div
                 className={`grid gap-2 ${
-                  fieldCount >= 2 ? 'grid-cols-2' : 'grid-cols-1'
+                  fieldCount >= 2 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'
                 }`}
               >
                 {usesWeight && (
-                  <label className="block space-y-0.5">
+                  <div className="space-y-0.5">
                     <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       {getWeightFieldLabel(t, unit)}
                     </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
+                    <NumberStepper
                       value={setRow.weightDisplay}
-                      onChange={(e) =>
-                        onUpdateSet(index, setIdx, {
-                          weightDisplay: e.target.value,
-                        })
+                      onChange={(next) =>
+                        onUpdateSet(index, setIdx, { weightDisplay: next })
                       }
+                      step={effectiveWeightStep}
+                      min={0}
+                      inputMode="decimal"
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+                      fallbackValue={getFieldFallbackValue(
+                        setIdx,
+                        'weightDisplay',
+                        exercise.sets,
+                        prefill,
+                        unit,
+                      )}
+                      ariaLabel={`Set ${setIdx + 1} weight (${unit})`}
+                      decrementLabel={`Decrease set ${setIdx + 1} weight by ${effectiveWeightStep} ${unit}`}
+                      incrementLabel={`Increase set ${setIdx + 1} weight by ${effectiveWeightStep} ${unit}`}
                     />
-                  </label>
+                  </div>
                 )}
 
                 {usesReps && (
-                  <label className="block space-y-0.5">
+                  <div className="space-y-0.5">
                     <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       Reps
                     </span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
+                    <NumberStepper
                       value={setRow.reps}
-                      onChange={(e) =>
-                        onUpdateSet(index, setIdx, { reps: e.target.value })
+                      onChange={(next) =>
+                        onUpdateSet(index, setIdx, { reps: next })
                       }
+                      step={DEFAULT_REPS_STEP}
+                      min={0}
+                      inputMode="numeric"
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+                      fallbackValue={getFieldFallbackValue(
+                        setIdx,
+                        'reps',
+                        exercise.sets,
+                        prefill,
+                        unit,
+                      )}
+                      ariaLabel={`Set ${setIdx + 1} reps`}
+                      decrementLabel={`Decrease set ${setIdx + 1} reps`}
+                      incrementLabel={`Increase set ${setIdx + 1} reps`}
                     />
-                  </label>
+                  </div>
                 )}
 
                 {usesDist && (
-                  <label className="block space-y-0.5">
+                  <div className="space-y-0.5">
                     <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       Meters
                     </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
+                    <NumberStepper
                       value={setRow.distanceM}
-                      onChange={(e) =>
-                        onUpdateSet(index, setIdx, {
-                          distanceM: e.target.value,
-                        })
+                      onChange={(next) =>
+                        onUpdateSet(index, setIdx, { distanceM: next })
                       }
+                      step={DEFAULT_DISTANCE_STEP_M}
+                      min={0}
+                      inputMode="decimal"
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+                      fallbackValue={getFieldFallbackValue(
+                        setIdx,
+                        'distanceM',
+                        exercise.sets,
+                        prefill,
+                        unit,
+                      )}
+                      ariaLabel={`Set ${setIdx + 1} distance meters`}
+                      decrementLabel={`Decrease set ${setIdx + 1} distance by ${DEFAULT_DISTANCE_STEP_M}m`}
+                      incrementLabel={`Increase set ${setIdx + 1} distance by ${DEFAULT_DISTANCE_STEP_M}m`}
                     />
-                  </label>
+                  </div>
                 )}
 
                 {usesTime && (
-                  <label className="block space-y-0.5">
+                  <div className="space-y-0.5">
                     <span className="block text-xs font-bold uppercase text-[var(--muted)]">
                       Seconds
                     </span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
+                    <NumberStepper
                       value={setRow.timeSeconds}
-                      onChange={(e) =>
-                        onUpdateSet(index, setIdx, {
-                          timeSeconds: e.target.value,
-                        })
+                      onChange={(next) =>
+                        onUpdateSet(index, setIdx, { timeSeconds: next })
                       }
+                      step={DEFAULT_TIME_STEP_SECONDS}
+                      min={0}
+                      inputMode="numeric"
                       placeholder="0"
-                      className="min-h-[44px] w-full rounded-[8px] border-[2.5px] border-[var(--line)] bg-[var(--card)] px-3 text-base font-bold outline-none focus:bg-[var(--surface)]"
+                      fallbackValue={getFieldFallbackValue(
+                        setIdx,
+                        'timeSeconds',
+                        exercise.sets,
+                        prefill,
+                        unit,
+                      )}
+                      ariaLabel={`Set ${setIdx + 1} seconds`}
+                      decrementLabel={`Decrease set ${setIdx + 1} time by ${DEFAULT_TIME_STEP_SECONDS}s`}
+                      incrementLabel={`Increase set ${setIdx + 1} time by ${DEFAULT_TIME_STEP_SECONDS}s`}
                     />
-                  </label>
+                  </div>
                 )}
               </div>
 
@@ -494,6 +654,62 @@ export default function ExerciseLoggerCard({
             })
           }
         />
+      )}
+
+      {usesWeight && onChangeWeightStep && (
+        <Sheet
+          open={stepSheetOpen}
+          onClose={() => setStepSheetOpen(false)}
+          title="Weight Step"
+        >
+          <div className="space-y-3">
+            <div>
+              <p className="font-bold text-[var(--ink)]">
+                {exercise.exerciseName}
+              </p>
+              <p className="text-sm text-[var(--muted)]">
+                {isCustomExercise && weightStepSource === 'exercise'
+                  ? 'Custom exercise step'
+                  : STEP_SOURCE_LABEL[weightStepSource]}
+                : <strong>±{effectiveWeightStep} {unit}</strong>
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {weightStepOptions.map((option) => {
+                const selected = effectiveWeightStep === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    disabled={savingStep}
+                    onClick={() =>
+                      void handleSelectWeightStep(displayStepToKg(option, unit))
+                    }
+                    className={`min-h-[44px] min-w-[72px] rounded-xl border-[2.5px] border-[var(--line)] px-3 text-sm font-bold shadow-[2px_2px_0_var(--shadow-color)] ${
+                      selected
+                        ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                        : 'bg-[var(--card)] text-[var(--ink)]'
+                    }`}
+                  >
+                    ±{option} {unit}
+                  </button>
+                );
+              })}
+            </div>
+
+            {canResetStep && (
+              <Button
+                variant="alt"
+                loading={savingStep}
+                onClick={() => void handleSelectWeightStep(null)}
+                className="w-full"
+              >
+                Reset to default
+              </Button>
+            )}
+          </div>
+        </Sheet>
       )}
     </div>
   );

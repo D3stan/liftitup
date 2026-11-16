@@ -36,6 +36,7 @@ export interface CatalogExercise {
   category: ExerciseCategory;
   primaryMuscles: string[];
   aliases?: string[];
+  weightStepKg?: number;
 }
 
 export const EXERCISE_CATALOG: CatalogExercise[] = [
@@ -1639,6 +1640,7 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
     category: 'legs',
     primaryMuscles: ['quads', 'glutes'],
     aliases: ['leg press'],
+    weightStepKg: 5,
   },
   {
     id: 'single-leg-press',
@@ -1647,6 +1649,7 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
     equipment: 'machine',
     category: 'legs',
     primaryMuscles: ['quads', 'glutes'],
+    weightStepKg: 5,
   },
   {
     id: 'hack-squat',
@@ -3049,6 +3052,7 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
     equipment: 'machine',
     category: 'legs',
     primaryMuscles: ['quads', 'glutes'],
+    weightStepKg: 5,
   },
   {
     id: 'donkey-calf-raise',

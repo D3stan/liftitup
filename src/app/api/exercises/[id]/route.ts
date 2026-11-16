@@ -8,7 +8,7 @@ import {
   updateCustomExercise,
   type UpdateCustomExerciseInput,
 } from '@/lib/exercises/repository';
-import { isValidTrackingType } from '../_validation';
+import { isValidTrackingType, parseNullableWeightStepKg } from '../_validation';
 
 interface ExerciseParams {
   id: string;
@@ -20,6 +20,7 @@ interface PatchExerciseBody {
   equipment?: unknown;
   category?: unknown;
   defaultRestSeconds?: unknown;
+  weightStepKg?: unknown;
   hidden?: unknown;
 }
 
@@ -59,7 +60,8 @@ export const PATCH = withApiHandler<ExerciseParams>(
       body.trackingType !== undefined ||
       body.equipment !== undefined ||
       body.category !== undefined ||
-      body.defaultRestSeconds !== undefined;
+      body.defaultRestSeconds !== undefined ||
+      body.weightStepKg !== undefined;
 
     if (hasCustomEdits) {
       if (!existing.isCustom || existing.userId !== user.id) {
@@ -112,6 +114,10 @@ export const PATCH = withApiHandler<ExerciseParams>(
           );
         }
         patch.defaultRestSeconds = body.defaultRestSeconds;
+      }
+
+      if (body.weightStepKg !== undefined) {
+        patch.weightStepKg = parseNullableWeightStepKg(body.weightStepKg);
       }
 
       await updateCustomExercise(user.id, exerciseId, patch);
