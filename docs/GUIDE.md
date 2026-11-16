@@ -33,7 +33,7 @@ LiftItUp keeps the UI minimal—almost no explanatory text appears on screen. Th
 - **7 Day Cells**: tap any day to open `/workout/[date]`. Cell colours show status: green (completed), gold/cream (planned), beige (rest), red (skipped), dashed beige (`Off` / postponed), blue (`Jolly` / `Jolly+`).
 - **Today Card**: shows today's planned or logged workout.
   - **Start** → opens `/workout/[date]/log` (workouts never auto-start).
-  - **View / Edit** → opens `/workout/[date]` or `/workout/[date]/log` when already logged.
+  - **Open** → opens `/workout/[date]` when not startable (e.g., completed, rest, postponed, skipped).
   - **Plan** → opens the **Plan today** sheet:
     - **Postpone (`+1d`, `+2d`, `+3d`)**: shifts the rotation by 1, 2, or 3 days.
     - **Jolly day**: optional **Label** input + **Extra** (do a free workout without consuming today's planned slot) or **Instead** (replace today's planned workout; hidden on Rest days).
@@ -68,13 +68,13 @@ LiftItUp keeps the UI minimal—almost no explanatory text appears on screen. Th
   - **Save**: persists the rotation and anchors it.
 
 ### `/exercises`, `/exercises/new`, `/exercises/[id]/edit` — Exercise Library
-- **`/exercises`**: search by name or alias, filter by **Category** (`push`, `pull`, `legs`, `core`, `cardio`, `other`) or **Tracking Type**, toggle **Show hidden**, and tap **Eye** to hide/unhide any exercise from pickers.
+- **`/exercises`**: search by name or alias, filter by **Category** (`push`, `pull`, `legs`, `core`, `cardio`, `full_body`, `skill`, `other`) or **Tracking Type**, toggle **Show hidden**, and tap **Eye** to hide/unhide any exercise from pickers.
 - **`/exercises/new`**: create a custom exercise with **Name**, **Tracking Type**, **Category**, **Equipment**, and **Default Rest (s)** (`0–600`).
 - **`/exercises/[id]/edit`**: edit or delete a custom exercise (exercises already used in a workout or split cannot be deleted—hide them instead).
 
 ### `/progress` — Progress Charts
 - Filter by **Exercise** and range (**`4w`**, **`12w`**, **`All`**).
-- Displays SVG charts tailored to the selected exercise's tracking type (e.g. Best Weight, Best Added Load, Min Assistance, Best Reps, Best Hold, Best Distance), **Volume** (for `weight_reps` and `weighted_bodyweight`), **Weekly Sessions**, and **Bodyweight**.
+- Displays SVG charts tailored to the selected exercise's tracking type (e.g. Best Weight, Best Added Load, Min Assistance, Best Reps, Best Hold, Best Distance), **Volume** (for `weight_reps` and `weighted_bodyweight`), **Sessions / Week**, **Sets / Week**, and **Body Weight**.
 
 ### `/ai` — AI Onboarding & Plan Editor
 - **Copy onboarding prompt**: copies the onboarding prompt for a new plan.
@@ -107,7 +107,7 @@ LiftItUp uses a **queue of days** (`position 0..N-1`) rather than fixed Monday�
 - **Reset**: sets the queue pointer back to position `0` (Day 1) starting on the reset date.
 
 ### Example: `P-P-L-Rest-P-L`
-Suppose your 6-day queue is **Push → Pull → Legs → Rest → Push → Legs**, and you complete Push (Thu), Pull (Fri), Legs (Sat), and miss **Legs** on Sunday? No—say you did Push (Thu), Pull (Fri), rested or missed, and **Legs** was planned for **Sunday**, which you missed:
+Suppose your 6-day queue is **Push → Pull → Legs → Rest → Push → Legs**. You complete **Push** on Friday and **Pull** on Saturday, then miss **Legs** on Sunday:
 1. **Sunday**: empty → marked `skipped` (Legs), pointer stays on **Legs**.
 2. **Monday**: **Legs** carries forward and is planned for Monday. You log Legs → pointer advances to **Rest**.
 3. **Tuesday**: **Rest** is planned (the rest day is preserved, not broken).
