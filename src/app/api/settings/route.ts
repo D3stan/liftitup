@@ -10,6 +10,7 @@ import { getApiKeyByUserId } from '@/lib/db/sessions';
 import {
   isValidRestClockMode,
   isValidTimezone,
+  isValidWorkoutViewMode,
   localDateForTimezone,
   updateUserSettings,
   type UpdateUserSettingsInput,
@@ -28,6 +29,7 @@ interface SettingsPatchBody {
   themeVariant?: unknown;
   enableSetQuality?: unknown;
   restClockMode?: unknown;
+  defaultWorkoutView?: unknown;
   defaultWeightStepKg?: unknown;
   appleFitnessEnabled?: unknown;
 }
@@ -146,6 +148,15 @@ export const PATCH = withApiHandler(
         );
       }
       patch.restClockMode = body.restClockMode;
+    }
+
+    if (body.defaultWorkoutView !== undefined) {
+      if (!isValidWorkoutViewMode(body.defaultWorkoutView)) {
+        throw ApiError.validation(
+          'defaultWorkoutView must be "list" or "focus"',
+        );
+      }
+      patch.defaultWorkoutView = body.defaultWorkoutView;
     }
 
     if (body.defaultWeightStepKg !== undefined) {

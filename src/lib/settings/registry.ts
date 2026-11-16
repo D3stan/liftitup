@@ -43,7 +43,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryMeta[] = [
     id: 'training',
     title: 'Training',
     description:
-      'Rest clock mode, rest alerts, default weight step, and execution quality.',
+      'Default workout view (List or Focus), rest clock mode, rest alerts, default weight step, and execution quality.',
     href: '/settings/training',
   },
   {
@@ -188,6 +188,25 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   },
 
   // Training
+  {
+    id: 'training-default-workout-view',
+    title: 'Default Workout View',
+    description:
+      'Choose List (scrolling) or Focus (one exercise per screen) for new workouts.',
+    categoryId: 'training',
+    categoryTitle: 'Training',
+    href: '/settings/training#workout-view',
+    keywords: [
+      'focus',
+      'focus mode',
+      'list',
+      'workout view',
+      'default view',
+      'one exercise',
+      'swipe',
+      'training',
+    ],
+  },
   {
     id: 'training-rest-clock-mode',
     title: 'Rest Clock Mode',

@@ -21,6 +21,7 @@ import type {
   ExercisePrefill,
   WeightUnit,
   WorkoutSession,
+  WorkoutViewMode,
 } from '@/types/domain';
 import {
   ApiClientError,
@@ -40,6 +41,7 @@ import {
 import ExerciseLoggerCard from '@/components/workout/ExerciseLoggerCard';
 import ExercisePickerSheet from '@/components/workout/ExercisePickerSheet';
 import FloatingRestTimer from '@/components/workout/FloatingRestTimer';
+import FocusWorkoutView from '@/components/workout/FocusWorkoutView';
 import VariationSwapSheet from '@/components/workout/VariationSwapSheet';
 import {
   adjustRestClockTarget,
@@ -52,6 +54,11 @@ import {
   stopRestClock,
 } from '@/lib/workouts/clock';
 import {
+  adjustFocusIndexAfterDelete,
+  clampFocusIndex,
+  moveFocusExercise,
+} from '@/lib/workouts/focus';
+import {
   computeActualRestForWorkoutSets,
   getLastTimeRestForCompletedSet,
 } from '@/lib/workouts/rest';
@@ -60,6 +67,7 @@ import {
   buildPrefilledSets,
   displayToKg,
   formatDisplayDate,
+  formatPlannedTarget,
   kgToDisplay,
   localTodayYmd,
   makeLocalId,
@@ -127,6 +135,8 @@ function sessionToDraft(
     sessionStartSource: null,
     completionSeqCounter: 0,
     restClock: null,
+    viewMode: 'list',
+    focusExerciseIndex: 0,
     updatedAt: new Date().toISOString(),
     exercises: session.exercises.map((ex) => ({
       localId: makeLocalId('ex'),
@@ -195,6 +205,9 @@ function buildInitialDraft(params: {
     plannedDay.isRestDay ||
     statusIsJollyOrSkipped;
 
+  const defaultViewMode: WorkoutViewMode =
+    dayView.user.defaultWorkoutView === 'focus' ? 'focus' : 'list';
+
   if (forceJolly) {
     const mode: 'extra' | 'instead' =
       jollyParam === 'instead' || (!jollyParam && status === 'jolly_instead')
@@ -223,6 +236,8 @@ function buildInitialDraft(params: {
       sessionStartSource: null,
       completionSeqCounter: 0,
       restClock: null,
+      viewMode: defaultViewMode,
+      focusExerciseIndex: 0,
       updatedAt: new Date().toISOString(),
       exercises: [],
     };
@@ -240,6 +255,8 @@ function buildInitialDraft(params: {
     sessionStartSource: null,
     completionSeqCounter: 0,
     restClock: null,
+    viewMode: defaultViewMode,
+    focusExerciseIndex: 0,
     updatedAt: new Date().toISOString(),
     exercises: plannedDay.exercises.map((slot) => {
       const t = slot.trackingType ?? 'weight_reps';
@@ -362,6 +379,13 @@ function WorkoutLoggerInner() {
                 ? existingDraft.completionSeqCounter
                 : 0,
             restClock: existingDraft.restClock ?? null,
+            viewMode: existingDraft.viewMode === 'focus' ? 'focus' : 'list',
+            focusExerciseIndex: clampFocusIndex(
+              typeof existingDraft.focusExerciseIndex === 'number'
+                ? existingDraft.focusExerciseIndex
+                : 0,
+              existingDraft.exercises.length,
+            ),
           };
           setDraft(normalizedDraft);
           setRestoredFromStorage(true);
@@ -441,28 +465,74 @@ function WorkoutLoggerInner() {
     });
   };
 
+  const handleReorderExercise = (fromIndex: number, toIndex: number) => {
+    updateDraft((prev) => {
+      const { exercises, nextFocusIndex } = moveFocusExercise(
+        prev.exercises,
+        fromIndex,
+        toIndex,
+        prev.focusExerciseIndex ?? 0,
+      );
+      return {
+        ...prev,
+        exercises,
+        focusExerciseIndex: nextFocusIndex,
+      };
+    });
+  };
+
   const handleMoveUp = (index: number) => {
     if (index <= 0) return;
-    updateDraft((prev) => {
-      const next = [...prev.exercises];
-      [next[index - 1], next[index]] = [next[index], next[index - 1]];
-      return { ...prev, exercises: next };
-    });
+    handleReorderExercise(index, index - 1);
   };
 
   const handleMoveDown = (index: number) => {
     updateDraft((prev) => {
       if (index >= prev.exercises.length - 1) return prev;
-      const next = [...prev.exercises];
-      [next[index], next[index + 1]] = [next[index + 1], next[index]];
-      return { ...prev, exercises: next };
+      const { exercises, nextFocusIndex } = moveFocusExercise(
+        prev.exercises,
+        index,
+        index + 1,
+        prev.focusExerciseIndex ?? 0,
+      );
+      return {
+        ...prev,
+        exercises,
+        focusExerciseIndex: nextFocusIndex,
+      };
     });
   };
 
   const handleDeleteExercise = (index: number) => {
+    updateDraft((prev) => {
+      const nextExercises = prev.exercises.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        exercises: nextExercises,
+        focusExerciseIndex: adjustFocusIndexAfterDelete(
+          prev.focusExerciseIndex ?? 0,
+          index,
+          nextExercises.length,
+        ),
+      };
+    });
+  };
+
+  const handleChangeViewMode = (nextMode: WorkoutViewMode) => {
     updateDraft((prev) => ({
       ...prev,
-      exercises: prev.exercises.filter((_, i) => i !== index),
+      viewMode: nextMode,
+      focusExerciseIndex: clampFocusIndex(
+        prev.focusExerciseIndex ?? 0,
+        prev.exercises.length,
+      ),
+    }));
+  };
+
+  const handleChangeFocusIndex = (nextIndex: number) => {
+    updateDraft((prev) => ({
+      ...prev,
+      focusExerciseIndex: clampFocusIndex(nextIndex, prev.exercises.length),
     }));
   };
 
@@ -701,10 +771,19 @@ function WorkoutLoggerInner() {
       }),
     };
 
-    updateDraft((prev) => ({
-      ...prev,
-      exercises: [...prev.exercises, newExercise],
-    }));
+    updateDraft((prev) => {
+      const nextExercises = [...prev.exercises, newExercise];
+      const prevFocus = prev.focusExerciseIndex ?? 0;
+      const nextFocusIndex =
+        prev.viewMode === 'focus' && prevFocus >= prev.exercises.length
+          ? prev.exercises.length
+          : clampFocusIndex(prevFocus, nextExercises.length);
+      return {
+        ...prev,
+        exercises: nextExercises,
+        focusExerciseIndex: nextFocusIndex,
+      };
+    });
   };
 
   const handleSwapComplete = (
@@ -1088,24 +1167,73 @@ function WorkoutLoggerInner() {
     }
   }
 
+  const viewMode: WorkoutViewMode =
+    draft.viewMode === 'focus' ? 'focus' : 'list';
+  const mergedPrefillsByExerciseId = {
+    ...dayView.prefillByExerciseId,
+    ...extraPrefills,
+  };
+  const plannedTargetByScheduleDayExerciseId: Record<string, string> = {};
+  if (dayView.calendarDay.plannedDay) {
+    for (const slot of dayView.calendarDay.plannedDay.exercises) {
+      plannedTargetByScheduleDayExerciseId[slot.id] = formatPlannedTarget(
+        slot,
+        dayView.user.unit,
+      );
+    }
+  }
+
   return (
     <main
       className={`mx-auto max-w-xl space-y-4 px-4 pt-4 ${
-        restClockActive || timerPickerOpen ? 'pb-64' : 'pb-48'
+        viewMode === 'list' && (restClockActive || timerPickerOpen)
+          ? 'pb-64'
+          : 'pb-48'
       }`}
     >
       {/* Top Bar */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
         <Link
           href={`/workout/${encodeURIComponent(date)}`}
-          className="btn alt !min-h-[44px] !px-3 text-base"
+          className="btn alt !min-h-[44px] !px-2.5 text-sm"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
         </Link>
 
+        <div
+          role="group"
+          aria-label="Workout view mode"
+          className="inline-flex min-h-[44px] items-center rounded-[10px] border-[2.5px] border-[var(--line)] bg-[var(--surface-alt)] p-0.5 shadow-[2px_2px_0_var(--shadow-color)]"
+        >
+          <button
+            type="button"
+            aria-pressed={viewMode === 'list'}
+            onClick={() => handleChangeViewMode('list')}
+            className={`min-h-[36px] rounded-[7px] px-2.5 text-xs font-bold transition-colors motion-reduce:transition-none ${
+              viewMode === 'list'
+                ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                : 'text-[var(--muted)]'
+            }`}
+          >
+            List
+          </button>
+          <button
+            type="button"
+            aria-pressed={viewMode === 'focus'}
+            onClick={() => handleChangeViewMode('focus')}
+            className={`min-h-[36px] rounded-[7px] px-2.5 text-xs font-bold transition-colors motion-reduce:transition-none ${
+              viewMode === 'focus'
+                ? 'bg-[var(--gold)] text-[var(--btn-gold-fg)]'
+                : 'text-[var(--muted)]'
+            }`}
+          >
+            Focus
+          </button>
+        </div>
+
         <div className="flex items-center gap-1.5">
-          <span className="pill text-sm">{formatDisplayDate(date)}</span>
+          <span className="pill !px-2 text-xs">{formatDisplayDate(date)}</span>
           <button
             type="button"
             onClick={() => {
@@ -1123,7 +1251,97 @@ function WorkoutLoggerInner() {
         </div>
       </div>
 
-      {/* User-Driven Session Clock (new workouts) or Editable Session Details (edit mode) */}
+      {/* Restored Draft Pill */}
+      {restoredFromStorage && (
+        <div className="flex items-center justify-between gap-2 rounded-[8px] border-2 border-[var(--line)] bg-[var(--gold-bg)] px-3 py-2 text-sm font-bold">
+          <span>Draft restored</span>
+          <button
+            type="button"
+            onClick={() => {
+              clearUserWorkoutDraft(dayView.user.id, draftKey);
+              loadData(true);
+            }}
+            className="inline-flex items-center gap-1 underline"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>Reset</span>
+          </button>
+        </div>
+      )}
+
+      {viewMode === 'focus' ? (
+        <FocusWorkoutView
+          draft={draft}
+          date={date}
+          isEditing={Boolean(sessionId)}
+          saving={saving}
+          deleting={deleting}
+          unit={dayView.user.unit}
+          enableSetQuality={dayView.user.enableSetQuality}
+          preferredRestMode={dayView.user.restClockMode}
+          defaultWeightStepKg={dayView.user.defaultWeightStepKg}
+          sessionNowMs={sessionNowMs}
+          completedSetsTotal={completedSetsTotal}
+          canOfferInstead={canOfferInstead}
+          plannedDayLabel={dayView.calendarDay.plannedDay?.label ?? null}
+          plannedTargetByScheduleDayExerciseId={
+            plannedTargetByScheduleDayExerciseId
+          }
+          prefillsByExerciseId={mergedPrefillsByExerciseId}
+          exerciseMetaById={exerciseByIdMap}
+          exerciseStepsById={dayView.exerciseStepsById}
+          lastTimeRest={lastTimeRest}
+          timerPickerOpen={timerPickerOpen}
+          onCloseTimerPicker={() => setTimerPickerOpen(false)}
+          noteOpen={noteOpen}
+          onToggleNoteOpen={setNoteOpen}
+          startTimeInput={isoToLocalTimeInput(draft.startedAt)}
+          onChangeFocusIndex={handleChangeFocusIndex}
+          onReorderExercise={handleReorderExercise}
+          onStartSession={handleStartSession}
+          onUpdateTitle={(title) =>
+            updateDraft((prev) => ({ ...prev, title }))
+          }
+          onUpdateWorkoutNotes={(notes) =>
+            updateDraft((prev) => ({ ...prev, notes }))
+          }
+          onUpdateJollyMode={(jollyMode) =>
+            updateDraft((prev) => ({ ...prev, jollyMode }))
+          }
+          onUpdateSessionDate={(sessionDate) =>
+            updateDraft((prev) => ({ ...prev, sessionDate }))
+          }
+          onUpdateStartedAt={(hhmm) =>
+            updateDraft((prev) => {
+              const ymd = prev.sessionDate ?? date;
+              const nextIso = combineDateAndLocalTimeToIso(ymd, hhmm);
+              return nextIso ? { ...prev, startedAt: nextIso } : prev;
+            })
+          }
+          onUpdateDurationMinutes={(durationMinutes) =>
+            updateDraft((prev) => ({ ...prev, durationMinutes }))
+          }
+          onDeleteExercise={handleDeleteExercise}
+          onOpenSwap={(i) => setSwapTargetIdx(i)}
+          onOpenPicker={() => setPickerOpen(true)}
+          onChangeExNotes={handleChangeExNotes}
+          onUpdateSet={handleUpdateSet}
+          onToggleSetComplete={handleToggleSetComplete}
+          onAddSet={handleAddSet}
+          onRemoveSet={handleRemoveSet}
+          onCheckAll={handleCheckAll}
+          onChangeWeightStep={handleChangeWeightStep}
+          onStartRestTimer={startRestTimer}
+          onAdjustRestTarget={adjustRestTimer}
+          onStopRestForNextSet={handleStopRestForNextSet}
+          onDismissRestClock={handleDismissRestClock}
+          onRestAlertFired={handleRestAlertFired}
+          onSave={handleSave}
+          onRequestDeleteSession={() => setConfirmDeleteOpen(true)}
+        />
+      ) : (
+        <>
+          {/* User-Driven Session Clock (new workouts) or Editable Session Details (edit mode) */}
       {!sessionId ? (
         <section
           aria-label="Session clock"
@@ -1233,24 +1451,6 @@ function WorkoutLoggerInner() {
             </label>
           </div>
         </section>
-      )}
-
-      {/* Restored Draft Pill */}
-      {restoredFromStorage && (
-        <div className="flex items-center justify-between gap-2 rounded-[8px] border-2 border-[var(--line)] bg-[var(--gold-bg)] px-3 py-2 text-sm font-bold">
-          <span>Draft restored</span>
-          <button
-            type="button"
-            onClick={() => {
-              clearUserWorkoutDraft(dayView.user.id, draftKey);
-              loadData(true);
-            }}
-            className="inline-flex items-center gap-1 underline"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>Reset</span>
-          </button>
-        </div>
       )}
 
       {/* Session Title + Jolly Mode + Optional Workout Note */}
@@ -1440,6 +1640,8 @@ function WorkoutLoggerInner() {
           </Button>
         )}
       </div>
+        </>
+      )}
 
       {/* Sheets & Timer */}
       <ExercisePickerSheet
@@ -1460,25 +1662,24 @@ function WorkoutLoggerInner() {
           scheduleDayExerciseId={swapExercise.scheduleDayExerciseId}
           allowScheduleScope={!sessionId && Boolean(swapExercise.scheduleDayExerciseId)}
           exercises={exercisesCatalog}
-          prefillByExerciseId={{
-            ...dayView.prefillByExerciseId,
-            ...extraPrefills,
-          }}
+          prefillByExerciseId={mergedPrefillsByExerciseId}
           onSwapComplete={handleSwapComplete}
         />
       )}
 
-      <FloatingRestTimer
-        restClock={draft.restClock}
-        preferredMode={dayView.user.restClockMode}
-        lastTimeRest={lastTimeRest}
-        isExpandedPicker={timerPickerOpen}
-        onAdjustTarget={adjustRestTimer}
-        onStartPreset={startRestTimer}
-        onStopForNextSet={handleStopRestForNextSet}
-        onDismiss={handleDismissRestClock}
-        onAlertFired={handleRestAlertFired}
-      />
+      {viewMode === 'list' && (
+        <FloatingRestTimer
+          restClock={draft.restClock}
+          preferredMode={dayView.user.restClockMode}
+          lastTimeRest={lastTimeRest}
+          isExpandedPicker={timerPickerOpen}
+          onAdjustTarget={adjustRestTimer}
+          onStartPreset={startRestTimer}
+          onStopForNextSet={handleStopRestForNextSet}
+          onDismiss={handleDismissRestClock}
+          onAlertFired={handleRestAlertFired}
+        />
+      )}
 
       <Sheet
         open={confirmDeleteOpen}

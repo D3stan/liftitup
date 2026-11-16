@@ -16,6 +16,8 @@ export type WeightUnit = 'kg' | 'lb';
 
 export type RestClockMode = 'stopwatch' | 'countdown';
 
+export type WorkoutViewMode = 'list' | 'focus';
+
 export type AppleHealthReceiveKind = 'workout' | 'weight' | 'both';
 
 export type AppTheme =
@@ -42,6 +44,7 @@ export interface UserProfile {
   themeVariant: ThemeVariant;
   enableSetQuality: boolean;
   restClockMode: RestClockMode;
+  defaultWorkoutView: WorkoutViewMode;
   defaultWeightStepKg: number | null;
   appleFitnessEnabled: boolean;
   appleHealthLastReceivedAt: string | null;

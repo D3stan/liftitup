@@ -196,6 +196,7 @@ export async function getWorkoutDayView(
       weightKg: user.weightKg,
       enableSetQuality: user.enableSetQuality,
       restClockMode: user.restClockMode,
+      defaultWorkoutView: user.defaultWorkoutView,
       defaultWeightStepKg: user.defaultWeightStepKg,
       timezone: user.timezone,
     },
