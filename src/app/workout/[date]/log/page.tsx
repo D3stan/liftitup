@@ -847,9 +847,10 @@ function WorkoutLoggerInner() {
         const updated = res.exercise;
         setExercisesCatalog((prev) => {
           const exists = prev.some((e) => e.id === updated.id);
-          return exists
-            ? prev.map((e) => (e.id === updated.id ? updated : e))
-            : [...prev, updated];
+          if (exists) {
+            return prev.map((e) => (e.id === updated.id ? updated : e));
+          }
+          return updated.isHidden ? prev : [...prev, updated];
         });
         setDayView((prev) =>
           prev

@@ -415,6 +415,26 @@ test('catalog sync, user_exercise_prefs isolation, reset deletes row, deletion c
     assert.equal(patchCustomRes.status, 200);
     assert.equal((await patchCustomRes.json()).exercise.weightStepKg, 1);
 
+    // 5b. Another user cannot view or mutate userA's custom exercise step
+    const tokenB = 'tok_phase4_b';
+    await createAuthSession(
+      userB.id,
+      hashToken(tokenB),
+      new Date(Date.now() + 3600_000).toISOString(),
+    );
+    const forbiddenPutRes = await putStepRoute(
+      makeCookieReq(
+        `http://localhost/api/exercises/${customEx.id}/step`,
+        'PUT',
+        tokenB,
+        { weightStepKg: 10 },
+      ),
+      { params: Promise.resolve({ id: customEx.id }) },
+    );
+    assert.equal(forbiddenPutRes.status, 404);
+    assert.equal((await getExerciseById(userA.id, customEx.id))?.weightStepKg, 1);
+    assert.equal(await getUserExercisePref(userB.id, customEx.id), null);
+
     // 6. Reset deletes the user_exercise_prefs row so catalog changes reach the user again
     const delCatalogStepRes = await deleteStepRoute(
       makeCookieReq(

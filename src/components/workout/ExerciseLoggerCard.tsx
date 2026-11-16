@@ -195,7 +195,7 @@ export default function ExerciseLoggerCard({
     e: React.PointerEvent<HTMLDivElement>,
   ) => {
     if (
-      e.target instanceof HTMLElement &&
+      e.target instanceof Element &&
       e.target.closest('button, input, textarea')
     ) {
       return;

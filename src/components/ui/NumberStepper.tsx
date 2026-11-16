@@ -62,6 +62,10 @@ export function NumberStepper({
   }, []);
 
   useEffect(() => {
+    if (disabled) stopHold();
+  }, [disabled, stopHold]);
+
+  useEffect(() => {
     const onWindowRelease = () => stopHold();
     window.addEventListener('pointerup', onWindowRelease);
     window.addEventListener('pointercancel', onWindowRelease);
@@ -130,7 +134,7 @@ export function NumberStepper({
         onClick={(e) => handleButtonClick(e, -1)}
         className="stepper-btn shrink-0 disabled:cursor-not-allowed disabled:opacity-45"
       >
-        <Minus className="h-4 w-4" aria-hidden="true" />
+        <Minus className="pointer-events-none h-4 w-4" aria-hidden="true" />
       </button>
 
       <input
@@ -159,7 +163,7 @@ export function NumberStepper({
         onClick={(e) => handleButtonClick(e, 1)}
         className="stepper-btn shrink-0 disabled:cursor-not-allowed disabled:opacity-45"
       >
-        <Plus className="h-4 w-4" aria-hidden="true" />
+        <Plus className="pointer-events-none h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   );
