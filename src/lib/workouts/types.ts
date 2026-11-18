@@ -19,6 +19,9 @@ export interface WorkoutDayViewResponse {
     unit: WeightUnit;
     weightKg: number;
     enableSetQuality: boolean;
+    alwaysShowRir: boolean;
+    enableSetNoteTags: boolean;
+    enableSetNoteHint: boolean;
     restClockMode: RestClockMode;
     defaultWeightStepKg: number | null;
     timezone: string;
@@ -50,6 +53,9 @@ export interface SaveWorkoutSetInput {
   actualRestSeconds?: number | null;
   restApproximate?: boolean;
   executionQualityPct?: number | null;
+  rir?: number | null;
+  notes?: string;
+  isWarmup?: boolean;
   isCompleted?: boolean;
   repQualities?: SaveWorkoutRepQualityInput[];
 }
@@ -92,8 +98,8 @@ export interface UpdateWorkoutSessionInput {
 export interface SwapExerciseInput {
   dateKey: string;
   scheduleDayExerciseId: string;
-  toExerciseId: string;
-  scope: 'session' | 'schedule';
+  toExerciseId?: string;
+  scope: 'session' | 'schedule' | 'revert';
 }
 
 export interface SwapExerciseResult {

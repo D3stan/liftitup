@@ -19,6 +19,7 @@ interface PutScheduleExerciseInput {
   id?: unknown;
   exerciseId?: unknown;
   targetSets?: unknown;
+  targetWarmupSets?: unknown;
   targetReps?: unknown;
   targetRepsMin?: unknown;
   targetRepsMax?: unknown;
@@ -46,6 +47,7 @@ interface ValidatedExercise {
   id: string | null;
   exerciseId: string;
   targetSets: number;
+  targetWarmupSets: number;
   targetReps: number | null;
   targetRepsMin: number | null;
   targetRepsMax: number | null;
@@ -150,6 +152,13 @@ function validateDays(rawDays: unknown): ValidatedDay[] {
           1,
           20,
         ) ?? 3;
+      const targetWarmupSets =
+        parseOptionalInt(
+          ex.targetWarmupSets ?? 0,
+          `days[${dayIdx}].exercises[${exIdx}].targetWarmupSets`,
+          0,
+          10,
+        ) ?? 0;
       const restSeconds =
         parseOptionalInt(
           ex.restSeconds ?? 120,
@@ -211,6 +220,7 @@ function validateDays(rawDays: unknown): ValidatedDay[] {
         id: exRowId,
         exerciseId,
         targetSets,
+        targetWarmupSets,
         targetReps,
         targetRepsMin,
         targetRepsMax,
@@ -224,6 +234,18 @@ function validateDays(rawDays: unknown): ValidatedDay[] {
 
     return { id, label, isRestDay: false, exercises };
   });
+}
+
+async function deleteSessionSwapsForSlotIds(
+  userId: string,
+  slotIds: string[],
+): Promise<void> {
+  if (slotIds.length === 0) return;
+  const placeholders = slotIds.map((_, i) => `$${i + 2}`).join(', ');
+  await query(
+    `DELETE FROM session_swaps WHERE user_id = $1 AND schedule_day_exercise_id IN (${placeholders})`,
+    [userId, ...slotIds],
+  );
 }
 
 export const GET = withApiHandler('api.schedule.get', async (req, ctx) => {
@@ -329,8 +351,12 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
       scheduleId = oldSchedule.id;
       const oldDayIds = new Set(oldSchedule.days.map((d) => d.id));
       const oldExByDay = new Map<string, Set<string>>();
+      const oldExerciseIdBySdeId = new Map<string, string>();
       for (const d of oldSchedule.days) {
         oldExByDay.set(d.id, new Set(d.exercises.map((e) => e.id)));
+        for (const e of d.exercises) {
+          oldExerciseIdBySdeId.set(e.id, e.exerciseId);
+        }
       }
 
       // Resolve final day IDs (preserving existing IDs belonging to this schedule)
@@ -351,6 +377,10 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
       // Delete removed days first (ON DELETE CASCADE cleans up their exercises)
       for (const oldDay of oldSchedule.days) {
         if (!usedDayIds.has(oldDay.id)) {
+          await deleteSessionSwapsForSlotIds(
+            auth.user.id,
+            oldDay.exercises.map((e) => e.id),
+          );
           await query('DELETE FROM schedule_days WHERE id = $1', [oldDay.id]);
         }
       }
@@ -396,27 +426,31 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
           return { ...ex, resolvedId: exRowId, isExisting: isExistingEx };
         });
 
-        for (const oldExId of existingExSet) {
-          if (!usedExIds.has(oldExId)) {
-            await query('DELETE FROM schedule_day_exercises WHERE id = $1', [
-              oldExId,
-            ]);
-          }
+        const removedExIds = Array.from(existingExSet).filter(
+          (oldExId) => !usedExIds.has(oldExId),
+        );
+        await deleteSessionSwapsForSlotIds(auth.user.id, removedExIds);
+        for (const oldExId of removedExIds) {
+          await query('DELETE FROM schedule_day_exercises WHERE id = $1', [
+            oldExId,
+          ]);
         }
 
         for (let orderIdx = 0; orderIdx < resolvedExercises.length; orderIdx++) {
           const ex = resolvedExercises[orderIdx];
           if (ex.isExisting) {
+            const oldExerciseId = oldExerciseIdBySdeId.get(ex.resolvedId);
             await query(
               `UPDATE schedule_day_exercises
-               SET exercise_id = $1, order_index = $2, target_sets = $3, target_reps = $4,
-                   target_reps_min = $5, target_reps_max = $6, target_time_seconds = $7,
-                   target_weight_kg = $8, target_distance_m = $9, rest_seconds = $10, notes = $11
-               WHERE id = $12`,
+               SET exercise_id = $1, order_index = $2, target_sets = $3, target_warmup_sets = $4, target_reps = $5,
+                   target_reps_min = $6, target_reps_max = $7, target_time_seconds = $8,
+                   target_weight_kg = $9, target_distance_m = $10, rest_seconds = $11, notes = $12
+               WHERE id = $13`,
               [
                 ex.exerciseId,
                 orderIdx,
                 ex.targetSets,
+                ex.targetWarmupSets,
                 ex.targetReps,
                 ex.targetRepsMin,
                 ex.targetRepsMax,
@@ -428,19 +462,26 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
                 ex.resolvedId,
               ],
             );
+            if (oldExerciseId && oldExerciseId !== ex.exerciseId) {
+              await query(
+                'DELETE FROM session_swaps WHERE user_id = $1 AND schedule_day_exercise_id = $2 AND date_key >= $3',
+                [auth.user.id, ex.resolvedId, todayStr],
+              );
+            }
           } else {
             await query(
               `INSERT INTO schedule_day_exercises (
-                 id, schedule_day_id, exercise_id, order_index, target_sets, target_reps,
+                 id, schedule_day_id, exercise_id, order_index, target_sets, target_warmup_sets, target_reps,
                  target_reps_min, target_reps_max, target_time_seconds, target_weight_kg,
                  target_distance_m, rest_seconds, notes
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
               [
                 ex.resolvedId,
                 d.resolvedId,
                 ex.exerciseId,
                 orderIdx,
                 ex.targetSets,
+                ex.targetWarmupSets,
                 ex.targetReps,
                 ex.targetRepsMin,
                 ex.targetRepsMax,
@@ -489,16 +530,17 @@ export const PUT = withApiHandler('api.schedule.put', async (req, ctx) => {
           const ex = d.exercises[orderIdx];
           await query(
             `INSERT INTO schedule_day_exercises (
-               id, schedule_day_id, exercise_id, order_index, target_sets, target_reps,
+               id, schedule_day_id, exercise_id, order_index, target_sets, target_warmup_sets, target_reps,
                target_reps_min, target_reps_max, target_time_seconds, target_weight_kg,
                target_distance_m, rest_seconds, notes
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
             [
               crypto.randomUUID(),
               dayId,
               ex.exerciseId,
               orderIdx,
               ex.targetSets,
+              ex.targetWarmupSets,
               ex.targetReps,
               ex.targetRepsMin,
               ex.targetRepsMax,

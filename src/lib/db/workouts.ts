@@ -41,6 +41,7 @@ type DbScheduleDayExerciseRow = {
   tracking_type: TrackingType;
   order_index: number;
   target_sets: number;
+  target_warmup_sets?: number;
   target_reps: number | null;
   target_reps_min: number | null;
   target_reps_max: number | null;
@@ -104,6 +105,9 @@ type DbWorkoutSetRow = {
   actual_rest_seconds: number | null;
   rest_approximate: number;
   execution_quality_pct: number | null;
+  rir?: number | null;
+  notes?: string;
+  is_warmup?: number;
   is_completed: number;
   created_at: string;
 };
@@ -187,6 +191,7 @@ export async function getActiveSchedule(
         trackingType: r.tracking_type,
         orderIndex: Number(r.order_index),
         targetSets: Number(r.target_sets),
+        targetWarmupSets: Number(r.target_warmup_sets ?? 0),
         targetReps: r.target_reps === null ? null : Number(r.target_reps),
         targetRepsMin:
           r.target_reps_min === null ? null : Number(r.target_reps_min),
@@ -346,6 +351,9 @@ async function hydrateSessions(
           s.execution_quality_pct === null
             ? null
             : Number(s.execution_quality_pct),
+        rir: s.rir === null || s.rir === undefined ? null : Number(s.rir),
+        notes: s.notes ?? '',
+        isWarmup: Boolean(s.is_warmup),
         isCompleted: Boolean(s.is_completed),
         createdAt: s.created_at,
         ...(repQualities && repQualities.length > 0 ? { repQualities } : {}),
@@ -457,19 +465,46 @@ export async function getLastPerformanceByExerciseIds(
     SELECT we.id AS workout_exercise_id, ws.session_date
     FROM workout_exercises we
     JOIN workout_sessions ws ON ws.id = we.session_id
+    JOIN workout_sets s ON s.workout_exercise_id = we.id
     WHERE ws.user_id = $1
       AND ws.completed_at IS NOT NULL
       AND we.exercise_id = $2
+      AND s.is_completed = 1
+      AND s.is_warmup = 0
       ${dateFilter}
+    GROUP BY we.id, ws.session_date, ws.started_at
     ORDER BY ws.session_date DESC, ws.started_at DESC
     LIMIT 1
   `;
 
   const setsSql = `
     SELECT set_number, weight_kg, reps, time_seconds, distance_m, rest_seconds,
-           actual_rest_seconds, rest_approximate
+           actual_rest_seconds, rest_approximate, rir, notes
     FROM workout_sets
-    WHERE workout_exercise_id = $1 AND is_completed = 1
+    WHERE workout_exercise_id = $1 AND is_completed = 1 AND is_warmup = 0
+    ORDER BY set_number ASC
+  `;
+
+  const warmupMatchSql = `
+    SELECT we.id AS workout_exercise_id, ws.session_date
+    FROM workout_exercises we
+    JOIN workout_sessions ws ON ws.id = we.session_id
+    JOIN workout_sets s ON s.workout_exercise_id = we.id
+    WHERE ws.user_id = $1
+      AND ws.completed_at IS NOT NULL
+      AND we.exercise_id = $2
+      AND s.is_completed = 1
+      AND s.is_warmup = 1
+      ${dateFilter}
+    GROUP BY we.id, ws.session_date, ws.started_at
+    ORDER BY ws.session_date DESC, ws.started_at DESC
+    LIMIT 1
+  `;
+
+  const warmupSetsSql = `
+    SELECT set_number, weight_kg, reps, time_seconds, distance_m, rir, notes
+    FROM workout_sets
+    WHERE workout_exercise_id = $1 AND is_completed = 1 AND is_warmup = 1
     ORDER BY set_number ASC
   `;
 
@@ -477,28 +512,35 @@ export async function getLastPerformanceByExerciseIds(
     const matchParams = beforeDate
       ? [userId, exerciseId, beforeDate]
       : [userId, exerciseId];
-    const match = await queryOne<{
-      workout_exercise_id: string;
-      session_date: string;
-    }>(matchSql, matchParams);
+    const [match, warmupMatch] = await Promise.all([
+      queryOne<{
+        workout_exercise_id: string;
+        session_date: string;
+      }>(matchSql, matchParams),
+      queryOne<{
+        workout_exercise_id: string;
+        session_date: string;
+      }>(warmupMatchSql, matchParams),
+    ]);
 
-    if (!match) continue;
+    if (!match && !warmupMatch) continue;
 
-    const setRes = await query<{
-      set_number: number;
-      weight_kg: number | null;
-      reps: number | null;
-      time_seconds: number | null;
-      distance_m: number | null;
-      rest_seconds: number | null;
-      actual_rest_seconds: number | null;
-      rest_approximate: number;
-    }>(setsSql, [match.workout_exercise_id]);
+    let sets: ExercisePrefill['sets'] = [];
+    if (match) {
+      const setRes = await query<{
+        set_number: number;
+        weight_kg: number | null;
+        reps: number | null;
+        time_seconds: number | null;
+        distance_m: number | null;
+        rest_seconds: number | null;
+        actual_rest_seconds: number | null;
+        rest_approximate: number;
+        rir: number | null;
+        notes: string;
+      }>(setsSql, [match.workout_exercise_id]);
 
-    result[exerciseId] = {
-      exerciseId,
-      lastSessionDate: match.session_date,
-      sets: setRes.rows.map((s) => ({
+      sets = setRes.rows.map((s) => ({
         setNumber: Number(s.set_number),
         weightKg: s.weight_kg === null ? null : Number(s.weight_kg),
         reps: s.reps === null ? null : Number(s.reps),
@@ -510,7 +552,40 @@ export async function getLastPerformanceByExerciseIds(
             ? null
             : Number(s.actual_rest_seconds),
         restApproximate: Boolean(s.rest_approximate),
-      })),
+        rir: s.rir === null || s.rir === undefined ? null : Number(s.rir),
+        notes: s.notes ?? '',
+      }));
+    }
+
+    let warmupSets: ExercisePrefill['warmupSets'];
+    if (warmupMatch) {
+      const warmupRes = await query<{
+        set_number: number;
+        weight_kg: number | null;
+        reps: number | null;
+        time_seconds: number | null;
+        distance_m: number | null;
+        rir: number | null;
+        notes: string;
+      }>(warmupSetsSql, [warmupMatch.workout_exercise_id]);
+      if (warmupRes.rows.length > 0) {
+        warmupSets = warmupRes.rows.map((s) => ({
+          setNumber: Number(s.set_number),
+          weightKg: s.weight_kg === null ? null : Number(s.weight_kg),
+          reps: s.reps === null ? null : Number(s.reps),
+          timeSeconds: s.time_seconds === null ? null : Number(s.time_seconds),
+          distanceM: s.distance_m === null ? null : Number(s.distance_m),
+          rir: s.rir === null || s.rir === undefined ? null : Number(s.rir),
+          notes: s.notes ?? '',
+        }));
+      }
+    }
+
+    result[exerciseId] = {
+      exerciseId,
+      lastSessionDate: match?.session_date ?? warmupMatch!.session_date,
+      sets,
+      ...(warmupSets ? { warmupSets } : {}),
     };
   }
 

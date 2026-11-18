@@ -62,7 +62,6 @@ type SessionSwapRow = {
   exercise_id: string;
   exercise_name: string;
   tracking_type: TrackingType;
-  default_rest_seconds: number;
 };
 
 async function getSessionSwapsForDate(
@@ -75,8 +74,7 @@ async function getSessionSwapsForDate(
         ss.schedule_day_exercise_id,
         ss.exercise_id,
         e.name AS exercise_name,
-        e.tracking_type,
-        e.default_rest_seconds
+        e.tracking_type
       FROM session_swaps ss
       JOIN exercises e ON e.id = ss.exercise_id
       WHERE ss.user_id = $1 AND ss.date_key = $2
@@ -156,6 +154,8 @@ export async function getWorkoutDayView(
               if (!swap) return ex;
               return {
                 ...ex,
+                swappedFromExerciseId: ex.exerciseId,
+                swappedFromExerciseName: ex.exerciseName ?? null,
                 exerciseId: swap.exercise_id,
                 exerciseName: swap.exercise_name,
                 trackingType: swap.tracking_type,
@@ -195,6 +195,9 @@ export async function getWorkoutDayView(
       unit: user.unit,
       weightKg: user.weightKg,
       enableSetQuality: user.enableSetQuality,
+      alwaysShowRir: user.alwaysShowRir,
+      enableSetNoteTags: user.enableSetNoteTags,
+      enableSetNoteHint: user.enableSetNoteHint,
       restClockMode: user.restClockMode,
       defaultWeightStepKg: user.defaultWeightStepKg,
       timezone: user.timezone,
@@ -243,6 +246,9 @@ interface NormalizedExercisePayload {
     actualRestSeconds: number | null;
     restApproximate: boolean;
     executionQualityPct: number | null;
+    rir: number | null;
+    notes: string;
+    isWarmup: boolean;
     isCompleted: boolean;
     repQualities: Array<{ repIndex: number; qualityPct: number }>;
   }>;
@@ -355,6 +361,21 @@ async function validateAndNormalizeExercises(
         100,
         true,
       );
+      const rawRir = parseNullableNumberRange(
+        s.rir,
+        `exercises[${i}].sets[${j}].rir`,
+        0,
+        10,
+      );
+      if (rawRir !== null && Math.abs(rawRir * 2 - Math.round(rawRir * 2)) > 1e-6) {
+        throw ApiError.validation(
+          `exercises[${i}].sets[${j}].rir must be in 0.5 increments between 0 and 10`,
+        );
+      }
+      const rir = rawRir === null ? null : Math.round(rawRir * 2) / 2;
+      const setNotes =
+        typeof s.notes === 'string' ? s.notes.trim().slice(0, 500) : '';
+      const isWarmup = Boolean(s.isWarmup);
 
       const isCompleted = s.isCompleted !== false;
 
@@ -404,10 +425,18 @@ async function validateAndNormalizeExercises(
         actualRestSeconds,
         restApproximate,
         executionQualityPct,
+        rir,
+        notes: setNotes,
+        isWarmup,
         isCompleted,
         repQualities,
       });
     }
+
+    const orderedSets = [
+      ...sets.filter((s) => s.isWarmup),
+      ...sets.filter((s) => !s.isWarmup),
+    ].map((s, idx) => ({ ...s, setNumber: idx + 1 }));
 
     normalized.push({
       exerciseId,
@@ -418,7 +447,7 @@ async function validateAndNormalizeExercises(
           ? raw.orderIndex
           : i,
       notes,
-      sets,
+      sets: orderedSets,
     });
   }
 
@@ -438,8 +467,8 @@ async function insertSessionExercises(
     INSERT INTO workout_sets (
       id, workout_exercise_id, set_number, weight_kg, reps, time_seconds,
       distance_m, rest_seconds, actual_rest_seconds, rest_approximate,
-      execution_quality_pct, is_completed, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      execution_quality_pct, rir, notes, is_warmup, is_completed, created_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
   `;
   const insertRepQSql = `
     INSERT INTO workout_set_rep_qualities (id, workout_set_id, rep_index, quality_pct)
@@ -466,6 +495,9 @@ async function insertSessionExercises(
         setRow.actualRestSeconds,
         setRow.restApproximate ? 1 : 0,
         setRow.executionQualityPct,
+        setRow.rir,
+        setRow.notes,
+        setRow.isWarmup ? 1 : 0,
         setRow.isCompleted ? 1 : 0,
         nowIso,
       ]);
@@ -792,24 +824,19 @@ export async function applyExerciseSwap(
   ) {
     throw ApiError.validation('scheduleDayExerciseId is required');
   }
-  if (typeof input.toExerciseId !== 'string' || !input.toExerciseId.trim()) {
-    throw ApiError.validation('toExerciseId is required');
-  }
-  if (input.scope !== 'session' && input.scope !== 'schedule') {
-    throw ApiError.validation('scope must be "session" or "schedule"');
+  if (
+    input.scope !== 'session' &&
+    input.scope !== 'schedule' &&
+    input.scope !== 'revert'
+  ) {
+    throw ApiError.validation('scope must be "session", "schedule", or "revert"');
   }
 
   const scheduleDayExerciseId = input.scheduleDayExerciseId.trim();
-  const toExerciseId = input.toExerciseId.trim();
 
-  const toExercise: Exercise | null = await getExerciseById(userId, toExerciseId);
-  if (!toExercise) {
-    throw ApiError.validation('Target exercise not found');
-  }
-
-  const slotRow = await queryOne<{ id: string }>(
+  const slotRow = await queryOne<{ id: string; exercise_id: string }>(
     `
-      SELECT sde.id
+      SELECT sde.id, sde.exercise_id
       FROM schedule_day_exercises sde
       JOIN schedule_days sd ON sd.id = sde.schedule_day_id
       JOIN schedules s ON s.id = sd.schedule_id
@@ -822,25 +849,71 @@ export async function applyExerciseSwap(
     throw ApiError.notFound('Planned exercise slot not found');
   }
 
+  if (input.scope === 'revert') {
+    await withTransaction(async () => {
+      await query(
+        'DELETE FROM session_swaps WHERE user_id = $1 AND date_key = $2 AND schedule_day_exercise_id = $3',
+        [userId, input.dateKey, scheduleDayExerciseId],
+      );
+    });
+
+    const plannedExercise: Exercise | null = await getExerciseById(
+      userId,
+      slotRow.exercise_id,
+    );
+    if (!plannedExercise) {
+      throw ApiError.notFound('Planned exercise not found');
+    }
+
+    const prefillMap = await getLastPerformanceByExerciseIds(
+      userId,
+      [slotRow.exercise_id],
+      addDaysYmd(input.dateKey, -1),
+    );
+
+    return {
+      ok: true,
+      toExercise: plannedExercise,
+      prefill: prefillMap[slotRow.exercise_id] ?? null,
+    };
+  }
+
+  if (typeof input.toExerciseId !== 'string' || !input.toExerciseId.trim()) {
+    throw ApiError.validation('toExerciseId is required');
+  }
+  const toExerciseId = input.toExerciseId.trim();
+
+  const toExercise: Exercise | null = await getExerciseById(userId, toExerciseId);
+  if (!toExercise) {
+    throw ApiError.validation('Target exercise not found');
+  }
+
   await withTransaction(async () => {
     if (input.scope === 'session') {
-      await query(
-        `
-        INSERT INTO session_swaps (user_id, date_key, schedule_day_exercise_id, exercise_id)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT(user_id, date_key, schedule_day_exercise_id) DO UPDATE SET
-          exercise_id = EXCLUDED.exercise_id
-      `,
-        [userId, input.dateKey, scheduleDayExerciseId, toExerciseId],
-      );
+      if (toExerciseId === slotRow.exercise_id) {
+        await query(
+          'DELETE FROM session_swaps WHERE user_id = $1 AND date_key = $2 AND schedule_day_exercise_id = $3',
+          [userId, input.dateKey, scheduleDayExerciseId],
+        );
+      } else {
+        await query(
+          `
+          INSERT INTO session_swaps (user_id, date_key, schedule_day_exercise_id, exercise_id)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT(user_id, date_key, schedule_day_exercise_id) DO UPDATE SET
+            exercise_id = EXCLUDED.exercise_id
+        `,
+          [userId, input.dateKey, scheduleDayExerciseId, toExerciseId],
+        );
+      }
     } else {
       await query(
         'UPDATE schedule_day_exercises SET exercise_id = $1 WHERE id = $2',
         [toExerciseId, scheduleDayExerciseId],
       );
       await query(
-        'DELETE FROM session_swaps WHERE user_id = $1 AND date_key = $2 AND schedule_day_exercise_id = $3',
-        [userId, input.dateKey, scheduleDayExerciseId],
+        'DELETE FROM session_swaps WHERE user_id = $1 AND schedule_day_exercise_id = $2 AND date_key >= $3',
+        [userId, scheduleDayExerciseId, input.dateKey],
       );
     }
   });

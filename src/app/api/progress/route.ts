@@ -179,17 +179,24 @@ export const GET = withApiHandler(
     }>(
       `
       SELECT
-        e.id AS id,
-        e.name AS name,
-        e.tracking_type AS tracking_type,
-        COUNT(DISTINCT ws.id)::int AS session_count
-      FROM workout_sessions ws
-      JOIN workout_exercises we ON we.session_id = ws.id
-      JOIN exercises e ON e.id = we.exercise_id
-      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
-      WHERE ws.user_id = $1
-      GROUP BY e.id, e.name, e.tracking_type
-      ORDER BY session_count DESC, e.name ASC
+        t.id AS id,
+        t.name AS name,
+        t.tracking_type AS tracking_type,
+        COUNT(*)::int AS session_count
+      FROM (
+        SELECT DISTINCT
+          e.id,
+          e.name,
+          e.tracking_type,
+          ws.id AS session_id
+        FROM workout_sessions ws
+        JOIN workout_exercises we ON we.session_id = ws.id
+        JOIN exercises e ON e.id = we.exercise_id
+        JOIN workout_sets wset ON wset.workout_exercise_id = we.id
+        WHERE ws.user_id = $1 AND wset.is_completed = 1 AND wset.is_warmup = 0
+      ) t
+      GROUP BY t.id, t.name, t.tracking_type
+      ORDER BY session_count DESC, t.name ASC
       `,
       [user.id],
     );
@@ -227,7 +234,7 @@ export const GET = withApiHandler(
           wset.distance_m AS distance_m
         FROM workout_sessions ws
         JOIN workout_exercises we ON we.session_id = ws.id
-        JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+        JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1 AND wset.is_warmup = 0
         WHERE ws.user_id = $1 AND we.exercise_id = $2 ${dateClause}
         ORDER BY ws.session_date ASC, wset.set_number ASC
         `,
@@ -304,7 +311,7 @@ export const GET = withApiHandler(
         COUNT(wset.id)::int AS completed_sets
       FROM workout_sessions ws
       LEFT JOIN workout_exercises we ON we.session_id = ws.id
-      LEFT JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+      LEFT JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1 AND wset.is_warmup = 0
       WHERE ws.user_id = $1 ${sessionDateClause}
       GROUP BY ws.id, ws.session_date
       ORDER BY ws.session_date ASC

@@ -5,6 +5,7 @@ export const MAX_MEASURED_REST_SECONDS = 900;
 
 export interface RestSetTimingInput {
   isCompleted: boolean;
+  isWarmup?: boolean;
   completedAt?: string | null;
   restEndedAt?: string | null;
   completionSeq?: number | null;
@@ -130,17 +131,25 @@ export function computeActualRestForWorkoutSets<T extends RestSetTimingInput>(
   interface CompletedRef {
     exIdx: number;
     setIdx: number;
+    flatPos: number;
     set: T;
   }
 
   const completed: CompletedRef[] = [];
+  const completedWarmups: Array<{ flatPos: number; set: T }> = [];
+  let flatPos = 0;
   for (let exIdx = 0; exIdx < exercises.length; exIdx += 1) {
     const sets = exercises[exIdx].sets;
     for (let setIdx = 0; setIdx < sets.length; setIdx += 1) {
       const set = sets[setIdx];
       if (set.isCompleted) {
-        completed.push({ exIdx, setIdx, set });
+        if (set.isWarmup) {
+          completedWarmups.push({ flatPos, set });
+        } else {
+          completed.push({ exIdx, setIdx, flatPos, set });
+        }
       }
+      flatPos += 1;
     }
   }
 
@@ -183,8 +192,38 @@ export function computeActualRestForWorkoutSets<T extends RestSetTimingInput>(
     return false;
   };
 
+  const hasWarmupBetween = (
+    cur: CompletedRef,
+    next: CompletedRef,
+    startMs: number,
+    nextStartMs: number,
+  ): boolean => {
+    for (const w of completedWarmups) {
+      if (w.flatPos > cur.flatPos && w.flatPos < next.flatPos) {
+        return true;
+      }
+      if (
+        useCompletionSeq &&
+        typeof w.set.completionSeq === 'number' &&
+        Number.isFinite(w.set.completionSeq) &&
+        typeof cur.set.completionSeq === 'number' &&
+        typeof next.set.completionSeq === 'number' &&
+        w.set.completionSeq > cur.set.completionSeq &&
+        w.set.completionSeq < next.set.completionSeq
+      ) {
+        return true;
+      }
+      const wMs = parseTimestampMs(w.set.completedAt);
+      if (wMs !== null && wMs > startMs && wMs < nextStartMs) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   for (let k = 0; k < completed.length - 1; k += 1) {
-    const { exIdx, setIdx, set } = completed[k];
+    const cur = completed[k];
+    const { exIdx, setIdx, set } = cur;
 
     if (set.completedViaCheckAll || set.wasUnchecked) {
       continue;
@@ -219,6 +258,10 @@ export function computeActualRestForWorkoutSets<T extends RestSetTimingInput>(
       continue;
     }
 
+    if (hasWarmupBetween(cur, next, startMs, nextStartMs)) {
+      continue;
+    }
+
     const diffSeconds = (nextStartMs - startMs) / 1000;
     results[exIdx][setIdx] = normalizeMeasuredRestSeconds(diffSeconds, true);
   }
@@ -238,12 +281,12 @@ export function computeSessionRestSummary(session: {
       Pick<
         WorkoutExercise['sets'][number],
         'isCompleted' | 'actualRestSeconds' | 'restApproximate'
-      >
+      > & { isWarmup?: boolean }
     >;
   }>;
 }): SessionRestSummary {
   const completedSets = session.exercises.flatMap((ex) =>
-    ex.sets.filter((s) => s.isCompleted !== false),
+    ex.sets.filter((s) => !s.isWarmup && s.isCompleted !== false),
   );
   const completedSetCount = completedSets.length;
   const nonFinalSets =
