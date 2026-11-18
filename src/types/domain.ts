@@ -43,6 +43,9 @@ export interface UserProfile {
   theme: AppTheme;
   themeVariant: ThemeVariant;
   enableSetQuality: boolean;
+  alwaysShowRir: boolean;
+  enableSetNoteTags: boolean;
+  enableSetNoteHint: boolean;
   restClockMode: RestClockMode;
   defaultWorkoutView: WorkoutViewMode;
   defaultWeightStepKg: number | null;
@@ -118,8 +121,11 @@ export interface ScheduleDayExercise {
   exerciseId: string;
   exerciseName?: string;
   trackingType?: TrackingType;
+  swappedFromExerciseId?: string | null;
+  swappedFromExerciseName?: string | null;
   orderIndex: number;
   targetSets: number;
+  targetWarmupSets: number;
   targetReps: number | null;
   targetRepsMin: number | null;
   targetRepsMax: number | null;
@@ -201,6 +207,9 @@ export interface WorkoutSet {
   actualRestSeconds: number | null;
   restApproximate: boolean;
   executionQualityPct: number | null;
+  rir: number | null;
+  notes: string;
+  isWarmup: boolean;
   isCompleted: boolean;
   createdAt: string;
   repQualities?: WorkoutSetRepQuality[];
@@ -273,5 +282,16 @@ export interface ExercisePrefill {
     restSeconds: number | null;
     actualRestSeconds: number | null;
     restApproximate: boolean;
+    rir: number | null;
+    notes: string;
+  }>;
+  warmupSets?: Array<{
+    setNumber: number;
+    weightKg: number | null;
+    reps: number | null;
+    timeSeconds: number | null;
+    distanceM: number | null;
+    rir: number | null;
+    notes: string;
   }>;
 }

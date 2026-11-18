@@ -31,6 +31,9 @@ type DbUserRow = {
   theme?: string;
   theme_variant?: string;
   enable_set_quality: number;
+  always_show_rir?: number;
+  enable_set_note_tags?: number;
+  enable_set_note_hint?: number;
   rest_clock_mode?: string;
   default_workout_view?: string;
   default_weight_step_kg?: number | null;
@@ -64,6 +67,9 @@ export interface CreateUserInput {
   theme?: AppTheme;
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
+  alwaysShowRir?: boolean;
+  enableSetNoteTags?: boolean;
+  enableSetNoteHint?: boolean;
   restClockMode?: RestClockMode;
   defaultWorkoutView?: WorkoutViewMode;
   defaultWeightStepKg?: number | null;
@@ -82,6 +88,9 @@ export interface UpdateUserSettingsInput {
   theme?: AppTheme;
   themeVariant?: ThemeVariant;
   enableSetQuality?: boolean;
+  alwaysShowRir?: boolean;
+  enableSetNoteTags?: boolean;
+  enableSetNoteHint?: boolean;
   restClockMode?: RestClockMode;
   defaultWorkoutView?: WorkoutViewMode;
   defaultWeightStepKg?: number | null;
@@ -112,6 +121,15 @@ export function mapUserRow(row: DbUserRow): UserProfile {
       ? row.theme_variant
       : DEFAULT_THEME_VARIANT,
     enableSetQuality: Boolean(row.enable_set_quality),
+    alwaysShowRir: Boolean(row.always_show_rir),
+    enableSetNoteTags:
+      row.enable_set_note_tags === undefined || row.enable_set_note_tags === null
+        ? true
+        : Boolean(row.enable_set_note_tags),
+    enableSetNoteHint:
+      row.enable_set_note_hint === undefined || row.enable_set_note_hint === null
+        ? true
+        : Boolean(row.enable_set_note_hint),
     restClockMode: row.rest_clock_mode === 'countdown' ? 'countdown' : 'stopwatch',
     defaultWorkoutView:
       row.default_workout_view === 'focus' ? 'focus' : 'list',
@@ -217,9 +235,10 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       id, username, display_name, password_hash,
       height_cm, weight_kg, age, training_years,
       unit, timezone, theme, theme_variant,
-      enable_set_quality, rest_clock_mode, default_workout_view, default_weight_step_kg,
+      enable_set_quality, always_show_rir, enable_set_note_tags, enable_set_note_hint,
+      rest_clock_mode, default_workout_view, default_weight_step_kg,
       apple_fitness_enabled, is_guest, last_active_at, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
     RETURNING *
     `,
     [
@@ -236,6 +255,9 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       theme,
       themeVariant,
       input.enableSetQuality ? 1 : 0,
+      input.alwaysShowRir ? 1 : 0,
+      input.enableSetNoteTags === false ? 0 : 1,
+      input.enableSetNoteHint === false ? 0 : 1,
       restClockMode,
       defaultWorkoutView,
       input.defaultWeightStepKg ?? null,
@@ -300,6 +322,18 @@ export async function updateUserSettings(
   if (patch.enableSetQuality !== undefined) {
     setClauses.push(`enable_set_quality = $${idx++}`);
     params.push(patch.enableSetQuality ? 1 : 0);
+  }
+  if (patch.alwaysShowRir !== undefined) {
+    setClauses.push(`always_show_rir = $${idx++}`);
+    params.push(patch.alwaysShowRir ? 1 : 0);
+  }
+  if (patch.enableSetNoteTags !== undefined) {
+    setClauses.push(`enable_set_note_tags = $${idx++}`);
+    params.push(patch.enableSetNoteTags ? 1 : 0);
+  }
+  if (patch.enableSetNoteHint !== undefined) {
+    setClauses.push(`enable_set_note_hint = $${idx++}`);
+    params.push(patch.enableSetNoteHint ? 1 : 0);
   }
   if (patch.restClockMode !== undefined) {
     setClauses.push(`rest_clock_mode = $${idx++}`);

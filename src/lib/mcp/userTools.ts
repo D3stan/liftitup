@@ -179,7 +179,7 @@ export const ORIGINAL_USER_TOOLS_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'get_workout_history',
     description:
-      'Returns logged workout sessions with exercises, sets (including restSeconds, actualRestSeconds, restApproximate), executionQualityPct, repQualities, and workout/exercise notes.',
+      'Returns logged workout sessions with exercises, sets (including rir, notes, isWarmup, restSeconds, actualRestSeconds, restApproximate), executionQualityPct, repQualities, and workout/exercise notes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -335,6 +335,20 @@ export const ORIGINAL_USER_TOOLS_DEFINITIONS: McpToolDefinition[] = [
                       minimum: 0,
                       maximum: 100,
                     },
+                    rir: {
+                      type: ['number', 'null'],
+                      minimum: 0,
+                      maximum: 10,
+                      description: 'Optional Reps In Reserve in 0.5 increments (0..10).',
+                    },
+                    notes: {
+                      type: 'string',
+                      description: 'Optional per-set note (max 500 characters).',
+                    },
+                    isWarmup: {
+                      type: 'boolean',
+                      description: 'True if this set is a warmup set (excluded from working stats/rest).',
+                    },
                     isCompleted: { type: 'boolean' },
                     repQualities: {
                       type: 'array',
@@ -379,6 +393,9 @@ const REGISTERED_EXTRA_USER_TOOLS_DEFINITIONS: McpToolDefinition[] = [
         theme: { type: 'string', enum: APP_THEMES.map((t) => t.id) },
         themeVariant: { type: 'string', enum: ['light', 'dark'] },
         enableSetQuality: { type: 'boolean' },
+        alwaysShowRir: { type: 'boolean' },
+        enableSetNoteTags: { type: 'boolean' },
+        enableSetNoteHint: { type: 'boolean' },
         restClockMode: { type: 'string', enum: ['stopwatch', 'countdown'] },
         defaultWorkoutView: { type: 'string', enum: ['list', 'focus'] },
         defaultWeightStepKg: { type: ['number', 'null'], minimum: 0.05, maximum: 100 },
@@ -893,7 +910,7 @@ async function handleLogWorkoutSession(
     600,
     true,
   );
-  const notes = typeof args.notes === 'string' ? args.notes.trim() : '';
+  const notes = typeof args.notes === 'string' ? args.notes.trim().slice(0, 4000) : '';
 
   if (!Array.isArray(args.exercises) || args.exercises.length === 0) {
     return wrapToolResult(
@@ -932,6 +949,9 @@ async function handleLogWorkoutSession(
       actualRestSeconds: number | null;
       restApproximate: boolean;
       executionQualityPct: number | null;
+      rir: number | null;
+      notes: string;
+      isWarmup: boolean;
       isCompleted: boolean;
       repQualities: Array<{ repIndex: number; qualityPct: number }>;
     }>;
@@ -966,8 +986,9 @@ async function handleLogWorkoutSession(
       );
     }
 
-    const exNotes = typeof rawEx.notes === 'string' ? rawEx.notes.trim() : '';
-    const sets = rawEx.sets.map((rawSet, sIdx) => {
+    const exNotes =
+      typeof rawEx.notes === 'string' ? rawEx.notes.trim().slice(0, 2000) : '';
+    const rawSets = rawEx.sets.map((rawSet, sIdx) => {
       const s = (rawSet ?? {}) as Record<string, unknown>;
       const setNumber =
         asNullableNumber(s.setNumber, `exercises[${i}].sets[${sIdx}].setNumber`, 1, 100, true) ??
@@ -976,7 +997,7 @@ async function handleLogWorkoutSession(
         s.weightKg,
         `exercises[${i}].sets[${sIdx}].weightKg`,
         0,
-        2000,
+        1500,
       );
       const reps = asNullableNumber(
         s.reps,
@@ -996,7 +1017,7 @@ async function handleLogWorkoutSession(
         s.distanceM,
         `exercises[${i}].sets[${sIdx}].distanceM`,
         0,
-        500000,
+        1_000_000,
       );
       const restSeconds = asNullableNumber(
         s.restSeconds,
@@ -1056,6 +1077,20 @@ async function handleLogWorkoutSession(
         executionQualityPct = Math.round(sum / repQualities.length);
       }
 
+      const rir = asNullableNumber(
+        s.rir,
+        `exercises[${i}].sets[${sIdx}].rir`,
+        0,
+        10,
+      );
+      if (rir !== null && Math.abs(rir * 2 - Math.round(rir * 2)) > 1e-6) {
+        throw new Error(
+          `exercises[${i}].sets[${sIdx}].rir must be in 0.5 increments between 0 and 10`,
+        );
+      }
+      const setNotes =
+        typeof s.notes === 'string' ? s.notes.trim().slice(0, 500) : '';
+      const isWarmup = Boolean(s.isWarmup);
       const isCompleted =
         typeof s.isCompleted === 'boolean' ? s.isCompleted : true;
 
@@ -1069,10 +1104,18 @@ async function handleLogWorkoutSession(
         actualRestSeconds,
         restApproximate,
         executionQualityPct,
+        rir,
+        notes: setNotes,
+        isWarmup,
         isCompleted,
         repQualities,
       };
     });
+
+    const sets = [
+      ...rawSets.filter((s) => s.isWarmup),
+      ...rawSets.filter((s) => !s.isWarmup),
+    ].map((s, idx) => ({ ...s, setNumber: idx + 1 }));
 
     preparedExercises.push({
       exerciseId: exMatch.id,
@@ -1121,8 +1164,8 @@ async function handleLogWorkoutSession(
       INSERT INTO workout_sets (
         id, workout_exercise_id, set_number, weight_kg, reps,
         time_seconds, distance_m, rest_seconds, actual_rest_seconds,
-        rest_approximate, execution_quality_pct, is_completed, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        rest_approximate, execution_quality_pct, rir, notes, is_warmup, is_completed, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     `;
     const insertRepQSql = `
       INSERT INTO workout_set_rep_qualities (id, workout_set_id, rep_index, quality_pct)
@@ -1148,6 +1191,9 @@ async function handleLogWorkoutSession(
           s.actualRestSeconds,
           s.restApproximate ? 1 : 0,
           s.executionQualityPct,
+          s.rir,
+          s.notes,
+          s.isWarmup ? 1 : 0,
           s.isCompleted ? 1 : 0,
           now,
         ]);
@@ -1353,6 +1399,10 @@ async function handleEditWorkoutSession(
           actualRestSeconds: s.actualRestSeconds as number | null | undefined,
           restApproximate: s.restApproximate as boolean | undefined,
           executionQualityPct,
+          rir: s.rir as number | null | undefined,
+          notes: typeof s.notes === 'string' ? s.notes : undefined,
+          isWarmup:
+            typeof s.isWarmup === 'boolean' ? s.isWarmup : undefined,
           isCompleted: s.isCompleted as boolean | undefined,
           repQualities,
         };
@@ -1408,6 +1458,9 @@ export async function executeUserToolCall(
           theme: user.theme,
           themeVariant: user.themeVariant,
           enableSetQuality: user.enableSetQuality,
+          alwaysShowRir: user.alwaysShowRir,
+          enableSetNoteTags: user.enableSetNoteTags,
+          enableSetNoteHint: user.enableSetNoteHint,
           restClockMode: user.restClockMode,
           defaultWorkoutView: user.defaultWorkoutView,
           defaultWeightStepKg: user.defaultWeightStepKg,

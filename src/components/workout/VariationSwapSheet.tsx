@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Search } from 'lucide-react';
+import { ArrowLeftRight, RotateCcw, Search } from 'lucide-react';
 import type { Exercise, ExercisePrefill, WeightUnit } from '@/types/domain';
 import { apiFetch, Button, Sheet, toast } from '@/components/ui';
 import {
@@ -16,14 +16,17 @@ export interface VariationSwapSheetProps {
   unit: WeightUnit;
   currentExerciseId: string;
   currentExerciseName: string;
+  currentNotes?: string;
   scheduleDayExerciseId?: string | null;
+  swappedFromExerciseId?: string | null;
+  swappedFromExerciseName?: string | null;
   allowScheduleScope: boolean;
   exercises: Exercise[];
   prefillByExerciseId: Record<string, ExercisePrefill>;
   onSwapComplete: (
     toExercise: Exercise,
     prefill: ExercisePrefill | null,
-    scope: 'session' | 'schedule',
+    scope: 'session' | 'schedule' | 'revert',
   ) => void;
 }
 
@@ -34,7 +37,10 @@ export default function VariationSwapSheet({
   unit,
   currentExerciseId,
   currentExerciseName,
+  currentNotes,
   scheduleDayExerciseId,
+  swappedFromExerciseId,
+  swappedFromExerciseName,
   allowScheduleScope,
   exercises,
   prefillByExerciseId,
@@ -44,9 +50,9 @@ export default function VariationSwapSheet({
   const [selectedId, setSelectedId] = useState<string>('');
   const [loadedPrefill, setLoadedPrefill] =
     useState<Record<string, ExercisePrefill>>(prefillByExerciseId);
-  const [submitting, setSubmitting] = useState<'session' | 'schedule' | null>(
-    null,
-  );
+  const [submitting, setSubmitting] = useState<
+    'session' | 'schedule' | 'revert' | null
+  >(null);
 
   useEffect(() => {
     setLoadedPrefill((prev) => ({ ...prev, ...prefillByExerciseId }));
@@ -157,12 +163,54 @@ export default function VariationSwapSheet({
     }
   };
 
+  const handleRevert = async () => {
+    if (!scheduleDayExerciseId) return;
+    setSubmitting('revert');
+    try {
+      const res = await apiFetch<{
+        ok: true;
+        toExercise: Exercise;
+        prefill: ExercisePrefill | null;
+      }>('/api/workouts/swap', {
+        method: 'POST',
+        body: JSON.stringify({
+          dateKey,
+          scheduleDayExerciseId,
+          scope: 'revert',
+        }),
+      });
+      toast.success('Reverted to planned exercise');
+      onSwapComplete(res.toExercise, res.prefill, 'revert');
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Revert failed');
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  const canRevert = Boolean(
+    swappedFromExerciseId && scheduleDayExerciseId && allowScheduleScope,
+  );
+  const revertLabelName =
+    swappedFromExerciseName ||
+    exercises.find((e) => e.id === swappedFromExerciseId)?.name ||
+    'original';
+  const hasNotesToPreserve = Boolean(currentNotes?.trim());
+
   return (
     <Sheet open={open} onClose={onClose} title="Swap Exercise">
       <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
-          <ArrowLeftRight className="h-4 w-4 shrink-0" />
-          <span className="truncate">{currentExerciseName}</span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
+            <ArrowLeftRight className="h-4 w-4 shrink-0" />
+            <span className="truncate">{currentExerciseName}</span>
+          </div>
+          {hasNotesToPreserve && (
+            <p className="text-xs font-bold text-[var(--muted)]">
+              Exercise note will be preserved
+            </p>
+          )}
         </div>
 
         <div className="relative">
@@ -234,23 +282,37 @@ export default function VariationSwapSheet({
         )}
 
         {allowScheduleScope && scheduleDayExerciseId ? (
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="alt"
-              loading={submitting === 'session'}
-              disabled={!selectedExercise || submitting !== null}
-              onClick={() => handleConfirm('session')}
-            >
-              This workout
-            </Button>
-            <Button
-              variant="primary"
-              loading={submitting === 'schedule'}
-              disabled={!selectedExercise || submitting !== null}
-              onClick={() => handleConfirm('schedule')}
-            >
-              Update split
-            </Button>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="alt"
+                loading={submitting === 'session'}
+                disabled={!selectedExercise || submitting !== null}
+                onClick={() => handleConfirm('session')}
+              >
+                This workout
+              </Button>
+              <Button
+                variant="primary"
+                loading={submitting === 'schedule'}
+                disabled={!selectedExercise || submitting !== null}
+                onClick={() => handleConfirm('schedule')}
+              >
+                Update split
+              </Button>
+            </div>
+            {canRevert && (
+              <Button
+                variant="blue"
+                className="w-full"
+                loading={submitting === 'revert'}
+                disabled={submitting !== null}
+                onClick={handleRevert}
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>Revert to planned ({revertLabelName})</span>
+              </Button>
+            )}
           </div>
         ) : (
           <Button

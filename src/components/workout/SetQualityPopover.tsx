@@ -9,6 +9,7 @@ export interface SetQualityPopoverProps {
   open: boolean;
   onClose: () => void;
   setNumber: number;
+  setLabel?: string;
   reps: number | null;
   qualityPct: number | null;
   repQualities: LoggerRepQuality[];
@@ -37,6 +38,7 @@ export default function SetQualityPopover({
   open,
   onClose,
   setNumber,
+  setLabel,
   reps,
   qualityPct,
   repQualities,
@@ -117,7 +119,11 @@ export default function SetQualityPopover({
   const displayedPct = perRepMode && repCount > 0 ? computePerRepAvg(repMap) : draftPct;
 
   return (
-    <Sheet open={open} onClose={onClose} title={`Set #${setNumber} Quality`}>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={setLabel ? `${setLabel} Quality` : `Set #${setNumber} Quality`}
+    >
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <span

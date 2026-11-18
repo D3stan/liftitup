@@ -143,8 +143,12 @@ function sessionToDraft(
       exerciseId: ex.exerciseId,
       exerciseName: ex.exerciseName ?? ex.exerciseId,
       trackingType: ex.trackingType ?? 'weight_reps',
-      defaultRestSeconds: ex.sets[0]?.restSeconds ?? 120,
+      defaultRestSeconds:
+        ex.sets.find((s) => !s.isWarmup && s.restSeconds !== null)
+          ?.restSeconds ?? 120,
       scheduleDayExerciseId: null,
+      swappedFromExerciseId: null,
+      swappedFromExerciseName: null,
       notes: ex.notes,
       sets: ex.sets.map((s, idx) => {
         const w = kgToDisplay(s.weightKg, unit);
@@ -155,19 +159,24 @@ function sessionToDraft(
           reps: s.reps !== null ? String(s.reps) : '',
           timeSeconds: s.timeSeconds !== null ? String(s.timeSeconds) : '',
           distanceM: s.distanceM !== null ? String(s.distanceM) : '',
-          restSeconds: s.restSeconds,
+          restSeconds: s.isWarmup ? null : s.restSeconds,
           restSecondsDisplay:
-            s.restSeconds !== null ? String(s.restSeconds) : '',
-          actualRestSeconds: s.actualRestSeconds,
-          restApproximate: s.restApproximate,
+            !s.isWarmup && s.restSeconds !== null ? String(s.restSeconds) : '',
+          actualRestSeconds: s.isWarmup ? null : s.actualRestSeconds,
+          restApproximate: s.isWarmup ? false : s.restApproximate,
           actualRestDisplay:
-            s.actualRestSeconds !== null ? String(s.actualRestSeconds) : '',
+            !s.isWarmup && s.actualRestSeconds !== null
+              ? String(s.actualRestSeconds)
+              : '',
           executionQualityPct: s.executionQualityPct,
           repQualities:
             s.repQualities?.map((rq) => ({
               repIndex: rq.repIndex,
               qualityPct: rq.qualityPct,
             })) ?? [],
+          rir: s.rir ?? null,
+          notes: s.notes ?? '',
+          isWarmup: Boolean(s.isWarmup),
           isCompleted: s.isCompleted,
           completedAt: null,
           restEndedAt: null,
@@ -268,6 +277,8 @@ function buildInitialDraft(params: {
         trackingType: t,
         defaultRestSeconds: slot.restSeconds,
         scheduleDayExerciseId: slot.id,
+        swappedFromExerciseId: slot.swappedFromExerciseId ?? null,
+        swappedFromExerciseName: slot.swappedFromExerciseName ?? null,
         notes: slot.notes ?? '',
         sets: buildPrefilledSets({
           targetSets: slot.targetSets,
@@ -379,6 +390,28 @@ function WorkoutLoggerInner() {
                 ? existingDraft.completionSeqCounter
                 : 0,
             restClock: existingDraft.restClock ?? null,
+            exercises: existingDraft.exercises.map((ex) => ({
+              ...ex,
+              notes: typeof ex.notes === 'string' ? ex.notes : '',
+              swappedFromExerciseId: ex.swappedFromExerciseId ?? null,
+              swappedFromExerciseName: ex.swappedFromExerciseName ?? null,
+              sets: Array.isArray(ex.sets)
+                ? ex.sets.map((s, idx) => ({
+                    ...s,
+                    setNumber:
+                      typeof s.setNumber === 'number' ? s.setNumber : idx + 1,
+                    rir:
+                      typeof s.rir === 'number' && Number.isFinite(s.rir)
+                        ? s.rir
+                        : null,
+                    notes: typeof s.notes === 'string' ? s.notes : '',
+                    isWarmup: Boolean(s.isWarmup),
+                    repQualities: Array.isArray(s.repQualities)
+                      ? s.repQualities
+                      : [],
+                  }))
+                : [],
+            })),
             viewMode: existingDraft.viewMode === 'focus' ? 'focus' : 'list',
             focusExerciseIndex: clampFocusIndex(
               typeof existingDraft.focusExerciseIndex === 'number'
@@ -608,14 +641,16 @@ function WorkoutLoggerInner() {
           }
           nextStartedAt = resolved;
         }
-        nextRestClock = createRestClock({
-          startedAt: nowIso,
-          targetSeconds: setRow.restSeconds ?? ex.defaultRestSeconds,
-          mode: dayView.user.restClockMode,
-          label: ex.exerciseName,
-          exerciseLocalId: ex.localId,
-          setLocalId: setRow.localId,
-        });
+        if (!setRow.isWarmup) {
+          nextRestClock = createRestClock({
+            startedAt: nowIso,
+            targetSeconds: setRow.restSeconds ?? ex.defaultRestSeconds,
+            mode: dayView.user.restClockMode,
+            label: ex.exerciseName,
+            exerciseLocalId: ex.localId,
+            setLocalId: setRow.localId,
+          });
+        }
       } else if (
         nextRestClock?.isActive &&
         nextRestClock.setLocalId === setRow.localId
@@ -640,7 +675,9 @@ function WorkoutLoggerInner() {
       ...prev,
       exercises: prev.exercises.map((ex, i) => {
         if (i !== exIndex) return ex;
-        const last = ex.sets[ex.sets.length - 1];
+        const workingSets = ex.sets.filter((s) => !s.isWarmup);
+        const last =
+          workingSets[workingSets.length - 1] ?? ex.sets[ex.sets.length - 1];
         const nextSet: LoggerSet = {
           localId: makeLocalId('set'),
           setNumber: ex.sets.length + 1,
@@ -658,6 +695,9 @@ function WorkoutLoggerInner() {
           actualRestDisplay: '',
           executionQualityPct: null,
           repQualities: [],
+          rir: null,
+          notes: '',
+          isWarmup: false,
           isCompleted: false,
           completedAt: null,
           restEndedAt: null,
@@ -665,7 +705,104 @@ function WorkoutLoggerInner() {
           wasUnchecked: false,
           completedViaCheckAll: false,
         };
-        return { ...ex, sets: [...ex.sets, nextSet] };
+        const updatedSets = [...ex.sets, nextSet].map((s, idx) => ({
+          ...s,
+          setNumber: idx + 1,
+        }));
+        return { ...ex, sets: updatedSets };
+      }),
+    }));
+  };
+
+  const handleAddWarmupSet = (exIndex: number) => {
+    updateDraft((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((ex, i) => {
+        if (i !== exIndex) return ex;
+        const warmups = ex.sets.filter((s) => s.isWarmup);
+        const working = ex.sets.filter((s) => !s.isWarmup);
+        const lastWarmup = warmups[warmups.length - 1] ?? null;
+        const nextWarmup: LoggerSet = {
+          localId: makeLocalId('set'),
+          setNumber: warmups.length + 1,
+          weightDisplay: lastWarmup?.weightDisplay ?? '',
+          reps: lastWarmup?.reps ?? '',
+          timeSeconds: lastWarmup?.timeSeconds ?? '',
+          distanceM: lastWarmup?.distanceM ?? '',
+          restSeconds: null,
+          restSecondsDisplay: '',
+          actualRestSeconds: null,
+          restApproximate: false,
+          actualRestDisplay: '',
+          executionQualityPct: null,
+          repQualities: [],
+          rir: null,
+          notes: '',
+          isWarmup: true,
+          isCompleted: false,
+          completedAt: null,
+          restEndedAt: null,
+          completionSeq: null,
+          wasUnchecked: false,
+          completedViaCheckAll: false,
+        };
+        const combined = [...warmups, nextWarmup, ...working].map((s, idx) => ({
+          ...s,
+          setNumber: idx + 1,
+        }));
+        return { ...ex, sets: combined };
+      }),
+    }));
+  };
+
+  const handleRepeatLastWarmups = (exIndex: number) => {
+    if (!dayView) return;
+    const unit = dayView.user.unit;
+    updateDraft((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((ex, i) => {
+        if (i !== exIndex) return ex;
+        if (ex.sets.some((s) => s.isWarmup)) return ex;
+        const prefill =
+          extraPrefills[ex.exerciseId] ??
+          dayView.prefillByExerciseId[ex.exerciseId] ??
+          null;
+        const prevWarmups = prefill?.warmupSets ?? [];
+        if (prevWarmups.length === 0) return ex;
+
+        const warmupSets: LoggerSet[] = prevWarmups.map((w, wIdx) => {
+          const wDisplay = kgToDisplay(w.weightKg, unit);
+          return {
+            localId: makeLocalId('set'),
+            setNumber: wIdx + 1,
+            weightDisplay: wDisplay !== null ? String(wDisplay) : '',
+            reps: w.reps !== null ? String(w.reps) : '',
+            timeSeconds: w.timeSeconds !== null ? String(w.timeSeconds) : '',
+            distanceM: w.distanceM !== null ? String(w.distanceM) : '',
+            restSeconds: null,
+            restSecondsDisplay: '',
+            actualRestSeconds: null,
+            restApproximate: false,
+            actualRestDisplay: '',
+            executionQualityPct: null,
+            repQualities: [],
+            rir: null,
+            notes: '',
+            isWarmup: true,
+            isCompleted: false,
+            completedAt: null,
+            restEndedAt: null,
+            completionSeq: null,
+            wasUnchecked: false,
+            completedViaCheckAll: false,
+          };
+        });
+        const working = ex.sets.filter((s) => !s.isWarmup);
+        const combined = [...warmupSets, ...working].map((s, idx) => ({
+          ...s,
+          setNumber: idx + 1,
+        }));
+        return { ...ex, sets: combined };
       }),
     }));
   };
@@ -674,7 +811,13 @@ function WorkoutLoggerInner() {
     updateDraft((prev) => ({
       ...prev,
       exercises: prev.exercises.map((ex, i) => {
-        if (i !== exIndex || ex.sets.length <= 1) return ex;
+        if (i !== exIndex) return ex;
+        const target = ex.sets[setIndex];
+        if (!target) return ex;
+        if (!target.isWarmup) {
+          const workingCount = ex.sets.filter((s) => !s.isWarmup).length;
+          if (workingCount <= 1) return ex;
+        }
         const filtered = ex.sets
           .filter((_, j) => j !== setIndex)
           .map((s, idx) => ({ ...s, setNumber: idx + 1 }));
@@ -715,7 +858,7 @@ function WorkoutLoggerInner() {
             ? {
                 ...item,
                 sets: item.sets.map((s) =>
-                  s.isCompleted
+                  s.isWarmup || s.isCompleted
                     ? s
                     : {
                         ...s,
@@ -762,9 +905,11 @@ function WorkoutLoggerInner() {
       trackingType: ex.trackingType,
       defaultRestSeconds: ex.defaultRestSeconds,
       scheduleDayExerciseId: null,
+      swappedFromExerciseId: null,
+      swappedFromExerciseName: null,
       notes: '',
       sets: buildPrefilledSets({
-        targetSets: prefill?.sets.length ?? 3,
+        targetSets: prefill?.sets.length || 3,
         trackingType: ex.trackingType,
         unit: dayView.user.unit,
         prefill,
@@ -789,6 +934,7 @@ function WorkoutLoggerInner() {
   const handleSwapComplete = (
     toExercise: Exercise,
     prefill: ExercisePrefill | null,
+    scope: 'session' | 'schedule' | 'revert',
   ) => {
     if (swapTargetIdx === null || !dayView) return;
     const targetIdx = swapTargetIdx;
@@ -800,17 +946,60 @@ function WorkoutLoggerInner() {
       ...prev,
       exercises: prev.exercises.map((ex, i) => {
         if (i !== targetIdx) return ex;
+        const workingCount = Math.max(
+          1,
+          ex.sets.filter((s) => !s.isWarmup).length,
+        );
+        const plannedSlot = ex.scheduleDayExerciseId
+          ? dayView.calendarDay.plannedDay?.exercises.find(
+              (slot) => slot.id === ex.scheduleDayExerciseId,
+            )
+          : undefined;
+
+        let nextSwappedFromId = ex.swappedFromExerciseId ?? null;
+        let nextSwappedFromName = ex.swappedFromExerciseName ?? null;
+        if (
+          scope === 'revert' ||
+          scope === 'schedule' ||
+          toExercise.id === ex.swappedFromExerciseId
+        ) {
+          nextSwappedFromId = null;
+          nextSwappedFromName = null;
+        } else if (scope === 'session' && !nextSwappedFromId) {
+          nextSwappedFromId = ex.exerciseId;
+          nextSwappedFromName = ex.exerciseName;
+        }
+
+        const preserveScheduleTargets =
+          (scope === 'revert' || scope === 'schedule') && Boolean(plannedSlot);
+
         return {
           ...ex,
           exerciseId: toExercise.id,
           exerciseName: toExercise.name,
           trackingType: toExercise.trackingType,
-          defaultRestSeconds: toExercise.defaultRestSeconds,
+          defaultRestSeconds: preserveScheduleTargets && plannedSlot
+            ? plannedSlot.restSeconds
+            : toExercise.defaultRestSeconds,
+          notes: ex.notes,
+          swappedFromExerciseId: nextSwappedFromId,
+          swappedFromExerciseName: nextSwappedFromName,
           sets: buildPrefilledSets({
-            targetSets: ex.sets.length,
+            targetSets:
+              preserveScheduleTargets && plannedSlot
+                ? plannedSlot.targetSets
+                : workingCount,
             trackingType: toExercise.trackingType,
             unit: dayView.user.unit,
             prefill,
+            slot: preserveScheduleTargets
+              ? plannedSlot
+              : plannedSlot
+                ? {
+                    targetWarmupSets: plannedSlot.targetWarmupSets,
+                    restSeconds: toExercise.defaultRestSeconds,
+                  }
+                : undefined,
           }),
         };
       }),
@@ -981,21 +1170,29 @@ function WorkoutLoggerInner() {
 
     const exercisesPayload = draft.exercises
       .map((ex, exIdx) => {
-        const completedEntries = ex.sets
+        const completed = ex.sets
           .map((s, origSetIdx) => ({ s, origSetIdx }))
           .filter(({ s }) => s.isCompleted);
+        const completedEntries = [
+          ...completed.filter(({ s }) => s.isWarmup),
+          ...completed.filter(({ s }) => !s.isWarmup),
+        ];
         return {
           exerciseId: ex.exerciseId,
           orderIndex: exIdx,
           notes: ex.notes.trim(),
           sets: completedEntries.map(({ s, origSetIdx }, sIdx) => {
             const restEntry = computedRestMatrix?.[exIdx]?.[origSetIdx];
-            const actualRestSeconds = isEditing
-              ? s.actualRestSeconds ?? null
-              : restEntry?.actualRestSeconds ?? null;
-            const restApproximate = isEditing
-              ? actualRestSeconds !== null && Boolean(s.restApproximate)
-              : restEntry?.restApproximate ?? false;
+            const actualRestSeconds = s.isWarmup
+              ? null
+              : isEditing
+                ? s.actualRestSeconds ?? null
+                : restEntry?.actualRestSeconds ?? null;
+            const restApproximate = s.isWarmup
+              ? false
+              : isEditing
+                ? actualRestSeconds !== null && Boolean(s.restApproximate)
+                : restEntry?.restApproximate ?? false;
             const keepQuality =
               isEditing ||
               dayView.user.enableSetQuality ||
@@ -1008,12 +1205,17 @@ function WorkoutLoggerInner() {
               reps: parseOptionalInt(s.reps),
               timeSeconds: parseOptionalInt(s.timeSeconds),
               distanceM: parseOptionalNum(s.distanceM),
-              restSeconds: isEditing
-                ? s.restSeconds ?? null
-                : s.restSeconds ?? ex.defaultRestSeconds,
+              restSeconds: s.isWarmup
+                ? null
+                : isEditing
+                  ? s.restSeconds ?? null
+                  : s.restSeconds ?? ex.defaultRestSeconds,
               actualRestSeconds,
               restApproximate,
               executionQualityPct: keepQuality ? s.executionQualityPct : null,
+              rir: s.rir,
+              notes: s.notes.trim(),
+              isWarmup: s.isWarmup,
               isCompleted: true,
               repQualities: keepQuality ? s.repQualities : [],
             };
@@ -1143,10 +1345,22 @@ function WorkoutLoggerInner() {
     dayView.calendarDay.plannedDay &&
       !dayView.calendarDay.plannedDay.isRestDay,
   );
-  const completedSetsTotal = draft.exercises.reduce(
-    (sum, ex) => sum + ex.sets.filter((s) => s.isCompleted).length,
+  const workingCompletedTotal = draft.exercises.reduce(
+    (sum, ex) => sum + ex.sets.filter((s) => !s.isWarmup && s.isCompleted).length,
     0,
   );
+  const warmupCompletedTotal = draft.exercises.reduce(
+    (sum, ex) => sum + ex.sets.filter((s) => s.isWarmup && s.isCompleted).length,
+    0,
+  );
+  const finishSetsLabel =
+    workingCompletedTotal > 0 && warmupCompletedTotal > 0
+      ? `${workingCompletedTotal} sets + ${warmupCompletedTotal}w`
+      : workingCompletedTotal > 0
+        ? `${workingCompletedTotal} sets`
+        : warmupCompletedTotal > 0
+          ? `${warmupCompletedTotal} warmup sets`
+          : '0 sets';
 
   const restClockActive = Boolean(draft.restClock?.isActive);
   const restClockExId = draft.restClock?.exerciseLocalId ?? null;
@@ -1156,7 +1370,7 @@ function WorkoutLoggerInner() {
     const clockEx = draft.exercises.find((e) => e.localId === restClockExId);
     if (clockEx) {
       const completedPos = clockEx.sets
-        .filter((s) => s.isCompleted)
+        .filter((s) => !s.isWarmup && s.isCompleted)
         .findIndex((s) => s.localId === restClockSetId);
       if (completedPos >= 0) {
         const prefill =
@@ -1279,10 +1493,14 @@ function WorkoutLoggerInner() {
           deleting={deleting}
           unit={dayView.user.unit}
           enableSetQuality={dayView.user.enableSetQuality}
+          alwaysShowRir={dayView.user.alwaysShowRir}
+          enableSetNoteTags={dayView.user.enableSetNoteTags}
+          enableSetNoteHint={dayView.user.enableSetNoteHint}
           preferredRestMode={dayView.user.restClockMode}
           defaultWeightStepKg={dayView.user.defaultWeightStepKg}
           sessionNowMs={sessionNowMs}
-          completedSetsTotal={completedSetsTotal}
+          completedSetsTotal={workingCompletedTotal}
+          finishSetsLabel={finishSetsLabel}
           canOfferInstead={canOfferInstead}
           plannedDayLabel={dayView.calendarDay.plannedDay?.label ?? null}
           plannedTargetByScheduleDayExerciseId={
@@ -1329,6 +1547,8 @@ function WorkoutLoggerInner() {
           onUpdateSet={handleUpdateSet}
           onToggleSetComplete={handleToggleSetComplete}
           onAddSet={handleAddSet}
+          onAddWarmupSet={handleAddWarmupSet}
+          onRepeatLastWarmups={handleRepeatLastWarmups}
           onRemoveSet={handleRemoveSet}
           onCheckAll={handleCheckAll}
           onChangeWeightStep={handleChangeWeightStep}
@@ -1572,6 +1792,9 @@ function WorkoutLoggerInner() {
               totalCount={draft.exercises.length}
               unit={dayView.user.unit}
               enableSetQuality={dayView.user.enableSetQuality}
+              alwaysShowRir={dayView.user.alwaysShowRir}
+              enableSetNoteTags={dayView.user.enableSetNoteTags}
+              enableSetNoteHint={dayView.user.enableSetNoteHint}
               isEditing={Boolean(sessionId)}
               weightStepDisplay={resolvedStep.displayStep}
               weightStepSource={resolvedStep.source}
@@ -1590,6 +1813,8 @@ function WorkoutLoggerInner() {
               onUpdateSet={handleUpdateSet}
               onToggleSetComplete={handleToggleSetComplete}
               onAddSet={handleAddSet}
+              onAddWarmupSet={handleAddWarmupSet}
+              onRepeatLastWarmups={handleRepeatLastWarmups}
               onRemoveSet={handleRemoveSet}
               onCheckAll={handleCheckAll}
               onStartRestTimer={startRestTimer}
@@ -1626,7 +1851,7 @@ function WorkoutLoggerInner() {
           <span>
             {sessionId
               ? 'Save changes'
-              : `Finish workout (${completedSetsTotal} sets)`}
+              : `Finish workout (${finishSetsLabel})`}
           </span>
         </Button>
 
@@ -1660,7 +1885,10 @@ function WorkoutLoggerInner() {
           unit={dayView.user.unit}
           currentExerciseId={swapExercise.exerciseId}
           currentExerciseName={swapExercise.exerciseName}
+          currentNotes={swapExercise.notes}
           scheduleDayExerciseId={swapExercise.scheduleDayExerciseId}
+          swappedFromExerciseId={swapExercise.swappedFromExerciseId}
+          swappedFromExerciseName={swapExercise.swappedFromExerciseName}
           allowScheduleScope={!sessionId && Boolean(swapExercise.scheduleDayExerciseId)}
           exercises={exercisesCatalog}
           prefillByExerciseId={mergedPrefillsByExerciseId}

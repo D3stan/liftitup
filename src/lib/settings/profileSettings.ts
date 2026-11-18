@@ -27,6 +27,9 @@ export interface SettingsPatchBody {
   theme?: unknown;
   themeVariant?: unknown;
   enableSetQuality?: unknown;
+  alwaysShowRir?: unknown;
+  enableSetNoteTags?: unknown;
+  enableSetNoteHint?: unknown;
   restClockMode?: unknown;
   defaultWorkoutView?: unknown;
   defaultWeightStepKg?: unknown;
@@ -137,6 +140,27 @@ export function validateSettingsPatch(
       throw ApiError.validation('enableSetQuality must be a boolean');
     }
     patch.enableSetQuality = body.enableSetQuality;
+  }
+
+  if (body.alwaysShowRir !== undefined) {
+    if (typeof body.alwaysShowRir !== 'boolean') {
+      throw ApiError.validation('alwaysShowRir must be a boolean');
+    }
+    patch.alwaysShowRir = body.alwaysShowRir;
+  }
+
+  if (body.enableSetNoteTags !== undefined) {
+    if (typeof body.enableSetNoteTags !== 'boolean') {
+      throw ApiError.validation('enableSetNoteTags must be a boolean');
+    }
+    patch.enableSetNoteTags = body.enableSetNoteTags;
+  }
+
+  if (body.enableSetNoteHint !== undefined) {
+    if (typeof body.enableSetNoteHint !== 'boolean') {
+      throw ApiError.validation('enableSetNoteHint must be a boolean');
+    }
+    patch.enableSetNoteHint = body.enableSetNoteHint;
   }
 
   if (body.restClockMode !== undefined) {

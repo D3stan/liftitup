@@ -11,6 +11,7 @@ import {
   Plus,
   SkipForward,
   Sparkles,
+  StickyNote,
   Trash2,
 } from 'lucide-react';
 import {
@@ -295,6 +296,19 @@ export default function WorkoutDayPage() {
           <div className="space-y-2.5">
             {session.exercises.map((ex, idx) => {
               const t = ex.trackingType ?? 'weight_reps';
+              const warmupSets = ex.sets.filter((s) => s.isWarmup);
+              const workingSets = ex.sets.filter((s) => !s.isWarmup);
+              const annotatedNotes = [
+                ...warmupSets.map((s, wIdx) => ({
+                  label: `W${wIdx + 1}`,
+                  notes: s.notes.trim(),
+                })),
+                ...workingSets.map((s, sIdx) => ({
+                  label: `Set ${sIdx + 1}`,
+                  notes: s.notes.trim(),
+                })),
+              ].filter((item) => item.notes.length > 0);
+
               return (
                 <div
                   key={ex.id}
@@ -315,8 +329,22 @@ export default function WorkoutDayPage() {
                     </div>
                   )}
 
+                  {warmupSets.length > 0 && (
+                    <div className="text-xs font-bold text-[var(--muted)]">
+                      Warmup:{' '}
+                      {warmupSets
+                        .map((s) => {
+                          const base = formatLoggedSet(s, t, user.unit);
+                          return s.rir !== null
+                            ? `${base} @ RIR ${s.rir}`
+                            : base;
+                        })
+                        .join(' · ')}
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-1.5">
-                    {ex.sets.map((s) => {
+                    {workingSets.map((s) => {
                       const color = getQualityRowColor(
                         s.isCompleted,
                         user.enableSetQuality || s.executionQualityPct !== null,
@@ -333,12 +361,18 @@ export default function WorkoutDayPage() {
                         restLabel !== null &&
                         s.restSeconds !== null &&
                         s.restSeconds !== s.actualRestSeconds;
+                      const hasSetNote = s.notes.trim().length > 0;
                       return (
                         <span
                           key={s.id}
                           className={`inline-flex flex-wrap items-center gap-1.5 rounded-[6px] border-2 border-[var(--line)] px-2.5 py-1 text-sm font-bold ${color}`}
                         >
                           <span>{formatLoggedSet(s, t, user.unit)}</span>
+                          {s.rir !== null && (
+                            <span className="text-xs opacity-85">
+                              @ RIR {s.rir}
+                            </span>
+                          )}
                           {s.executionQualityPct !== null &&
                             (user.enableSetQuality ||
                               s.executionQualityPct !== 100) && (
@@ -354,10 +388,29 @@ export default function WorkoutDayPage() {
                                 : ''}
                             </span>
                           )}
+                          {hasSetNote && (
+                            <StickyNote
+                              className="h-3.5 w-3.5 shrink-0 opacity-80"
+                              aria-label="Set has note"
+                            />
+                          )}
                         </span>
                       );
                     })}
                   </div>
+
+                  {annotatedNotes.length > 0 && (
+                    <div className="space-y-0.5 text-xs font-bold text-[var(--muted)]">
+                      {annotatedNotes.map((item, nIdx) => (
+                        <div key={`${item.label}-${nIdx}`}>
+                          <span className="text-[var(--ink)]">
+                            {item.label}:
+                          </span>{' '}
+                          {item.notes}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -410,6 +463,12 @@ export default function WorkoutDayPage() {
                 <div className="text-base font-bold text-[var(--muted)]">
                   {formatPlannedTarget(ex, user.unit)}
                 </div>
+
+                {ex.swappedFromExerciseName && (
+                  <div className="inline-flex items-center gap-1 rounded-[6px] border border-[var(--line)]/40 bg-[var(--gold-bg)] px-2 py-0.5 text-xs font-bold text-[var(--ink)]">
+                    <span>Swapped from {ex.swappedFromExerciseName}</span>
+                  </div>
+                )}
 
                 {ex.notes.trim().length > 0 && (
                   <div className="note !mt-1.5 !py-1.5 !px-2.5 text-sm font-bold">

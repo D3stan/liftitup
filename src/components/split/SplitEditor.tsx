@@ -6,12 +6,20 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
   ArrowLeft,
+  ArrowLeftRight,
   ArrowUp,
   Plus,
   Save,
   Trash2,
 } from 'lucide-react';
 import { ApiClientError, Button, apiFetch, toast } from '@/components/ui';
+import {
+  trackingUsesDistance,
+  trackingUsesReps,
+  trackingUsesTime,
+  trackingUsesWeight,
+} from '@/components/workout/trackingFormat';
+import { EXERCISE_CATALOG } from '@/lib/exercises/catalog';
 import type {
   Exercise,
   RotationSchedule,
@@ -35,6 +43,7 @@ interface DraftExercise {
   exerciseName: string;
   trackingType: TrackingType;
   targetSets: string;
+  targetWarmupSets: string;
   repsMin: string;
   repsMax: string;
   timeSeconds: string;
@@ -43,6 +52,18 @@ interface DraftExercise {
   restSeconds: string;
   notes: string;
 }
+
+type PickerState =
+  | { mode: 'add'; dayKey: string }
+  | {
+      mode: 'swap';
+      dayKey: string;
+      exKey: string;
+      excludeExerciseId: string;
+      preferCategory?: string;
+      preferTrackingType: TrackingType;
+    }
+  | null;
 
 interface DraftDay {
   localKey: string;
@@ -68,6 +89,7 @@ function toDraftExercise(
     exerciseName: ex.exerciseName ?? 'Exercise',
     trackingType: ex.trackingType ?? 'weight_reps',
     targetSets: String(ex.targetSets),
+    targetWarmupSets: String(ex.targetWarmupSets ?? 0),
     repsMin: hasRange
       ? ex.targetRepsMin !== null
         ? String(ex.targetRepsMin)
@@ -106,6 +128,7 @@ function createDraftFromExercise(ex: Exercise): DraftExercise {
     exerciseName: ex.name,
     trackingType: type,
     targetSets: '3',
+    targetWarmupSets: '0',
     repsMin: usesReps ? '8' : '',
     repsMax: usesReps ? '12' : '',
     timeSeconds: usesTime ? '30' : '',
@@ -141,15 +164,26 @@ export function SplitEditor() {
   const [unit, setUnit] = useState<WeightUnit>('kg');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [pickerDayKey, setPickerDayKey] = useState<string | null>(null);
+  const [pickerState, setPickerState] = useState<PickerState>(null);
+  const [exerciseCategories, setExerciseCategories] = useState<
+    Record<string, string>
+  >({});
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [schedRes, meRes] = await Promise.all([
+      const [schedRes, meRes, exRes] = await Promise.all([
         apiFetch<{ schedule: RotationSchedule | null }>('/api/schedule'),
         apiFetch<{ user: UserProfile }>('/api/auth/me'),
+        apiFetch<{ exercises: Exercise[] }>('/api/exercises').catch(() => ({
+          exercises: [] as Exercise[],
+        })),
       ]);
+      const catMap: Record<string, string> = {};
+      for (const item of exRes.exercises ?? []) {
+        if (item.category) catMap[item.id] = item.category;
+      }
+      setExerciseCategories(catMap);
       const userUnit = meRes.user.unit;
       setUnit(userUnit);
 
@@ -235,6 +269,49 @@ export function SplitEditor() {
     );
   };
 
+  const swapExerciseInDay = (
+    dayKey: string,
+    exKey: string,
+    nextExercise: Exercise,
+  ) => {
+    setDays((prev) =>
+      prev.map((d) => {
+        if (d.localKey !== dayKey) return d;
+        return {
+          ...d,
+          exercises: d.exercises.map((ex) => {
+            if (ex.localKey !== exKey) return ex;
+            const prevType = ex.trackingType;
+            const nextType = nextExercise.trackingType;
+            const hadReps = trackingUsesReps(prevType);
+            const usesReps = trackingUsesReps(nextType);
+            const usesWeight = trackingUsesWeight(nextType);
+            const sameWeightSemantics =
+              prevType === nextType ||
+              ((prevType === 'weight_reps' || prevType === 'weight_time') &&
+                (nextType === 'weight_reps' || nextType === 'weight_time'));
+            const hadTime = trackingUsesTime(prevType);
+            const usesTime = trackingUsesTime(nextType);
+            const hadDist = trackingUsesDistance(prevType);
+            const usesDist = trackingUsesDistance(nextType);
+
+            return {
+              ...ex,
+              exerciseId: nextExercise.id,
+              exerciseName: nextExercise.name,
+              trackingType: nextType,
+              repsMin: usesReps ? (hadReps ? ex.repsMin : '8') : '',
+              repsMax: usesReps ? (hadReps ? ex.repsMax : '12') : '',
+              weight: usesWeight && sameWeightSemantics ? ex.weight : '',
+              timeSeconds: usesTime ? (hadTime ? ex.timeSeconds : '30') : '',
+              distanceM: usesDist ? (hadDist ? ex.distanceM : '100') : '',
+            };
+          }),
+        };
+      }),
+    );
+  };
+
   const removeExercise = (dayKey: string, exKey: string) => {
     setDays((prev) =>
       prev.map((d) =>
@@ -314,6 +391,7 @@ export function SplitEditor() {
               ...(ex.id ? { id: ex.id } : {}),
               exerciseId: ex.exerciseId,
               targetSets: parseOptionalNum(ex.targetSets) ?? 3,
+              targetWarmupSets: parseOptionalNum(ex.targetWarmupSets) ?? 0,
               targetReps,
               targetRepsMin,
               targetRepsMax,
@@ -478,6 +556,29 @@ export function SplitEditor() {
                           <Button
                             variant="alt"
                             size="icon"
+                            className="min-h-[44px] min-w-[44px]"
+                            aria-label="Swap exercise"
+                            onClick={() => {
+                              const preferCategory =
+                                exerciseCategories[ex.exerciseId] ??
+                                EXERCISE_CATALOG.find(
+                                  (c) => c.id === ex.exerciseId,
+                                )?.category;
+                              setPickerState({
+                                mode: 'swap',
+                                dayKey: day.localKey,
+                                exKey: ex.localKey,
+                                excludeExerciseId: ex.exerciseId,
+                                preferCategory,
+                                preferTrackingType: ex.trackingType,
+                              });
+                            }}
+                          >
+                            <ArrowLeftRight className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="alt"
+                            size="icon"
                             aria-label="Move exercise up"
                             disabled={exIdx === 0}
                             onClick={() => moveExercise(day.localKey, exIdx, -1)}
@@ -516,6 +617,23 @@ export function SplitEditor() {
                             onChange={(e) =>
                               updateExercise(day.localKey, ex.localKey, {
                                 targetSets: e.target.value,
+                              })
+                            }
+                            className={`${INPUT_CLS} mt-0.5`}
+                          />
+                        </label>
+
+                        <label className="block text-xs font-bold text-[var(--muted)]">
+                          Warmups
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={10}
+                            value={ex.targetWarmupSets}
+                            onChange={(e) =>
+                              updateExercise(day.localKey, ex.localKey, {
+                                targetWarmupSets: e.target.value,
                               })
                             }
                             className={`${INPUT_CLS} mt-0.5`}
@@ -658,7 +776,9 @@ export function SplitEditor() {
                 <Button
                   variant="alt"
                   className="w-full"
-                  onClick={() => setPickerDayKey(day.localKey)}
+                  onClick={() =>
+                    setPickerState({ mode: 'add', dayKey: day.localKey })
+                  }
                 >
                   <Plus className="h-4 w-4" />
                   Add exercise
@@ -675,10 +795,29 @@ export function SplitEditor() {
       </Button>
 
       <ExercisePickerSheet
-        open={pickerDayKey !== null}
-        onClose={() => setPickerDayKey(null)}
+        open={pickerState !== null}
+        onClose={() => setPickerState(null)}
+        title={pickerState?.mode === 'swap' ? 'Swap exercise' : 'Add exercise'}
+        excludeExerciseId={
+          pickerState?.mode === 'swap'
+            ? pickerState.excludeExerciseId
+            : undefined
+        }
+        preferCategory={
+          pickerState?.mode === 'swap' ? pickerState.preferCategory : undefined
+        }
+        preferTrackingType={
+          pickerState?.mode === 'swap'
+            ? pickerState.preferTrackingType
+            : undefined
+        }
         onSelect={(ex) => {
-          if (pickerDayKey) addExerciseToDay(pickerDayKey, ex);
+          if (!pickerState) return;
+          if (pickerState.mode === 'swap') {
+            swapExerciseInDay(pickerState.dayKey, pickerState.exKey, ex);
+          } else {
+            addExerciseToDay(pickerState.dayKey, ex);
+          }
         }}
       />
     </div>

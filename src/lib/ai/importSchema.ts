@@ -23,6 +23,7 @@ export interface AiImportExercise {
   name: string;
   trackingType: AiTrackingType;
   targetSets: number;
+  targetWarmupSets: number;
   targetReps: number | null;
   targetRepsMin: number | null;
   targetRepsMax: number | null;
@@ -103,6 +104,7 @@ Once I reply, return ONLY valid JSON matching this schema (no extra prose):
             "name": "Barbell Bench Press",
             "trackingType": "weight_reps",
             "targetSets": 3,
+            "targetWarmupSets": 0,
             "targetRepsMin": 6,
             "targetRepsMax": 8,
             "targetWeightKg": 80,
@@ -117,6 +119,7 @@ Once I reply, return ONLY valid JSON matching this schema (no extra prose):
 }
 Allowed trackingType values: weight_reps, bodyweight_reps, weighted_bodyweight, assisted_bodyweight, time, weight_time, distance, distance_time.
 For time exercises use "targetTimeSeconds" instead of reps; for distance use "targetDistanceM".
+Optional "targetWarmupSets" (integer 0..10, default 0) can be set alongside "targetSets".
 Put days in exact rotation order (no weekday names needed).`;
 
 export interface EditPromptInput {
@@ -136,6 +139,7 @@ export interface EditPromptInput {
         name: string;
         trackingType: AiTrackingType;
         targetSets: number;
+        targetWarmupSets?: number;
         targetReps?: number | null;
         targetRepsMin?: number | null;
         targetRepsMax?: number | null;
@@ -506,6 +510,18 @@ export function validateAiImportPayload(rawText: string): AiValidationResult {
               errors,
             );
 
+            const targetWarmupSets =
+              rawEx.targetWarmupSets === undefined ||
+              rawEx.targetWarmupSets === null
+                ? 0
+                : (validateNumberField(
+                    rawEx,
+                    'targetWarmupSets',
+                    `${exPath}.targetWarmupSets`,
+                    { min: 0, max: 10, integer: true },
+                    errors,
+                  ) ?? 0);
+
             const restSeconds = validateNumberField(
               rawEx,
               'restSeconds',
@@ -636,6 +652,7 @@ export function validateAiImportPayload(rawText: string): AiValidationResult {
                 name: exName,
                 trackingType,
                 targetSets,
+                targetWarmupSets,
                 targetReps,
                 targetRepsMin,
                 targetRepsMax,

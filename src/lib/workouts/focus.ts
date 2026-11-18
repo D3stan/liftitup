@@ -272,6 +272,7 @@ export function computeFocusSummaryStats(params: {
   const restEvalExercises = exercises.map((ex, exIdx) => ({
     sets: ex.sets.map((s, setIdx) => ({
       isCompleted: s.isCompleted,
+      isWarmup: s.isWarmup,
       actualRestSeconds: isEditing
         ? s.actualRestSeconds ?? null
         : restMatrix?.[exIdx]?.[setIdx]?.actualRestSeconds ?? null,
@@ -305,14 +306,15 @@ export function computeFocusSummaryStats(params: {
   let totalVolumeKg = 0;
 
   for (const ex of exercises) {
-    const setsCount = ex.sets.length;
+    const workingSets = ex.sets.filter((s) => !s.isWarmup);
+    const setsCount = workingSets.length;
     totalSetsCount += setsCount;
     let exCompleted = 0;
     const supportsVolume =
       ex.trackingType === 'weight_reps' ||
       ex.trackingType === 'weighted_bodyweight';
 
-    for (const s of ex.sets) {
+    for (const s of workingSets) {
       if (!s.isCompleted) continue;
       completedSetsCount += 1;
       exCompleted += 1;

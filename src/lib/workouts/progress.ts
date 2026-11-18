@@ -235,7 +235,7 @@ export async function getUserProgressReport(
       FROM workout_sessions ws
       JOIN workout_exercises we ON we.session_id = ws.id
       JOIN exercises e ON e.id = we.exercise_id
-      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1 AND wset.is_warmup = 0
       WHERE ws.user_id = $1
       `,
       [user.id],
@@ -283,7 +283,7 @@ export async function getUserProgressReport(
       FROM workout_sessions ws
       JOIN workout_exercises we ON we.session_id = ws.id
       JOIN exercises e ON e.id = we.exercise_id
-      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1 AND wset.is_warmup = 0
       WHERE ws.user_id = $1
       GROUP BY e.id, e.name, e.tracking_type
       ORDER BY session_count DESC, e.name ASC
@@ -323,7 +323,7 @@ export async function getUserProgressReport(
         wset.distance_m AS distance_m
       FROM workout_sessions ws
       JOIN workout_exercises we ON we.session_id = ws.id
-      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+      JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1 AND wset.is_warmup = 0
       WHERE ws.user_id = $1 AND we.exercise_id = $2 ${dateClause}
       ORDER BY ws.session_date ASC, wset.set_number ASC
       `,
@@ -402,7 +402,7 @@ export async function getUserProgressReport(
       COUNT(wset.id)::int AS completed_sets
     FROM workout_sessions ws
     LEFT JOIN workout_exercises we ON we.session_id = ws.id
-    LEFT JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1
+    LEFT JOIN workout_sets wset ON wset.workout_exercise_id = we.id AND wset.is_completed = 1 AND wset.is_warmup = 0
     WHERE ws.user_id = $1 ${sessionDateClause}
     GROUP BY ws.id, ws.session_date
     ORDER BY ws.session_date ASC
@@ -561,7 +561,7 @@ export async function getUserProgressAndRestReport(
       let hasVolume = false;
 
       for (const s of ex.sets) {
-        if (!s.isCompleted) continue;
+        if (!s.isCompleted || s.isWarmup) continue;
 
         if (
           s.actualRestSeconds !== null &&

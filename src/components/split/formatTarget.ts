@@ -69,6 +69,8 @@ export function formatExerciseTarget(
   unit: WeightUnit,
 ): string {
   const type: TrackingType = ex.trackingType ?? 'weight_reps';
+  const warmupPrefix =
+    ex.targetWarmupSets > 0 ? `${ex.targetWarmupSets}w + ` : '';
   const parts: string[] = [];
 
   if (type === 'time' || type === 'weight_time') {
@@ -76,20 +78,20 @@ export function formatExerciseTarget(
       ex.targetTimeSeconds !== null
         ? formatDurationShort(ex.targetTimeSeconds)
         : '—';
-    parts.push(`${ex.targetSets} × ${timeStr}`);
+    parts.push(`${warmupPrefix}${ex.targetSets} × ${timeStr}`);
   } else if (type === 'distance' || type === 'distance_time') {
     const distStr =
       ex.targetDistanceM !== null ? `${ex.targetDistanceM}m` : '—';
     if (type === 'distance_time' && ex.targetTimeSeconds !== null) {
       parts.push(
-        `${ex.targetSets} × ${distStr} / ${formatDurationShort(ex.targetTimeSeconds)}`,
+        `${warmupPrefix}${ex.targetSets} × ${distStr} / ${formatDurationShort(ex.targetTimeSeconds)}`,
       );
     } else {
-      parts.push(`${ex.targetSets} × ${distStr}`);
+      parts.push(`${warmupPrefix}${ex.targetSets} × ${distStr}`);
     }
   } else {
     const repsStr = formatRepsPart(ex) ?? '—';
-    parts.push(`${ex.targetSets} × ${repsStr}`);
+    parts.push(`${warmupPrefix}${ex.targetSets} × ${repsStr}`);
   }
 
   if (ex.targetWeightKg !== null) {

@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowLeftRight,
   ArrowUp,
   CheckCheck,
+  ChevronDown,
+  ChevronUp,
   Plus,
+  RotateCcw,
   StickyNote,
   Timer,
   Trash2,
@@ -23,6 +26,7 @@ import SetQualityPopover from './SetQualityPopover';
 import WeightStepSheet from './WeightStepSheet';
 import {
   parseOptionalInt,
+  trackingUsesReps,
   trackingUsesWeight,
   type LoggerExercise,
   type LoggerSet,
@@ -34,6 +38,9 @@ export interface ExerciseLoggerCardProps {
   totalCount: number;
   unit: WeightUnit;
   enableSetQuality: boolean;
+  alwaysShowRir: boolean;
+  enableSetNoteTags: boolean;
+  enableSetNoteHint: boolean;
   isEditing?: boolean;
   weightStepDisplay?: number;
   weightStepSource?: WeightStepSource;
@@ -57,6 +64,8 @@ export interface ExerciseLoggerCardProps {
   ) => void;
   onToggleSetComplete: (exIndex: number, setIndex: number) => void;
   onAddSet: (exIndex: number) => void;
+  onAddWarmupSet?: (exIndex: number) => void;
+  onRepeatLastWarmups?: (exIndex: number) => void;
   onRemoveSet: (exIndex: number, setIndex: number) => void;
   onCheckAll: (exIndex: number) => void;
   onStartRestTimer: (seconds: number, label: string) => void;
@@ -68,6 +77,9 @@ export default function ExerciseLoggerCard({
   totalCount,
   unit,
   enableSetQuality,
+  alwaysShowRir,
+  enableSetNoteTags,
+  enableSetNoteHint,
   isEditing = false,
   weightStepDisplay,
   weightStepSource = 'default',
@@ -84,13 +96,41 @@ export default function ExerciseLoggerCard({
   onUpdateSet,
   onToggleSetComplete,
   onAddSet,
+  onAddWarmupSet,
+  onRepeatLastWarmups,
   onRemoveSet,
   onCheckAll,
   onStartRestTimer,
 }: ExerciseLoggerCardProps) {
   const [noteOpen, setNoteOpen] = useState(exercise.notes.trim().length > 0);
+  const [rirOpen, setRirOpen] = useState(
+    () => alwaysShowRir || exercise.sets.some((s) => s.rir !== null),
+  );
+  const [rirManuallyOpened, setRirManuallyOpened] = useState(false);
   const [qualitySetIdx, setQualitySetIdx] = useState<number | null>(null);
   const [stepSheetOpen, setStepSheetOpen] = useState(false);
+
+  const warmupEntries = exercise.sets
+    .map((setRow, origIdx) => ({ setRow, origIdx }))
+    .filter(({ setRow }) => setRow.isWarmup);
+  const workingEntries = exercise.sets
+    .map((setRow, origIdx) => ({ setRow, origIdx }))
+    .filter(({ setRow }) => !setRow.isWarmup);
+
+  const completedWarmupCount = warmupEntries.filter(
+    ({ setRow }) => setRow.isCompleted,
+  ).length;
+  const allWarmupsDone =
+    warmupEntries.length > 0 && completedWarmupCount === warmupEntries.length;
+  const [warmupExpanded, setWarmupExpanded] = useState(() => !allWarmupsDone);
+
+  const prevExerciseIdRef = useRef(exercise.exerciseId);
+  useEffect(() => {
+    if (prevExerciseIdRef.current !== exercise.exerciseId) {
+      prevExerciseIdRef.current = exercise.exerciseId;
+      setWarmupExpanded(!allWarmupsDone);
+    }
+  }, [exercise.exerciseId, allWarmupsDone]);
 
   const effectiveWeightStep =
     weightStepDisplay ??
@@ -100,13 +140,45 @@ export default function ExerciseLoggerCard({
     : hasUserStepOverride;
 
   const usesWeight = trackingUsesWeight(exercise.trackingType);
+  const usesReps = trackingUsesReps(exercise.trackingType);
 
-  const completedCount = exercise.sets.filter((s) => s.isCompleted).length;
+  const canShowRirToggle =
+    usesReps || exercise.sets.some((s) => s.rir !== null);
+  const showRirRow = rirOpen && canShowRirToggle;
+
+  const completedWorkingCount = workingEntries.filter(
+    ({ setRow }) => setRow.isCompleted,
+  ).length;
   const allDone =
-    exercise.sets.length > 0 && completedCount === exercise.sets.length;
+    workingEntries.length > 0 && completedWorkingCount === workingEntries.length;
 
   const activeQualitySet =
     qualitySetIdx !== null ? exercise.sets[qualitySetIdx] ?? null : null;
+  const activeQualityIsWarmup = Boolean(activeQualitySet?.isWarmup);
+  const activeQualityNumber =
+    qualitySetIdx !== null
+      ? exercise.sets
+          .slice(0, qualitySetIdx + 1)
+          .filter((s) => s.isWarmup === activeQualityIsWarmup).length
+      : 1;
+  const activeQualityLabel = activeQualityIsWarmup
+    ? `Warmup #${activeQualityNumber}`
+    : `Set #${activeQualityNumber}`;
+
+  const handleToggleSetWithAutoCollapse = (
+    origIdx: number,
+    isWarmup: boolean,
+    currentlyCompleted: boolean,
+  ) => {
+    if (
+      isWarmup &&
+      !currentlyCompleted &&
+      warmupEntries.filter(({ setRow }) => !setRow.isCompleted).length === 1
+    ) {
+      setWarmupExpanded(false);
+    }
+    onToggleSetComplete(index, origIdx);
+  };
 
   return (
     <div
@@ -179,6 +251,22 @@ export default function ExerciseLoggerCard({
               <span>Note</span>
             </button>
           )}
+          {canShowRirToggle && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = !rirOpen;
+                setRirOpen(next);
+                setRirManuallyOpened(next);
+              }}
+              aria-pressed={rirOpen}
+              className={`btn alt !min-h-[44px] !px-3 text-sm ${
+                rirOpen ? '!bg-[var(--gold-bg)]' : ''
+              }`}
+            >
+              <span>RIR</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onDeleteExercise(index)}
@@ -218,19 +306,131 @@ export default function ExerciseLoggerCard({
         </div>
       )}
 
-      {/* Stacked Mobile Set Rows */}
+      {/* Warmup Sets Drawer & Quick Actions */}
+      {warmupEntries.length === 0 ? (
+        (onAddWarmupSet || onRepeatLastWarmups) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {onAddWarmupSet && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAddWarmupSet(index);
+                  setWarmupExpanded(true);
+                }}
+                className="btn alt !min-h-[44px] border-dashed !px-3 text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Warmup</span>
+              </button>
+            )}
+            {onRepeatLastWarmups && (prefill?.warmupSets?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  onRepeatLastWarmups(index);
+                  setWarmupExpanded(true);
+                }}
+                className="btn alt !min-h-[44px] !px-3 text-sm"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>Repeat last warmups ({prefill!.warmupSets!.length})</span>
+              </button>
+            )}
+          </div>
+        )
+      ) : !warmupExpanded ? (
+        <button
+          type="button"
+          onClick={() => setWarmupExpanded(true)}
+          className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-[10px] border-2 border-dashed border-[var(--line)]/60 bg-[var(--paper)]/70 px-3 py-2 text-sm font-bold text-[var(--ink)]"
+        >
+          <span>
+            Warmup · {completedWarmupCount}/{warmupEntries.length}
+            {allWarmupsDone ? ' ✓' : ''}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+        </button>
+      ) : (
+        <div className="space-y-2.5 rounded-[10px] border-2 border-dashed border-[var(--line)]/60 bg-[var(--paper)]/60 p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setWarmupExpanded(false)}
+              className="flex min-h-[44px] items-center gap-1.5 rounded-[8px] px-2 text-sm font-bold text-[var(--muted)]"
+            >
+              <ChevronUp className="h-4 w-4" />
+              <span>
+                Warmup · {completedWarmupCount}/{warmupEntries.length}
+                {allWarmupsDone ? ' ✓' : ''}
+              </span>
+            </button>
+            {onAddWarmupSet && (
+              <button
+                type="button"
+                onClick={() => onAddWarmupSet(index)}
+                className="btn alt !min-h-[44px] !px-3 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Warmup</span>
+              </button>
+            )}
+          </div>
+          <div className="space-y-2.5">
+            {warmupEntries.map(({ setRow, origIdx }, wIdx) => (
+              <LoggerSetRow
+                key={setRow.localId}
+                exIndex={index}
+                setIndex={origIdx}
+                kindIndex={wIdx}
+                totalSets={workingEntries.length}
+                canDelete={true}
+                setRow={setRow}
+                sets={exercise.sets}
+                trackingType={exercise.trackingType}
+                unit={unit}
+                enableSetQuality={enableSetQuality}
+                showRir={
+                  showRirRow && (setRow.rir !== null || rirManuallyOpened)
+                }
+                enableSetNoteTags={enableSetNoteTags}
+                enableSetNoteHint={enableSetNoteHint}
+                isEditing={isEditing}
+                effectiveWeightStep={effectiveWeightStep}
+                prefill={prefill}
+                onUpdateSet={onUpdateSet}
+                onToggleSetComplete={(exIdx, setIdx) =>
+                  handleToggleSetWithAutoCollapse(
+                    setIdx,
+                    true,
+                    setRow.isCompleted,
+                  )
+                }
+                onRemoveSet={onRemoveSet}
+                onOpenQuality={(idx) => setQualitySetIdx(idx)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stacked Mobile Working Set Rows */}
       <div className="space-y-2.5">
-        {exercise.sets.map((setRow, setIdx) => (
+        {workingEntries.map(({ setRow, origIdx }, workIdx) => (
           <LoggerSetRow
             key={setRow.localId}
             exIndex={index}
-            setIndex={setIdx}
-            totalSets={exercise.sets.length}
+            setIndex={origIdx}
+            kindIndex={workIdx}
+            totalSets={workingEntries.length}
+            canDelete={workingEntries.length > 1}
             setRow={setRow}
             sets={exercise.sets}
             trackingType={exercise.trackingType}
             unit={unit}
             enableSetQuality={enableSetQuality}
+            showRir={showRirRow}
+            enableSetNoteTags={enableSetNoteTags}
+            enableSetNoteHint={enableSetNoteHint}
             isEditing={isEditing}
             effectiveWeightStep={effectiveWeightStep}
             prefill={prefill}
@@ -287,7 +487,8 @@ export default function ExerciseLoggerCard({
         <SetQualityPopover
           open={true}
           onClose={() => setQualitySetIdx(null)}
-          setNumber={qualitySetIdx + 1}
+          setNumber={activeQualityNumber}
+          setLabel={activeQualityLabel}
           reps={parseOptionalInt(activeQualitySet.reps)}
           qualityPct={activeQualitySet.executionQualityPct}
           repQualities={activeQualitySet.repQualities}

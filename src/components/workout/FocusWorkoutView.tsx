@@ -11,10 +11,12 @@ import {
   CheckCheck,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   Clock,
   ListOrdered,
   Play,
   Plus,
+  RotateCcw,
   Sparkles,
   StickyNote,
   Timer,
@@ -55,6 +57,7 @@ import WeightStepSheet from './WeightStepSheet';
 import {
   getTrackingShortLabel,
   parseOptionalInt,
+  trackingUsesReps,
   trackingUsesWeight,
   type LoggerSet,
   type WorkoutDraft,
@@ -69,10 +72,14 @@ export interface FocusWorkoutViewProps {
   deleting: boolean;
   unit: WeightUnit;
   enableSetQuality: boolean;
+  alwaysShowRir: boolean;
+  enableSetNoteTags: boolean;
+  enableSetNoteHint: boolean;
   preferredRestMode: RestClockMode;
   defaultWeightStepKg: number | null;
   sessionNowMs: number;
   completedSetsTotal: number;
+  finishSetsLabel?: string;
   canOfferInstead: boolean;
   plannedDayLabel: string | null;
   plannedTargetByScheduleDayExerciseId: Record<string, string>;
@@ -105,6 +112,8 @@ export interface FocusWorkoutViewProps {
   ) => void;
   onToggleSetComplete: (exIndex: number, setIndex: number) => void;
   onAddSet: (exIndex: number) => void;
+  onAddWarmupSet?: (exIndex: number) => void;
+  onRepeatLastWarmups?: (exIndex: number) => void;
   onRemoveSet: (exIndex: number, setIndex: number) => void;
   onCheckAll: (exIndex: number) => void;
   onChangeWeightStep: (
@@ -130,10 +139,14 @@ export default function FocusWorkoutView({
   deleting,
   unit,
   enableSetQuality,
+  alwaysShowRir,
+  enableSetNoteTags,
+  enableSetNoteHint,
   preferredRestMode,
   defaultWeightStepKg,
   sessionNowMs,
   completedSetsTotal,
+  finishSetsLabel,
   canOfferInstead,
   plannedDayLabel,
   plannedTargetByScheduleDayExerciseId,
@@ -162,6 +175,8 @@ export default function FocusWorkoutView({
   onUpdateSet,
   onToggleSetComplete,
   onAddSet,
+  onAddWarmupSet,
+  onRepeatLastWarmups,
   onRemoveSet,
   onCheckAll,
   onChangeWeightStep,
@@ -191,6 +206,15 @@ export default function FocusWorkoutView({
   const [stepSheetOpen, setStepSheetOpen] = useState(false);
   const [qualitySetIdx, setQualitySetIdx] = useState<number | null>(null);
   const [openNotesByExId, setOpenNotesByExId] = useState<
+    Record<string, boolean>
+  >({});
+  const [rirOpenByExId, setRirOpenByExId] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [rirManuallyOpenedByExId, setRirManuallyOpenedByExId] = useState<
+    Record<string, boolean>
+  >({});
+  const [warmupExpandedByExId, setWarmupExpandedByExId] = useState<
     Record<string, boolean>
   >({});
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -265,6 +289,17 @@ export default function FocusWorkoutView({
       if (!targetEx || !targetSet) return;
 
       const completingThisSet = !targetSet.isCompleted;
+      if (targetSet.isWarmup && completingThisSet) {
+        const remainingWarmups = targetEx.sets.filter(
+          (s) => s.isWarmup && !s.isCompleted,
+        ).length;
+        if (remainingWarmups === 1) {
+          setWarmupExpandedByExId((prev) => ({
+            ...prev,
+            [targetEx.localId]: false,
+          }));
+        }
+      }
       const otherAllCompleted = targetEx.sets.every((s, idx) =>
         idx === setIdx ? true : s.isCompleted,
       );
@@ -392,10 +427,43 @@ export default function FocusWorkoutView({
     ? prefillsByExerciseId[activeExercise.exerciseId] ?? null
     : null;
 
-  const activeCompletedCount = activeExercise
-    ? activeExercise.sets.filter((s) => s.isCompleted).length
-    : 0;
-  const activeTotalSets = activeExercise ? activeExercise.sets.length : 0;
+  const warmupEntries = activeExercise
+    ? activeExercise.sets
+        .map((setRow, origIdx) => ({ setRow, origIdx }))
+        .filter(({ setRow }) => setRow.isWarmup)
+    : [];
+  const workingEntries = activeExercise
+    ? activeExercise.sets
+        .map((setRow, origIdx) => ({ setRow, origIdx }))
+        .filter(({ setRow }) => !setRow.isWarmup)
+    : [];
+
+  const completedWarmupCount = warmupEntries.filter(
+    ({ setRow }) => setRow.isCompleted,
+  ).length;
+  const allWarmupsDone =
+    warmupEntries.length > 0 && completedWarmupCount === warmupEntries.length;
+  const warmupExpanded = activeExercise
+    ? warmupExpandedByExId[activeExercise.localId] ?? !allWarmupsDone
+    : false;
+
+  const activeRirOpen = activeExercise
+    ? rirOpenByExId[activeExercise.localId] ??
+      (alwaysShowRir || activeExercise.sets.some((s) => s.rir !== null))
+    : false;
+  const activeRirManuallyOpened = activeExercise
+    ? Boolean(rirManuallyOpenedByExId[activeExercise.localId])
+    : false;
+  const canShowRirToggle = activeExercise
+    ? trackingUsesReps(activeExercise.trackingType) ||
+      activeExercise.sets.some((s) => s.rir !== null)
+    : false;
+  const showRirRow = activeRirOpen && canShowRirToggle;
+
+  const activeCompletedCount = workingEntries.filter(
+    ({ setRow }) => setRow.isCompleted,
+  ).length;
+  const activeTotalSets = workingEntries.length;
   const activeRemainingCount = Math.max(
     0,
     activeTotalSets - activeCompletedCount,
@@ -405,6 +473,14 @@ export default function FocusWorkoutView({
   const nextIncompleteIdx = activeExercise
     ? activeExercise.sets.findIndex((s) => !s.isCompleted)
     : -1;
+  const nextIncompleteLabel = (() => {
+    if (!activeExercise || nextIncompleteIdx < 0) return 'Set 1';
+    const target = activeExercise.sets[nextIncompleteIdx];
+    const kindNum = activeExercise.sets
+      .slice(0, nextIncompleteIdx + 1)
+      .filter((s) => s.isWarmup === target.isWarmup).length;
+    return target.isWarmup ? `Warmup ${kindNum}` : `Set ${kindNum}`;
+  })();
 
   const activeNoteOpen = activeExercise
     ? Boolean(
@@ -433,6 +509,16 @@ export default function FocusWorkoutView({
     activeExercise && qualitySetIdx !== null
       ? activeExercise.sets[qualitySetIdx] ?? null
       : null;
+  const activeQualityIsWarmup = Boolean(activeQualitySet?.isWarmup);
+  const activeQualityNumber =
+    activeExercise && qualitySetIdx !== null
+      ? activeExercise.sets
+          .slice(0, qualitySetIdx + 1)
+          .filter((s) => s.isWarmup === activeQualityIsWarmup).length
+      : 1;
+  const activeQualityLabel = activeQualityIsWarmup
+    ? `Warmup #${activeQualityNumber}`
+    : `Set #${activeQualityNumber}`;
 
   const isStopwatch = restState.mode === 'stopwatch';
   const restPrimaryReadout = isStopwatch
@@ -790,6 +876,29 @@ export default function FocusWorkoutView({
                   </button>
                 )}
 
+                {canShowRirToggle && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !activeRirOpen;
+                      setRirOpenByExId((prev) => ({
+                        ...prev,
+                        [activeExercise.localId]: next,
+                      }));
+                      setRirManuallyOpenedByExId((prev) => ({
+                        ...prev,
+                        [activeExercise.localId]: next,
+                      }));
+                    }}
+                    aria-pressed={activeRirOpen}
+                    className={`btn alt !min-h-[44px] !px-3 text-sm ${
+                      activeRirOpen ? '!bg-[var(--gold-bg)]' : ''
+                    }`}
+                  >
+                    <span>RIR</span>
+                  </button>
+                )}
+
                 {!activeAllDone && (
                   <button
                     type="button"
@@ -865,23 +974,161 @@ export default function FocusWorkoutView({
                 </div>
               )}
 
-              {/* Set Rows (shared with List view) */}
+              {/* Warmup Sets Drawer & Quick Actions */}
+              {warmupEntries.length === 0 ? (
+                (onAddWarmupSet || onRepeatLastWarmups) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {onAddWarmupSet && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          cancelAutoAdvance();
+                          onAddWarmupSet(activeIndex);
+                          setWarmupExpandedByExId((prev) => ({
+                            ...prev,
+                            [activeExercise.localId]: true,
+                          }));
+                        }}
+                        className="btn alt !min-h-[44px] border-dashed !px-3 text-sm"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Warmup</span>
+                      </button>
+                    )}
+                    {onRepeatLastWarmups &&
+                      (activePrefill?.warmupSets?.length ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            cancelAutoAdvance();
+                            onRepeatLastWarmups(activeIndex);
+                            setWarmupExpandedByExId((prev) => ({
+                              ...prev,
+                              [activeExercise.localId]: true,
+                            }));
+                          }}
+                          className="btn alt !min-h-[44px] !px-3 text-sm"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          <span>
+                            Repeat last warmups ({activePrefill!.warmupSets!.length})
+                          </span>
+                        </button>
+                      )}
+                  </div>
+                )
+              ) : !warmupExpanded ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setWarmupExpandedByExId((prev) => ({
+                      ...prev,
+                      [activeExercise.localId]: true,
+                    }))
+                  }
+                  className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-[10px] border-2 border-dashed border-[var(--line)]/60 bg-[var(--paper)]/70 px-3 py-2 text-sm font-bold text-[var(--ink)]"
+                >
+                  <span>
+                    Warmup · {completedWarmupCount}/{warmupEntries.length}
+                    {allWarmupsDone ? ' ✓' : ''}
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+                </button>
+              ) : (
+                <div className="space-y-2.5 rounded-[10px] border-2 border-dashed border-[var(--line)]/60 bg-[var(--paper)]/60 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setWarmupExpandedByExId((prev) => ({
+                          ...prev,
+                          [activeExercise.localId]: false,
+                        }))
+                      }
+                      className="flex min-h-[44px] items-center gap-1.5 rounded-[8px] px-2 text-sm font-bold text-[var(--muted)]"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                      <span>
+                        Warmup · {completedWarmupCount}/{warmupEntries.length}
+                        {allWarmupsDone ? ' ✓' : ''}
+                      </span>
+                    </button>
+                    {onAddWarmupSet && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          cancelAutoAdvance();
+                          onAddWarmupSet(activeIndex);
+                        }}
+                        className="btn alt !min-h-[44px] !px-3 text-xs"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Warmup</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-2.5">
+                    {warmupEntries.map(({ setRow, origIdx }, wIdx) => (
+                      <LoggerSetRow
+                        key={setRow.localId}
+                        exIndex={activeIndex}
+                        setIndex={origIdx}
+                        kindIndex={wIdx}
+                        totalSets={workingEntries.length}
+                        canDelete={true}
+                        setRow={setRow}
+                        sets={activeExercise.sets}
+                        trackingType={activeExercise.trackingType}
+                        unit={unit}
+                        enableSetQuality={enableSetQuality}
+                        showRir={
+                          showRirRow &&
+                          (setRow.rir !== null || activeRirManuallyOpened)
+                        }
+                        enableSetNoteTags={enableSetNoteTags}
+                        enableSetNoteHint={enableSetNoteHint}
+                        isEditing={isEditing}
+                        effectiveWeightStep={effectiveWeightStep}
+                        prefill={activePrefill}
+                        isCurrentFocusSet={origIdx === nextIncompleteIdx}
+                        onUpdateSet={(exIdx, sIdx, patch) => {
+                          cancelAutoAdvance();
+                          onUpdateSet(exIdx, sIdx, patch);
+                        }}
+                        onToggleSetComplete={handleSetToggleWithAutoAdvance}
+                        onRemoveSet={(exIdx, sIdx) => {
+                          cancelAutoAdvance();
+                          onRemoveSet(exIdx, sIdx);
+                        }}
+                        onOpenQuality={(idx) => setQualitySetIdx(idx)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Working Set Rows (shared with List view) */}
               <div className="space-y-2.5">
-                {activeExercise.sets.map((setRow, setIdx) => (
+                {workingEntries.map(({ setRow, origIdx }, workIdx) => (
                   <LoggerSetRow
                     key={setRow.localId}
                     exIndex={activeIndex}
-                    setIndex={setIdx}
-                    totalSets={activeExercise.sets.length}
+                    setIndex={origIdx}
+                    kindIndex={workIdx}
+                    totalSets={workingEntries.length}
+                    canDelete={workingEntries.length > 1}
                     setRow={setRow}
                     sets={activeExercise.sets}
                     trackingType={activeExercise.trackingType}
                     unit={unit}
                     enableSetQuality={enableSetQuality}
+                    showRir={showRirRow}
+                    enableSetNoteTags={enableSetNoteTags}
+                    enableSetNoteHint={enableSetNoteHint}
                     isEditing={isEditing}
                     effectiveWeightStep={effectiveWeightStep}
                     prefill={activePrefill}
-                    isCurrentFocusSet={setIdx === nextIncompleteIdx}
+                    isCurrentFocusSet={origIdx === nextIncompleteIdx}
                     onUpdateSet={(exIdx, sIdx, patch) => {
                       cancelAutoAdvance();
                       onUpdateSet(exIdx, sIdx, patch);
@@ -911,7 +1158,7 @@ export default function FocusWorkoutView({
                     }
                   >
                     <Check className="h-5 w-5" />
-                    <span>Complete Set {nextIncompleteIdx + 1}</span>
+                    <span>Complete {nextIncompleteLabel}</span>
                   </Button>
                 ) : (
                   <Button
@@ -1087,8 +1334,9 @@ export default function FocusWorkoutView({
               {draft.exercises.length > 0 ? (
                 <div className="space-y-1.5">
                   {draft.exercises.map((ex, idx) => {
-                    const done = ex.sets.filter((s) => s.isCompleted).length;
-                    const total = ex.sets.length;
+                    const working = ex.sets.filter((s) => !s.isWarmup);
+                    const done = working.filter((s) => s.isCompleted).length;
+                    const total = working.length;
                     return (
                       <button
                         key={ex.localId}
@@ -1269,7 +1517,7 @@ export default function FocusWorkoutView({
                 <span>
                   {isEditing
                     ? 'Save changes'
-                    : `Finish workout (${completedSetsTotal} sets)`}
+                    : `Finish workout (${finishSetsLabel ?? `${completedSetsTotal} sets`})`}
                 </span>
               </Button>
 
@@ -1303,8 +1551,9 @@ export default function FocusWorkoutView({
           ) : (
             <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-0.5">
               {draft.exercises.map((ex, idx) => {
-                const done = ex.sets.filter((s) => s.isCompleted).length;
-                const total = ex.sets.length;
+                const working = ex.sets.filter((s) => !s.isWarmup);
+                const done = working.filter((s) => s.isCompleted).length;
+                const total = working.length;
                 const isCurrent = !isSummaryStep && idx === activeIndex;
                 return (
                   <div
@@ -1403,7 +1652,8 @@ export default function FocusWorkoutView({
           <SetQualityPopover
             open={true}
             onClose={() => setQualitySetIdx(null)}
-            setNumber={qualitySetIdx + 1}
+            setNumber={activeQualityNumber}
+            setLabel={activeQualityLabel}
             reps={parseOptionalInt(activeQualitySet.reps)}
             qualityPct={activeQualitySet.executionQualityPct}
             repQualities={activeQualitySet.repQualities}

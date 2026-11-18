@@ -44,11 +44,54 @@ const STATUS_BADGE: Record<
   },
 };
 
+type BooleanSettingKey =
+  | 'enableSetQuality'
+  | 'alwaysShowRir'
+  | 'enableSetNoteTags'
+  | 'enableSetNoteHint';
+
+const TRAINING_BOOLEAN_TOGGLES: Array<{
+  id: string;
+  key: BooleanSettingKey;
+  title: string;
+  description: string;
+}> = [
+  {
+    id: 'set-quality',
+    key: 'enableSetQuality',
+    title: 'Execution Quality %',
+    description:
+      'Track execution quality percentage per set and rep while logging.',
+  },
+  {
+    id: 'always-show-rir',
+    key: 'alwaysShowRir',
+    title: 'Always Show RIR',
+    description:
+      'Show RIR inputs open by default when logging (can still toggle per exercise).',
+  },
+  {
+    id: 'set-note-tags',
+    key: 'enableSetNoteTags',
+    title: 'Set Note Quick-Tags',
+    description: 'Show quick-tag dropdown inside per-set notes.',
+  },
+  {
+    id: 'set-note-hint',
+    key: 'enableSetNoteHint',
+    title: 'Last-Time Set Note Hint',
+    description:
+      "Show previous session's set note hint when opening a set note.",
+  },
+];
+
 export function SettingsTrainingView() {
   const { user, setUser, loading } = useSettingsData();
   const [savingMode, setSavingMode] = useState(false);
   const [savingWorkoutView, setSavingWorkoutView] = useState(false);
   const [savingWeightStep, setSavingWeightStep] = useState(false);
+  const [savingToggleKey, setSavingToggleKey] =
+    useState<BooleanSettingKey | null>(null);
   const [alertInfo, setAlertInfo] = useState<RestAlertSupportInfo>(() =>
     getRestAlertSupportInfo(),
   );
@@ -157,19 +200,23 @@ export function SettingsTrainingView() {
     }
   }
 
-  async function handleToggleSetQuality() {
-    if (!user) return;
+  async function handleToggleBooleanSetting(
+    key: BooleanSettingKey,
+    label: string,
+  ) {
+    if (!user || savingToggleKey === key) return;
+    setSavingToggleKey(key);
     try {
       const res = await apiFetch<SettingsPayload>('/api/settings', {
         method: 'PATCH',
-        body: JSON.stringify({ enableSetQuality: !user.enableSetQuality }),
+        body: JSON.stringify({ [key]: !user[key] }),
       });
       setUser(res.user);
-      toast.success(
-        res.user.enableSetQuality ? 'Set quality ON' : 'Set quality OFF',
-      );
+      toast.success(res.user[key] ? `${label} ON` : `${label} OFF`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setSavingToggleKey(null);
     }
   }
 
@@ -531,30 +578,39 @@ export function SettingsTrainingView() {
             </div>
           </section>
 
-          {/* Execution Quality % */}
-          <section className="card flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h2 className="font-marker text-base text-[var(--ink)]">
-                Execution Quality %
-              </h2>
-              <p className="mt-0.5 text-sm text-[var(--muted)]">
-                Track execution quality percentage per set and rep while logging.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={user.enableSetQuality}
-              onClick={handleToggleSetQuality}
-              className={`min-h-[44px] min-w-[72px] shrink-0 rounded-xl border-2 border-[var(--line)] px-3 text-sm font-bold transition ${
-                user.enableSetQuality
-                  ? 'bg-[var(--green-bg)] text-[var(--ink)]'
-                  : 'bg-[var(--surface-alt)] text-[var(--muted)]'
-              }`}
-            >
-              {user.enableSetQuality ? 'ON' : 'OFF'}
-            </button>
-          </section>
+          {TRAINING_BOOLEAN_TOGGLES.map(({ id, key, title, description }) => {
+            const enabled = user[key];
+            return (
+              <section
+                id={id}
+                key={key}
+                className="card flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-marker text-base text-[var(--ink)]">
+                    {title}
+                  </h2>
+                  <p className="mt-0.5 text-sm text-[var(--muted)]">
+                    {description}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enabled}
+                  disabled={savingToggleKey === key}
+                  onClick={() => handleToggleBooleanSetting(key, title)}
+                  className={`min-h-[44px] min-w-[72px] shrink-0 rounded-xl border-2 border-[var(--line)] px-3 text-sm font-bold transition ${
+                    enabled
+                      ? 'bg-[var(--green-bg)] text-[var(--ink)]'
+                      : 'bg-[var(--surface-alt)] text-[var(--muted)]'
+                  }`}
+                >
+                  {enabled ? 'ON' : 'OFF'}
+                </button>
+              </section>
+            );
+          })}
         </div>
       )}
     </SettingsSubpageShell>

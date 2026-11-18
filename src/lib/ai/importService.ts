@@ -76,6 +76,9 @@ export async function getAiPromptContext(
               name: ex.exerciseName ?? ex.exerciseId,
               trackingType: ex.trackingType ?? 'weight_reps',
               targetSets: ex.targetSets,
+              ...(ex.targetWarmupSets > 0
+                ? { targetWarmupSets: ex.targetWarmupSets }
+                : {}),
               ...(ex.targetReps !== null ? { targetReps: ex.targetReps } : {}),
               ...(ex.targetRepsMin !== null
                 ? { targetRepsMin: ex.targetRepsMin }
@@ -201,10 +204,10 @@ export async function applyAiImport(
     const insertDayExSql = `
       INSERT INTO schedule_day_exercises (
         id, schedule_day_id, exercise_id, order_index,
-        target_sets, target_reps, target_reps_min, target_reps_max,
+        target_sets, target_warmup_sets, target_reps, target_reps_min, target_reps_max,
         target_time_seconds, target_weight_kg, target_distance_m,
         rest_seconds, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     `;
 
     for (let position = 0; position < payload.schedule.days.length; position += 1) {
@@ -227,6 +230,7 @@ export async function applyAiImport(
           exerciseId,
           orderIndex,
           ex.targetSets,
+          ex.targetWarmupSets,
           ex.targetReps,
           ex.targetRepsMin,
           ex.targetRepsMax,

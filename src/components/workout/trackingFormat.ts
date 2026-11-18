@@ -33,6 +33,9 @@ export interface LoggerSet {
   actualRestDisplay?: string;
   executionQualityPct: number | null;
   repQualities: LoggerRepQuality[];
+  rir: number | null;
+  notes: string;
+  isWarmup: boolean;
   isCompleted: boolean;
   /** ISO timestamp when this set was marked completed (consumed by Phase 3). */
   completedAt?: string | null;
@@ -53,6 +56,8 @@ export interface LoggerExercise {
   trackingType: TrackingType;
   defaultRestSeconds: number;
   scheduleDayExerciseId?: string | null;
+  swappedFromExerciseId?: string | null;
+  swappedFromExerciseName?: string | null;
   notes: string;
   sets: LoggerSet[];
 }
@@ -198,7 +203,9 @@ export function formatPlannedTarget(
   unit: WeightUnit,
 ): string {
   const t = ex.trackingType ?? 'weight_reps';
-  const setsPrefix = `${ex.targetSets} × `;
+  const warmupPrefix =
+    ex.targetWarmupSets > 0 ? `${ex.targetWarmupSets}w + ` : '';
+  const setsPrefix = `${warmupPrefix}${ex.targetSets} × `;
   const repsPart =
     ex.targetReps !== null
       ? `${ex.targetReps}`
@@ -300,6 +307,9 @@ export function formatPrefillSummary(
     actualRestSeconds: first.actualRestSeconds ?? null,
     restApproximate: first.restApproximate ?? false,
     executionQualityPct: null,
+    rir: null,
+    notes: '',
+    isWarmup: false,
     isCompleted: true,
     createdAt: '',
   };
@@ -362,8 +372,45 @@ export function buildPrefilledSets(params: {
   slot?: Partial<ScheduleDayExercise>;
 }): LoggerSet[] {
   const { targetSets, unit, prefill, slot } = params;
+  const warmupCount = Math.max(
+    0,
+    Math.min(10, Math.round(slot?.targetWarmupSets ?? 0)),
+  );
   const count = Math.max(1, targetSets);
   const sets: LoggerSet[] = [];
+
+  for (let i = 0; i < warmupCount; i += 1) {
+    const prevWarmup = prefill?.warmupSets?.[i] ?? null;
+    const wDisplay = kgToDisplay(prevWarmup?.weightKg ?? null, unit);
+    const repsVal = prevWarmup?.reps ?? null;
+    const timeVal = prevWarmup?.timeSeconds ?? null;
+    const distVal = prevWarmup?.distanceM ?? null;
+
+    sets.push({
+      localId: makeLocalId('set'),
+      setNumber: sets.length + 1,
+      weightDisplay: wDisplay !== null ? String(wDisplay) : '',
+      reps: repsVal !== null ? String(repsVal) : '',
+      timeSeconds: timeVal !== null ? String(timeVal) : '',
+      distanceM: distVal !== null ? String(distVal) : '',
+      restSeconds: null,
+      restSecondsDisplay: '',
+      actualRestSeconds: null,
+      restApproximate: false,
+      actualRestDisplay: '',
+      executionQualityPct: null,
+      repQualities: [],
+      rir: null,
+      notes: '',
+      isWarmup: true,
+      isCompleted: false,
+      completedAt: null,
+      restEndedAt: null,
+      completionSeq: null,
+      wasUnchecked: false,
+      completedViaCheckAll: false,
+    });
+  }
 
   for (let i = 0; i < count; i += 1) {
     const prev =
@@ -379,7 +426,7 @@ export function buildPrefilledSets(params: {
 
     sets.push({
       localId: makeLocalId('set'),
-      setNumber: i + 1,
+      setNumber: sets.length + 1,
       weightDisplay: wDisplay !== null ? String(wDisplay) : '',
       reps: repsVal !== null ? String(repsVal) : '',
       timeSeconds: timeVal !== null ? String(timeVal) : '',
@@ -391,6 +438,9 @@ export function buildPrefilledSets(params: {
       actualRestDisplay: '',
       executionQualityPct: null,
       repQualities: [],
+      rir: null,
+      notes: '',
+      isWarmup: false,
       isCompleted: false,
       completedAt: null,
       restEndedAt: null,

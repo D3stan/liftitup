@@ -596,7 +596,7 @@ test('settings search registry filters across categories by name and keywords an
   assert.ok(exportMatches.some((i) => i.href === '/settings/data'));
 
   const qualityMatches = filterSettingsItems('execution quality');
-  assert.ok(qualityMatches.some((i) => i.href === '/settings/training'));
+  assert.ok(qualityMatches.some((i) => i.href === '/settings/training#set-quality'));
 
   const deleteMatchesUser = filterSettingsItems('delete', { isGuest: false });
   assert.equal(deleteMatchesUser.length, 4);

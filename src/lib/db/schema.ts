@@ -30,6 +30,9 @@ const SCHEMA_V2_DDL = `
     theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art')),
     theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark')),
     enable_set_quality INTEGER NOT NULL DEFAULT 0 CHECK (enable_set_quality IN (0, 1)),
+    always_show_rir INTEGER NOT NULL DEFAULT 0 CHECK (always_show_rir IN (0, 1)),
+    enable_set_note_tags INTEGER NOT NULL DEFAULT 1 CHECK (enable_set_note_tags IN (0, 1)),
+    enable_set_note_hint INTEGER NOT NULL DEFAULT 1 CHECK (enable_set_note_hint IN (0, 1)),
     rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown')),
     default_workout_view TEXT NOT NULL DEFAULT 'list' CHECK (default_workout_view IN ('list', 'focus')),
     default_weight_step_kg DOUBLE PRECISION,
@@ -149,6 +152,7 @@ const SCHEMA_V2_DDL = `
     exercise_id TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     target_sets INTEGER NOT NULL DEFAULT 3,
+    target_warmup_sets INTEGER NOT NULL DEFAULT 0 CHECK (target_warmup_sets BETWEEN 0 AND 10),
     target_reps INTEGER,
     target_reps_min INTEGER,
     target_reps_max INTEGER,
@@ -226,6 +230,9 @@ const SCHEMA_V2_DDL = `
     actual_rest_seconds INTEGER,
     rest_approximate INTEGER NOT NULL DEFAULT 0 CHECK (rest_approximate IN (0, 1)),
     execution_quality_pct INTEGER CHECK (execution_quality_pct IS NULL OR (execution_quality_pct BETWEEN 0 AND 100)),
+    rir DOUBLE PRECISION CHECK (rir IS NULL OR (rir >= 0 AND rir <= 10)),
+    notes TEXT NOT NULL DEFAULT '',
+    is_warmup INTEGER NOT NULL DEFAULT 0 CHECK (is_warmup IN (0, 1)),
     is_completed INTEGER NOT NULL DEFAULT 1 CHECK (is_completed IN (0, 1)),
     created_at TEXT NOT NULL,
     FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises(id) ON DELETE CASCADE
@@ -690,6 +697,27 @@ export async function initSchema(
     );
     await client.query(
       'ALTER TABLE apple_health_workouts ALTER COLUMN active_calories DROP NOT NULL',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS always_show_rir INTEGER NOT NULL DEFAULT 0 CHECK (always_show_rir IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS enable_set_note_tags INTEGER NOT NULL DEFAULT 1 CHECK (enable_set_note_tags IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS enable_set_note_hint INTEGER NOT NULL DEFAULT 1 CHECK (enable_set_note_hint IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE schedule_day_exercises ADD COLUMN IF NOT EXISTS target_warmup_sets INTEGER NOT NULL DEFAULT 0',
+    );
+    await client.query(
+      'ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS rir DOUBLE PRECISION',
+    );
+    await client.query(
+      "ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''",
+    );
+    await client.query(
+      'ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS is_warmup INTEGER NOT NULL DEFAULT 0 CHECK (is_warmup IN (0, 1))',
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_quota INTEGER',
