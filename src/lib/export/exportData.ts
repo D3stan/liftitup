@@ -34,6 +34,9 @@ export interface ExportJsonPayload {
     unit: 'kg' | 'lb';
     timezone: string;
     enableSetQuality: boolean;
+    alwaysShowRir: boolean;
+    enableSetNoteTags: boolean;
+    enableSetNoteHint: boolean;
     restClockMode: RestClockMode;
     defaultWeightStepKg: number | null;
     appleFitnessEnabled: boolean;
@@ -100,6 +103,9 @@ export interface ExportJsonPayload {
         restApproximate: boolean;
         executionQualityPct: number | null;
         isCompleted: boolean;
+        rir: number | null;
+        notes: string;
+        isWarmup: boolean;
         repQualities: Array<{
           repIndex: number;
           qualityPct: number;
@@ -134,6 +140,9 @@ export const CSV_HEADERS = [
   'execution_quality_pct',
   'rep_qualities',
   'is_completed',
+  'is_warmup',
+  'rir',
+  'set_notes',
 ] as const;
 
 export async function buildUserExportJson(user: UserProfile): Promise<ExportJsonPayload> {
@@ -171,6 +180,9 @@ export async function buildUserExportJson(user: UserProfile): Promise<ExportJson
       unit: user.unit,
       timezone: user.timezone,
       enableSetQuality: user.enableSetQuality,
+      alwaysShowRir: user.alwaysShowRir,
+      enableSetNoteTags: user.enableSetNoteTags,
+      enableSetNoteHint: user.enableSetNoteHint,
       restClockMode: user.restClockMode,
       defaultWeightStepKg: user.defaultWeightStepKg,
       appleFitnessEnabled: user.appleFitnessEnabled,
@@ -242,6 +254,9 @@ function mapExportSession(
         restApproximate: s.restApproximate,
         executionQualityPct: s.executionQualityPct,
         isCompleted: s.isCompleted,
+        rir: s.rir ?? null,
+        notes: s.notes ?? '',
+        isWarmup: Boolean(s.isWarmup),
         repQualities: (s.repQualities ?? []).map((rq) => ({
           repIndex: rq.repIndex,
           qualityPct: rq.qualityPct,
@@ -308,6 +323,9 @@ export async function buildUserExportCsv(user: UserProfile): Promise<string> {
           set.executionQualityPct ?? '',
           formatRepQualitiesCsv(set.repQualities),
           set.isCompleted ? 1 : 0,
+          set.isWarmup ? 1 : 0,
+          set.rir ?? '',
+          set.notes ?? '',
         ];
         lines.push(row.map(escapeCsvCell).join(','));
       }

@@ -70,6 +70,9 @@ interface ParsedUserSettings {
   unit: WeightUnit;
   timezone?: string;
   enableSetQuality?: boolean;
+  alwaysShowRir?: boolean;
+  enableSetNoteTags?: boolean;
+  enableSetNoteHint?: boolean;
   restClockMode?: RestClockMode;
   defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
@@ -105,6 +108,7 @@ interface ParsedScheduleDayExercise {
   trackingType: TrackingType;
   orderIndex: number;
   targetSets: number;
+  targetWarmupSets: number;
   targetReps: number | null;
   targetRepsMin: number | null;
   targetRepsMax: number | null;
@@ -151,6 +155,9 @@ interface ParsedWorkoutSet {
   restApproximate: boolean;
   executionQualityPct: number | null;
   isCompleted: boolean;
+  rir: number | null;
+  notes: string;
+  isWarmup: boolean;
   repQualities: Array<{ repIndex: number; qualityPct: number }>;
 }
 
@@ -332,6 +339,42 @@ function parseUserSettings(
       });
     } else {
       result.enableSetQuality = rawUser.enableSetQuality;
+    }
+  }
+  if ('alwaysShowRir' in rawUser && rawUser.alwaysShowRir !== undefined) {
+    if (typeof rawUser.alwaysShowRir !== 'boolean') {
+      errors.push({
+        path: 'user.alwaysShowRir',
+        message: 'must be a boolean',
+      });
+    } else {
+      result.alwaysShowRir = rawUser.alwaysShowRir;
+    }
+  }
+  if (
+    'enableSetNoteTags' in rawUser &&
+    rawUser.enableSetNoteTags !== undefined
+  ) {
+    if (typeof rawUser.enableSetNoteTags !== 'boolean') {
+      errors.push({
+        path: 'user.enableSetNoteTags',
+        message: 'must be a boolean',
+      });
+    } else {
+      result.enableSetNoteTags = rawUser.enableSetNoteTags;
+    }
+  }
+  if (
+    'enableSetNoteHint' in rawUser &&
+    rawUser.enableSetNoteHint !== undefined
+  ) {
+    if (typeof rawUser.enableSetNoteHint !== 'boolean') {
+      errors.push({
+        path: 'user.enableSetNoteHint',
+        message: 'must be a boolean',
+      });
+    } else {
+      result.enableSetNoteHint = rawUser.enableSetNoteHint;
     }
   }
   if ('restClockMode' in rawUser && rawUser.restClockMode !== undefined) {
@@ -691,6 +734,15 @@ function parseActiveSchedule(
               { min: 1, max: 20, integer: true },
               errors,
             ) ?? 3;
+          const targetWarmupSets =
+            rawEx.targetWarmupSets === undefined || rawEx.targetWarmupSets === null
+              ? 0
+              : (validateNumberRange(
+                  rawEx.targetWarmupSets,
+                  `${ep}.targetWarmupSets`,
+                  { min: 0, max: 10, integer: true },
+                  errors,
+                ) ?? 0);
           const targetReps =
             rawEx.targetReps === undefined
               ? null
@@ -764,6 +816,7 @@ function parseActiveSchedule(
               trackingType,
               orderIndex,
               targetSets,
+              targetWarmupSets,
               targetReps,
               targetRepsMin,
               targetRepsMax,
@@ -1153,6 +1206,53 @@ function parseSessions(
                   );
             const isCompleted = rawSet.isCompleted !== false;
 
+            let rir: number | null = null;
+            if (rawSet.rir !== undefined && rawSet.rir !== null) {
+              const validatedRir = validateNumberRange(
+                rawSet.rir,
+                `${stp}.rir`,
+                { min: 0, max: 10, allowNull: true },
+                errors,
+              );
+              if (validatedRir !== null) {
+                if (
+                  Math.abs(validatedRir * 2 - Math.round(validatedRir * 2)) >
+                  1e-6
+                ) {
+                  errors.push({
+                    path: `${stp}.rir`,
+                    message: 'must be in 0.5 steps between 0 and 10',
+                  });
+                } else {
+                  rir = Math.round(validatedRir * 2) / 2;
+                }
+              }
+            }
+
+            let setNotes = '';
+            if (rawSet.notes !== undefined && rawSet.notes !== null) {
+              if (typeof rawSet.notes !== 'string') {
+                errors.push({
+                  path: `${stp}.notes`,
+                  message: 'must be a string',
+                });
+              } else {
+                setNotes = rawSet.notes.trim().slice(0, 500);
+              }
+            }
+
+            let isWarmup = false;
+            if (rawSet.isWarmup !== undefined) {
+              if (typeof rawSet.isWarmup !== 'boolean') {
+                errors.push({
+                  path: `${stp}.isWarmup`,
+                  message: 'must be a boolean',
+                });
+              } else {
+                isWarmup = rawSet.isWarmup;
+              }
+            }
+
             const repQualities: Array<{ repIndex: number; qualityPct: number }> =
               [];
             if (Array.isArray(rawSet.repQualities)) {
@@ -1199,6 +1299,9 @@ function parseSessions(
               restApproximate,
               executionQualityPct,
               isCompleted,
+              rir,
+              notes: setNotes,
+              isWarmup,
               repQualities,
             });
           });
@@ -1835,6 +1938,9 @@ export async function applyLiftitupRestore(
       if (payload.user.enableSetQuality !== undefined) {
         userPatch.enableSetQuality = payload.user.enableSetQuality;
       }
+      userPatch.alwaysShowRir = payload.user.alwaysShowRir ?? false;
+      userPatch.enableSetNoteTags = payload.user.enableSetNoteTags ?? true;
+      userPatch.enableSetNoteHint = payload.user.enableSetNoteHint ?? true;
       if (payload.user.restClockMode !== undefined) {
         userPatch.restClockMode = payload.user.restClockMode;
       }
@@ -2048,10 +2154,10 @@ export async function applyLiftitupRestore(
               `
               INSERT INTO schedule_day_exercises (
                 id, schedule_day_id, exercise_id, order_index,
-                target_sets, target_reps, target_reps_min, target_reps_max,
+                target_sets, target_warmup_sets, target_reps, target_reps_min, target_reps_max,
                 target_time_seconds, target_weight_kg, target_distance_m,
                 rest_seconds, notes
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
               `,
               [
                 `sdex_${crypto.randomUUID()}`,
@@ -2059,6 +2165,7 @@ export async function applyLiftitupRestore(
                 resolvedExId,
                 ex.orderIndex,
                 ex.targetSets,
+                ex.targetWarmupSets,
                 ex.targetReps,
                 ex.targetRepsMin,
                 ex.targetRepsMax,
@@ -2184,8 +2291,8 @@ export async function applyLiftitupRestore(
             INSERT INTO workout_sets (
               id, workout_exercise_id, set_number, weight_kg, reps, time_seconds,
               distance_m, rest_seconds, actual_rest_seconds, rest_approximate,
-              execution_quality_pct, is_completed, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+              execution_quality_pct, is_completed, rir, notes, is_warmup, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             `,
             [
               newSetId,
@@ -2200,6 +2307,9 @@ export async function applyLiftitupRestore(
               s.restApproximate ? 1 : 0,
               s.executionQualityPct,
               s.isCompleted ? 1 : 0,
+              s.rir,
+              s.notes,
+              s.isWarmup ? 1 : 0,
               setCreatedAt,
             ],
           );

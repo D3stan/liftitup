@@ -80,7 +80,7 @@ export const MCP_TOOLS_DEFINITIONS = [
   {
     name: 'get_workout_history',
     description:
-      'Returns logged workout sessions with exercises, sets (including restSeconds, actualRestSeconds, restApproximate), executionQualityPct, repQualities, and workout/exercise notes.',
+      'Returns logged workout sessions with exercises, sets (including rir, notes, isWarmup, restSeconds, actualRestSeconds, restApproximate), executionQualityPct, repQualities, and workout/exercise notes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -231,6 +231,22 @@ export const MCP_TOOLS_DEFINITIONS = [
                       maximum: 100,
                     },
                     isCompleted: { type: 'boolean' },
+                    rir: {
+                      type: ['number', 'null'],
+                      minimum: 0,
+                      maximum: 10,
+                      multipleOf: 0.5,
+                      description: 'Reps in Reserve (0 to 10 in 0.5 increments).',
+                    },
+                    notes: {
+                      type: 'string',
+                      maxLength: 500,
+                      description: 'Optional per-set notes (trimmed, max 500 chars).',
+                    },
+                    isWarmup: {
+                      type: 'boolean',
+                      description: 'Whether this set is a warmup set.',
+                    },
                     repQualities: {
                       type: 'array',
                       items: {
@@ -337,6 +353,9 @@ async function executeToolCall(
           unit: user.unit,
           timezone: user.timezone,
           enableSetQuality: user.enableSetQuality,
+          alwaysShowRir: user.alwaysShowRir,
+          enableSetNoteTags: user.enableSetNoteTags,
+          enableSetNoteHint: user.enableSetNoteHint,
           restClockMode: user.restClockMode,
           defaultWeightStepKg: user.defaultWeightStepKg,
           appleFitnessEnabled: user.appleFitnessEnabled,
@@ -683,7 +702,8 @@ async function handleLogWorkoutSession(
     600,
     true,
   );
-  const notes = typeof args.notes === 'string' ? args.notes.trim() : '';
+  const notes =
+    typeof args.notes === 'string' ? args.notes.trim().slice(0, 4000) : '';
 
   if (!Array.isArray(args.exercises) || args.exercises.length === 0) {
     return wrapToolResult(
@@ -724,6 +744,9 @@ async function handleLogWorkoutSession(
       restApproximate: boolean;
       executionQualityPct: number | null;
       isCompleted: boolean;
+      rir: number | null;
+      notes: string;
+      isWarmup: boolean;
       repQualities: Array<{ repIndex: number; qualityPct: number }>;
     }>;
   }> = [];
@@ -757,8 +780,9 @@ async function handleLogWorkoutSession(
       );
     }
 
-    const exNotes = typeof rawEx.notes === 'string' ? rawEx.notes.trim() : '';
-    const sets = rawEx.sets.map((rawSet, sIdx) => {
+    const exNotes =
+      typeof rawEx.notes === 'string' ? rawEx.notes.trim().slice(0, 2000) : '';
+    const parsedSets = rawEx.sets.map((rawSet, sIdx) => {
       const s = (rawSet ?? {}) as Record<string, unknown>;
       const setNumber =
         asNullableNumber(s.setNumber, `exercises[${i}].sets[${sIdx}].setNumber`, 1, 100, true) ??
@@ -767,7 +791,7 @@ async function handleLogWorkoutSession(
         s.weightKg,
         `exercises[${i}].sets[${sIdx}].weightKg`,
         0,
-        2000,
+        1500,
       );
       const reps = asNullableNumber(
         s.reps,
@@ -787,7 +811,7 @@ async function handleLogWorkoutSession(
         s.distanceM,
         `exercises[${i}].sets[${sIdx}].distanceM`,
         0,
-        500000,
+        1_000_000,
       );
       const restSeconds = asNullableNumber(
         s.restSeconds,
@@ -850,6 +874,38 @@ async function handleLogWorkoutSession(
       const isCompleted =
         typeof s.isCompleted === 'boolean' ? s.isCompleted : true;
 
+      const rawRir = asNullableNumber(
+        s.rir,
+        `exercises[${i}].sets[${sIdx}].rir`,
+        0,
+        10,
+      );
+      if (
+        rawRir !== null &&
+        Math.abs(rawRir * 2 - Math.round(rawRir * 2)) > 1e-6
+      ) {
+        throw new Error(
+          `exercises[${i}].sets[${sIdx}].rir must be in 0.5 steps between 0 and 10`,
+        );
+      }
+      const rir = rawRir === null ? null : Math.round(rawRir * 2) / 2;
+
+      let setNotes = '';
+      if (s.notes !== undefined && s.notes !== null) {
+        if (typeof s.notes !== 'string') {
+          throw new Error(`exercises[${i}].sets[${sIdx}].notes must be a string`);
+        }
+        setNotes = s.notes.trim().slice(0, 500);
+      }
+
+      let isWarmup = false;
+      if (s.isWarmup !== undefined) {
+        if (typeof s.isWarmup !== 'boolean') {
+          throw new Error(`exercises[${i}].sets[${sIdx}].isWarmup must be a boolean`);
+        }
+        isWarmup = s.isWarmup;
+      }
+
       return {
         setNumber,
         weightKg,
@@ -861,9 +917,19 @@ async function handleLogWorkoutSession(
         restApproximate,
         executionQualityPct,
         isCompleted,
+        rir,
+        notes: setNotes,
+        isWarmup,
         repQualities,
       };
     });
+
+    const warmupSets = parsedSets.filter((s) => s.isWarmup);
+    const workingSets = parsedSets.filter((s) => !s.isWarmup);
+    const sets = [...warmupSets, ...workingSets].map((s, idx) => ({
+      ...s,
+      setNumber: idx + 1,
+    }));
 
     preparedExercises.push({
       exerciseId: exMatch.id,
@@ -912,8 +978,9 @@ async function handleLogWorkoutSession(
       INSERT INTO workout_sets (
         id, workout_exercise_id, set_number, weight_kg, reps,
         time_seconds, distance_m, rest_seconds, actual_rest_seconds,
-        rest_approximate, execution_quality_pct, is_completed, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        rest_approximate, execution_quality_pct, is_completed,
+        rir, notes, is_warmup, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     `;
     const insertRepQSql = `
       INSERT INTO workout_set_rep_qualities (id, workout_set_id, rep_index, quality_pct)
@@ -940,6 +1007,9 @@ async function handleLogWorkoutSession(
           s.restApproximate ? 1 : 0,
           s.executionQualityPct,
           s.isCompleted ? 1 : 0,
+          s.rir,
+          s.notes,
+          s.isWarmup ? 1 : 0,
           now,
         ]);
         for (const rq of s.repQualities) {
