@@ -199,6 +199,7 @@ export async function getWorkoutDayView(
       enableSetNoteTags: user.enableSetNoteTags,
       enableSetNoteHint: user.enableSetNoteHint,
       restClockMode: user.restClockMode,
+      defaultWorkoutView: user.defaultWorkoutView,
       defaultWeightStepKg: user.defaultWeightStepKg,
       timezone: user.timezone,
     },
@@ -809,6 +810,142 @@ export async function deleteWorkoutSession(
   if (result.rowCount === 0) {
     throw ApiError.notFound('Workout session not found');
   }
+}
+
+export interface BulkDeleteSessionTarget {
+  id: string;
+  sessionDate: string;
+  title: string;
+}
+
+/**
+ * Resolves workout sessions owned by `userId` matching explicit IDs or an inclusive date range.
+ */
+export async function findWorkoutSessionsForBulkDelete(
+  userId: string,
+  filter: { sessionIds?: string[]; from?: string; to?: string },
+): Promise<BulkDeleteSessionTarget[]> {
+  const clauses = ['user_id = $1'];
+  const params: unknown[] = [userId];
+
+  if (filter.sessionIds && filter.sessionIds.length > 0) {
+    const uniqueIds = Array.from(
+      new Set(filter.sessionIds.map((id) => id.trim()).filter(Boolean)),
+    );
+    if (uniqueIds.length === 0) {
+      throw ApiError.validation('sessionIds must contain at least one ID');
+    }
+    const startIdx = params.length + 1;
+    const placeholders = uniqueIds.map((_, i) => `$${startIdx + i}`).join(', ');
+    params.push(...uniqueIds);
+    clauses.push(`id IN (${placeholders})`);
+  }
+
+  if (filter.from !== undefined) {
+    if (!isValidYmd(filter.from)) {
+      throw ApiError.validation('from must be YYYY-MM-DD');
+    }
+    params.push(filter.from);
+    clauses.push(`session_date >= $${params.length}`);
+  }
+
+  if (filter.to !== undefined) {
+    if (!isValidYmd(filter.to)) {
+      throw ApiError.validation('to must be YYYY-MM-DD');
+    }
+    params.push(filter.to);
+    clauses.push(`session_date <= $${params.length}`);
+  }
+
+  if (params.length === 1) {
+    throw ApiError.validation(
+      'Provide sessionIds or a from/to date filter for bulk deletion',
+    );
+  }
+
+  const { rows } = await query<{
+    id: string;
+    session_date: string;
+    title: string;
+  }>(
+    `SELECT id, session_date, title
+     FROM workout_sessions
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY session_date DESC, started_at DESC`,
+    params,
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    sessionDate: r.session_date,
+    title: r.title,
+  }));
+}
+
+/**
+ * Transactionally deletes multiple workout sessions owned by `userId` in explicit
+ * child-to-parent cleanup order (clearing Apple Health links, sets, exercises, then sessions).
+ */
+export async function deleteWorkoutSessionsBulk(
+  userId: string,
+  sessionIds: string[],
+): Promise<number> {
+  const uniqueIds = Array.from(
+    new Set(sessionIds.map((id) => id.trim()).filter(Boolean)),
+  );
+  if (uniqueIds.length === 0) return 0;
+
+  return await withTransaction(async () => {
+    const placeholders = uniqueIds.map((_, i) => `$${i + 2}`).join(', ');
+    const params = [userId, ...uniqueIds];
+
+    const ownedRes = await query<{ id: string }>(
+      `SELECT id FROM workout_sessions WHERE user_id = $1 AND id IN (${placeholders})`,
+      params,
+    );
+    const ownedIds = ownedRes.rows.map((r) => r.id);
+    if (ownedIds.length === 0) return 0;
+
+    const ownedPlaceholders = ownedIds.map((_, i) => `$${i + 1}`).join(', ');
+    const ownedUserPlaceholders = ownedIds.map((_, i) => `$${i + 2}`).join(', ');
+
+    await query(
+      `UPDATE apple_health_workouts
+       SET linked_session_id = NULL
+       WHERE user_id = $1 AND linked_session_id IN (${ownedUserPlaceholders})`,
+      [userId, ...ownedIds],
+    );
+
+    await query(
+      `DELETE FROM workout_set_rep_qualities
+       WHERE workout_set_id IN (
+         SELECT ws.id
+         FROM workout_sets ws
+         JOIN workout_exercises we ON we.id = ws.workout_exercise_id
+         WHERE we.session_id IN (${ownedPlaceholders})
+       )`,
+      ownedIds,
+    );
+
+    await query(
+      `DELETE FROM workout_sets
+       WHERE workout_exercise_id IN (
+         SELECT id FROM workout_exercises WHERE session_id IN (${ownedPlaceholders})
+       )`,
+      ownedIds,
+    );
+
+    await query(
+      `DELETE FROM workout_exercises WHERE session_id IN (${ownedPlaceholders})`,
+      ownedIds,
+    );
+
+    const delRes = await query(
+      `DELETE FROM workout_sessions WHERE user_id = $1 AND id IN (${ownedUserPlaceholders})`,
+      [userId, ...ownedIds],
+    );
+    return Number(delRes.rowCount ?? ownedIds.length);
+  });
 }
 
 export async function applyExerciseSwap(

@@ -78,6 +78,7 @@ const {
   computeActualRestForWorkoutSets,
   computeSessionRestSummary,
 } = await import('@/lib/workouts/rest');
+const { computeFocusSummaryStats } = await import('@/lib/workouts/focus');
 const {
   buildUserExportCsv,
   buildUserExportJson,
@@ -128,6 +129,7 @@ function createMemPool() {
     }) as unknown as PoolClient;
 
   return {
+    __isPgMem: true,
     async connect() {
       const c = await innerPool.connect();
       return wrapClient(c);
@@ -1701,4 +1703,90 @@ test('7. Review fixes: self-swap delete, schedule-swap & slot-deletion session_s
   } finally {
     await closeDb();
   }
+});
+
+test('8. Focus summary excludes warmup sets from volume, working set counts, and rest transitions', () => {
+  const stats = computeFocusSummaryStats({
+    exercises: [
+      {
+        localId: 'ex1',
+        exerciseId: 'barbell-bench-press',
+        exerciseName: 'Barbell Bench Press',
+        trackingType: 'weight_reps',
+        defaultRestSeconds: 120,
+        notes: '',
+        scheduleDayExerciseId: null,
+        swappedFromExerciseId: null,
+        swappedFromExerciseName: null,
+        sets: [
+          {
+            localId: 'w1',
+            setNumber: 1,
+            weightDisplay: '40',
+            reps: '10',
+            timeSeconds: '',
+            distanceM: '',
+            restSeconds: 60,
+            rir: null,
+            notes: 'warmup',
+            isWarmup: true,
+            executionQualityPct: null,
+            repQualities: [],
+            isCompleted: true,
+            completedAt: '2026-11-18T10:00:30.000Z',
+            restEndedAt: '2026-11-18T10:01:30.000Z',
+            completionSeq: 1,
+          },
+          {
+            localId: 's1',
+            setNumber: 2,
+            weightDisplay: '100',
+            reps: '5',
+            timeSeconds: '',
+            distanceM: '',
+            restSeconds: 120,
+            rir: 2,
+            notes: '',
+            isWarmup: false,
+            executionQualityPct: null,
+            repQualities: [],
+            isCompleted: true,
+            completedAt: '2026-11-18T10:02:00.000Z',
+            restEndedAt: '2026-11-18T10:04:00.000Z',
+            completionSeq: 2,
+          },
+          {
+            localId: 's2',
+            setNumber: 3,
+            weightDisplay: '100',
+            reps: '5',
+            timeSeconds: '',
+            distanceM: '',
+            restSeconds: 120,
+            rir: 1.5,
+            notes: '',
+            isWarmup: false,
+            executionQualityPct: null,
+            repQualities: [],
+            isCompleted: true,
+            completedAt: '2026-11-18T10:04:30.000Z',
+            restEndedAt: null,
+            completionSeq: 3,
+          },
+        ],
+      },
+    ],
+    unit: 'kg',
+    startedAt: '2026-11-18T10:00:00.000Z',
+    durationMinutesInput: null,
+    isEditing: false,
+    nowMs: Date.parse('2026-11-18T10:05:00.000Z'),
+  });
+
+  assert.equal(stats.completedSetsCount, 2);
+  assert.equal(stats.totalSetsCount, 2);
+  assert.equal(stats.totalVolumeDisplay, 1000);
+  assert.equal(stats.measuredRestCount, 1);
+  assert.equal(stats.nonFinalSetCount, 1);
+  assert.equal(stats.totalRestSeconds, 120);
 });

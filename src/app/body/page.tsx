@@ -1,5 +1,5 @@
-import { BodyWeightView } from '@/components/body/BodyWeightView';
+import { BodyPageView } from '@/components/body/BodyPageView';
 
 export default function BodyPage() {
-  return <BodyWeightView />;
+  return <BodyPageView />;
 }

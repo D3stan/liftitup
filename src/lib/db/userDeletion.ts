@@ -68,9 +68,10 @@ export async function deleteUserWorkoutHistory(userId: string): Promise<void> {
 
 /**
  * Deletes all body metrics for `userId` and resets profile weight to default (75 kg).
+ * Preserves progress photos (used by Replace-mode restore).
  * Must be called inside an active transaction.
  */
-export async function deleteUserBodyDataInTx(userId: string): Promise<void> {
+export async function deleteUserBodyMetricsInTx(userId: string): Promise<void> {
   await query('DELETE FROM body_metrics WHERE user_id = $1', [userId]);
   await query('UPDATE users SET weight_kg = $1 WHERE id = $2', [
     DEFAULT_USER_WEIGHT_KG,
@@ -79,7 +80,34 @@ export async function deleteUserBodyDataInTx(userId: string): Promise<void> {
 }
 
 /**
- * Deletes all body metrics for `userId` and resets `users.weight_kg` to 75
+ * Deletes all progress photo binary blobs and metadata for `userId` in explicit
+ * child-to-parent order. Must be called inside an active transaction.
+ */
+export async function deleteUserPhotosInTx(userId: string): Promise<void> {
+  await query(
+    `
+    DELETE FROM progress_photo_blobs
+    WHERE photo_id IN (
+      SELECT id FROM progress_photos WHERE user_id = $1
+    )
+    `,
+    [userId],
+  );
+  await query('DELETE FROM progress_photos WHERE user_id = $1', [userId]);
+}
+
+/**
+ * Deletes all body metrics AND all progress photos (including binary bytes) for `userId`,
+ * and resets profile weight to default (75 kg).
+ * Must be called inside an active transaction.
+ */
+export async function deleteUserBodyDataInTx(userId: string): Promise<void> {
+  await deleteUserBodyMetricsInTx(userId);
+  await deleteUserPhotosInTx(userId);
+}
+
+/**
+ * Deletes all body metrics and progress photos for `userId` and resets `users.weight_kg` to 75
  * in one transaction. Keeps all other user data.
  */
 export async function deleteUserBodyData(userId: string): Promise<void> {
@@ -141,8 +169,8 @@ export async function deleteUserSplitData(userId: string): Promise<void> {
  * Deletes all user-owned workout history, splits, body metrics, hidden exercise flags,
  * exercise step overrides, and custom exercises in explicit child-to-parent order for
  * Replace-mode restore. Preserves `users`, `auth_sessions`, `api_keys`,
- * `apple_health_workouts` (session links already cleared by `deleteUserWorkoutHistoryInTx`),
- * and shared catalog exercises (`user_id IS NULL`).
+ * `progress_photos` (and their binary blobs), `apple_health_workouts` (session links
+ * already cleared by `deleteUserWorkoutHistoryInTx`), and shared catalog exercises (`user_id IS NULL`).
  * Must be called inside an active transaction.
  */
 export async function resetUserAccountDataForRestoreInTx(
@@ -150,7 +178,7 @@ export async function resetUserAccountDataForRestoreInTx(
 ): Promise<void> {
   await deleteUserWorkoutHistoryInTx(userId);
   await deleteUserSplitDataInTx(userId);
-  await deleteUserBodyDataInTx(userId);
+  await deleteUserBodyMetricsInTx(userId);
   await query('DELETE FROM hidden_exercises WHERE user_id = $1', [userId]);
   await query('DELETE FROM user_exercise_prefs WHERE user_id = $1', [userId]);
   await query('DELETE FROM exercises WHERE user_id = $1 AND is_custom = 1', [
@@ -166,7 +194,9 @@ export async function resetUserAccountDataForRestoreInTx(
  */
 export async function deleteUserAccountInTx(userId: string): Promise<boolean> {
   await resetUserAccountDataForRestoreInTx(userId);
+  await deleteUserPhotosInTx(userId);
   await query('DELETE FROM apple_health_workouts WHERE user_id = $1', [userId]);
+  await query('DELETE FROM mcp_confirmations WHERE user_id = $1', [userId]);
   await query('DELETE FROM api_keys WHERE user_id = $1', [userId]);
   await query('DELETE FROM auth_sessions WHERE user_id = $1', [userId]);
   const res = await query('DELETE FROM users WHERE id = $1', [userId]);

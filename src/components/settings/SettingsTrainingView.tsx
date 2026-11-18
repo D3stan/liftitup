@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Bell, BellOff, BellRing, Check, Clock, Timer } from 'lucide-react';
+import { Bell, BellOff, BellRing, Check, Clock, Focus, List, Timer } from 'lucide-react';
 import { apiFetch, toast } from '@/components/ui';
 import {
   ensureAlertServiceWorker,
@@ -10,7 +10,7 @@ import {
   requestRestAlertPermission,
   type RestAlertSupportInfo,
 } from '@/lib/workouts/restAlerts';
-import type { RestClockMode } from '@/types/domain';
+import type { RestClockMode, WorkoutViewMode } from '@/types/domain';
 import {
   DEFAULT_WEIGHT_STEP_KG,
   DEFAULT_WEIGHT_STEP_LB,
@@ -88,6 +88,7 @@ const TRAINING_BOOLEAN_TOGGLES: Array<{
 export function SettingsTrainingView() {
   const { user, setUser, loading } = useSettingsData();
   const [savingMode, setSavingMode] = useState(false);
+  const [savingWorkoutView, setSavingWorkoutView] = useState(false);
   const [savingWeightStep, setSavingWeightStep] = useState(false);
   const [savingToggleKey, setSavingToggleKey] =
     useState<BooleanSettingKey | null>(null);
@@ -124,6 +125,27 @@ export function SettingsTrainingView() {
       toast.error(err instanceof Error ? err.message : 'Update failed');
     } finally {
       setSavingMode(false);
+    }
+  }
+
+  async function handleSelectWorkoutView(nextView: WorkoutViewMode) {
+    if (!user || savingWorkoutView || user.defaultWorkoutView === nextView) return;
+    setSavingWorkoutView(true);
+    try {
+      const res = await apiFetch<SettingsPayload>('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ defaultWorkoutView: nextView }),
+      });
+      setUser(res.user);
+      toast.success(
+        nextView === 'focus'
+          ? 'Default workout view set to Focus'
+          : 'Default workout view set to List',
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setSavingWorkoutView(false);
     }
   }
 
@@ -234,6 +256,77 @@ export function SettingsTrainingView() {
     <SettingsSubpageShell title="Training" user={user} loading={loading}>
       {user && (
         <div className="space-y-4">
+          {/* Default Workout View */}
+          <section id="workout-view" className="card space-y-3">
+            <div>
+              <h2 className="font-marker text-base text-[var(--ink)]">
+                Default Workout View
+              </h2>
+              <p className="mt-0.5 text-sm text-[var(--muted)]">
+                Choose the default view when starting a new workout. You can
+                still switch between List and Focus mid-workout.
+              </p>
+            </div>
+
+            <div
+              role="radiogroup"
+              aria-label="Default workout view"
+              className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={user.defaultWorkoutView === 'list'}
+                disabled={savingWorkoutView}
+                onClick={() => handleSelectWorkoutView('list')}
+                className={`flex min-h-[56px] items-center gap-3 rounded-xl border-[2.5px] border-[var(--line)] p-3 text-left transition ${
+                  user.defaultWorkoutView === 'list'
+                    ? 'bg-[var(--gold-bg)] shadow-[2px_2px_0_var(--shadow-color)]'
+                    : 'bg-[var(--surface-alt)]/60 opacity-80'
+                }`}
+              >
+                <List className="h-5 w-5 shrink-0 text-[var(--ink)]" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 font-bold text-[var(--ink)]">
+                    <span>List</span>
+                    {user.defaultWorkoutView === 'list' && (
+                      <Check className="h-4 w-4 shrink-0 text-[var(--green)]" />
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--muted)]">
+                    All exercises in one scrolling list
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                role="radio"
+                aria-checked={user.defaultWorkoutView === 'focus'}
+                disabled={savingWorkoutView}
+                onClick={() => handleSelectWorkoutView('focus')}
+                className={`flex min-h-[56px] items-center gap-3 rounded-xl border-[2.5px] border-[var(--line)] p-3 text-left transition ${
+                  user.defaultWorkoutView === 'focus'
+                    ? 'bg-[var(--gold-bg)] shadow-[2px_2px_0_var(--shadow-color)]'
+                    : 'bg-[var(--surface-alt)]/60 opacity-80'
+                }`}
+              >
+                <Focus className="h-5 w-5 shrink-0 text-[var(--ink)]" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 font-bold text-[var(--ink)]">
+                    <span>Focus</span>
+                    {user.defaultWorkoutView === 'focus' && (
+                      <Check className="h-4 w-4 shrink-0 text-[var(--green)]" />
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--muted)]">
+                    One exercise per screen with swipe &amp; inline rest
+                  </p>
+                </div>
+              </button>
+            </div>
+          </section>
+
           {/* Rest Clock Mode */}
           <section id="rest-clock" className="card space-y-3">
             <div>

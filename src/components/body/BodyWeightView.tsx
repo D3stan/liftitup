@@ -299,7 +299,7 @@ export function BodyWeightView() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pb-6 pt-2">
+    <div className="flex w-full flex-col gap-4">
       {/* Header & Range Selector */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">

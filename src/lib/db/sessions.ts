@@ -89,8 +89,51 @@ export async function touchAuthSession(
   );
 }
 
+export interface ActiveAuthSessionSummary {
+  createdAt: string;
+  expiresAt: string;
+  lastSeenAt: string;
+}
+
 export async function deleteAuthSession(tokenHash: string): Promise<void> {
   await query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
+}
+
+export async function deleteAuthSessionsByUserId(
+  userId: string,
+): Promise<number> {
+  const res = await query('DELETE FROM auth_sessions WHERE user_id = $1', [
+    userId,
+  ]);
+  return Number(res.rowCount ?? 0);
+}
+
+export async function listActiveAuthSessionsForUser(
+  userId: string,
+  nowIso = new Date().toISOString(),
+): Promise<ActiveAuthSessionSummary[]> {
+  // Never select token_hash; return only non-expired session timestamps.
+  const res = await query<{
+    created_at: string;
+    expires_at: string;
+    last_seen_at: string;
+  }>(
+    `SELECT created_at, expires_at, last_seen_at
+     FROM auth_sessions
+     WHERE user_id = $1 AND expires_at > $2
+     ORDER BY last_seen_at DESC, created_at DESC`,
+    [userId, nowIso],
+  );
+  return res.rows.map((r) => ({
+    createdAt: r.created_at,
+    expiresAt: r.expires_at,
+    lastSeenAt: r.last_seen_at,
+  }));
+}
+
+export async function deleteApiKeyByUserId(userId: string): Promise<boolean> {
+  const res = await query('DELETE FROM api_keys WHERE user_id = $1', [userId]);
+  return Number(res.rowCount ?? 0) > 0;
 }
 
 export async function getApiKeyByUserId(
@@ -131,12 +174,15 @@ export async function upsertApiKey(
 
 export async function getUserByApiKeyHash(
   keyHash: string,
-): Promise<{ user: UserProfile; apiKeyId: string } | null> {
+): Promise<{ user: UserProfile; apiKeyId: string; apiKeyPrefix: string } | null> {
   const row = await queryOne<
-    Parameters<typeof mapUserRow>[0] & { _api_key_id: string }
+    Parameters<typeof mapUserRow>[0] & {
+      _api_key_id: string;
+      _api_key_prefix: string;
+    }
   >(
     `
-    SELECT u.*, k.id AS _api_key_id
+    SELECT u.*, k.id AS _api_key_id, k.key_prefix AS _api_key_prefix
     FROM api_keys k
     JOIN users u ON u.id = k.user_id
     WHERE k.key_hash = $1
@@ -146,9 +192,11 @@ export async function getUserByApiKeyHash(
 
   if (!row) return null;
   const apiKeyId = row._api_key_id;
+  const apiKeyPrefix = row._api_key_prefix;
   return {
     user: mapUserRow(row),
     apiKeyId,
+    apiKeyPrefix,
   };
 }
 

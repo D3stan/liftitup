@@ -8,6 +8,7 @@ import { adoptLegacyWorkoutDrafts } from '@/lib/offline/outbox';
 import { ApiClientError, apiFetch, Toaster } from '@/components/ui';
 import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
+import { ChangePasswordGate } from './ChangePasswordGate';
 
 const SHELL_LESS_PREFIXES = ['/welcome', '/onboarding'];
 
@@ -16,9 +17,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
 
-  const isShellLess = SHELL_LESS_PREFIXES.some((prefix) =>
-    pathname.startsWith(prefix),
-  );
+  const isAdminPath = pathname === '/admin' || pathname.startsWith('/admin/');
+  const isShellLess =
+    isAdminPath ||
+    SHELL_LESS_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   const isWelcome = pathname.startsWith('/welcome');
 
   const loadMe = useCallback(async () => {
@@ -36,16 +38,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   useEffect(() => {
-    if (isWelcome) {
+    if (isWelcome || isAdminPath) {
       setUser(null);
       return;
     }
     void loadMe();
-  }, [isWelcome, pathname, loadMe]);
+  }, [isWelcome, isAdminPath, pathname, loadMe]);
 
   useEffect(() => {
     const onUserChanged = () => {
-      if (!isWelcome) {
+      if (!isWelcome && !isAdminPath) {
         void loadMe();
       }
     };
@@ -53,12 +55,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener('liftitup:user-updated', onUserChanged);
     };
-  }, [isWelcome, loadMe]);
+  }, [isWelcome, isAdminPath, loadMe]);
 
   if (isShellLess) {
     return (
       <>
         {children}
+        <Toaster />
+      </>
+    );
+  }
+
+  if (user?.mustChangePassword) {
+    return (
+      <>
+        <ChangePasswordGate
+          user={user}
+          onPasswordChanged={(updated) => {
+            setUser(updated);
+            window.dispatchEvent(new Event('liftitup:user-updated'));
+          }}
+          onLogout={() => {
+            setUser(null);
+            router.replace('/welcome');
+          }}
+        />
         <Toaster />
       </>
     );

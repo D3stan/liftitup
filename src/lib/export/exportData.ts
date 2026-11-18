@@ -8,6 +8,7 @@ import type {
   UserProfile,
   WorkoutSession,
   WorkoutSetRepQuality,
+  WorkoutViewMode,
 } from '@/types/domain';
 import { listBodyMetrics } from '@/lib/db/bodyMetrics';
 import { localDateForTimezone } from '@/lib/db/users';
@@ -38,6 +39,7 @@ export interface ExportJsonPayload {
     enableSetNoteTags: boolean;
     enableSetNoteHint: boolean;
     restClockMode: RestClockMode;
+    defaultWorkoutView: WorkoutViewMode;
     defaultWeightStepKg: number | null;
     appleFitnessEnabled: boolean;
     appleHealthLastReceivedAt: string | null;
@@ -184,6 +186,7 @@ export async function buildUserExportJson(user: UserProfile): Promise<ExportJson
       enableSetNoteTags: user.enableSetNoteTags,
       enableSetNoteHint: user.enableSetNoteHint,
       restClockMode: user.restClockMode,
+      defaultWorkoutView: user.defaultWorkoutView,
       defaultWeightStepKg: user.defaultWeightStepKg,
       appleFitnessEnabled: user.appleFitnessEnabled,
       appleHealthLastReceivedAt: user.appleHealthLastReceivedAt,

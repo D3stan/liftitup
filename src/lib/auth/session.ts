@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { NextRequest, NextResponse } from 'next/server';
 import type { UserProfile } from '@/types/domain';
 import { ApiError } from '@/lib/api/handler';
+import { recordThrottledActivityEvent } from '@/lib/admin/events';
 import {
   createAuthSession,
   deleteAuthSession,
@@ -21,6 +22,8 @@ export interface AuthContext {
   user: UserProfile;
   authMethod: 'session' | 'api_key';
   sessionTokenHash?: string;
+  apiKeyId?: string;
+  apiKeyPrefix?: string;
 }
 
 export function generateRawToken(): string {
@@ -54,11 +57,17 @@ function extractBearerToken(req: NextRequest): string | null {
 async function resolveFromApiKey(rawKey: string): Promise<AuthContext | null> {
   if (!rawKey) return null;
   const match = await getUserByApiKeyHash(hashToken(rawKey));
-  if (!match) return null;
+  if (!match || match.user.isDisabled) return null;
 
   await touchApiKeyLastUsed(match.apiKeyId);
   await touchUserLastActive(match.user.id);
-  return { user: match.user, authMethod: 'api_key' };
+  await recordThrottledActivityEvent(match.user.id, 'api_key');
+  return {
+    user: match.user,
+    authMethod: 'api_key',
+    apiKeyId: match.apiKeyId,
+    apiKeyPrefix: match.apiKeyPrefix,
+  };
 }
 
 /**
@@ -93,7 +102,7 @@ export async function optionalAuth(req: NextRequest): Promise<AuthContext | null
   }
 
   const user = await getUserById(session.userId);
-  if (!user) {
+  if (!user || user.isDisabled) {
     await deleteAuthSession(tokenHash);
     return null;
   }
@@ -104,6 +113,7 @@ export async function optionalAuth(req: NextRequest): Promise<AuthContext | null
     await touchAuthSession(tokenHash, newExpiresAt);
   }
   await touchUserLastActive(user.id);
+  await recordThrottledActivityEvent(user.id, 'session');
 
   return {
     user,

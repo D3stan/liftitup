@@ -43,7 +43,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryMeta[] = [
     id: 'training',
     title: 'Training',
     description:
-      'Rest clock mode, rest alerts, default weight step, execution quality, RIR, and per-set notes.',
+      'Default workout view (List or Focus), rest clock mode, rest alerts, default weight step, execution quality, RIR, and per-set notes.',
     href: '/settings/training',
   },
   {
@@ -95,6 +95,17 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
     categoryTitle: 'Body tab',
     href: '/body',
     keywords: ['weight', 'body weight', 'body', 'kg', 'lb', 'scale', 'trend'],
+  },
+  {
+    id: 'body-progress-photos',
+    title: 'Progress Photos',
+    description:
+      'Take or upload private 3:4 progress photos, compare dates, and manage your gallery.',
+    categoryId: 'profile',
+    categoryTitle: 'Body tab',
+    href: '/body?tab=photos',
+    keywords: ['progress photos', 'photos', 'camera', 'pose', 'compare', 'body'],
+    hideForGuest: true,
   },
   {
     id: 'profile-height',
@@ -177,6 +188,25 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   },
 
   // Training
+  {
+    id: 'training-default-workout-view',
+    title: 'Default Workout View',
+    description:
+      'Choose List (scrolling) or Focus (one exercise per screen) for new workouts.',
+    categoryId: 'training',
+    categoryTitle: 'Training',
+    href: '/settings/training#workout-view',
+    keywords: [
+      'focus',
+      'focus mode',
+      'list',
+      'workout view',
+      'default view',
+      'one exercise',
+      'swipe',
+      'training',
+    ],
+  },
   {
     id: 'training-rest-clock-mode',
     title: 'Rest Clock Mode',
@@ -315,6 +345,17 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
     categoryTitle: 'Data',
     href: '/settings/data',
     keywords: ['export', 'download', 'json', 'csv', 'backup', 'data'],
+  },
+  {
+    id: 'data-photo-archive',
+    title: 'Export Progress Photos Archive (ZIP)',
+    description:
+      'Download all your private progress photos with a date/pose/weight index.',
+    categoryId: 'data',
+    categoryTitle: 'Data',
+    href: '/settings/data#photo-archive',
+    keywords: ['photo', 'photos', 'archive', 'zip', 'export', 'download', 'data'],
+    hideForGuest: true,
   },
   {
     id: 'data-restore',

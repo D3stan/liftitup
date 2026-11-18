@@ -24,7 +24,12 @@ export const GET = withApiHandler('mcp.get', async (_req: NextRequest, ctx) => {
 });
 
 export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => {
-  const { user } = await requireApiKeyAuth(req, ctx);
+  const { user, apiKeyId, apiKeyPrefix } = await requireApiKeyAuth(req, ctx);
+  const mcpCtx = {
+    apiKeyId,
+    apiKeyPrefix,
+    origin: req.nextUrl.origin,
+  };
 
   let rawBody: string;
   try {
@@ -76,7 +81,11 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
         });
         continue;
       }
-      const res = await handleMcpJsonRpcRequest(user, item as JsonRpcRequest);
+      const res = await handleMcpJsonRpcRequest(
+        user,
+        item as JsonRpcRequest,
+        mcpCtx,
+      );
       if (res !== null) {
         responses.push(res);
       }
@@ -99,7 +108,11 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
     );
   }
 
-  const rpcResponse = await handleMcpJsonRpcRequest(user, parsed as JsonRpcRequest);
+  const rpcResponse = await handleMcpJsonRpcRequest(
+    user,
+    parsed as JsonRpcRequest,
+    mcpCtx,
+  );
   if (rpcResponse === null) {
     return new NextResponse(null, { status: 202 });
   }

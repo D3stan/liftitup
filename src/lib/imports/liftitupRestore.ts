@@ -8,6 +8,7 @@ import type {
   TrackingType,
   UserProfile,
   WeightUnit,
+  WorkoutViewMode,
 } from '@/types/domain';
 import {
   matchExerciseName,
@@ -74,6 +75,7 @@ interface ParsedUserSettings {
   enableSetNoteTags?: boolean;
   enableSetNoteHint?: boolean;
   restClockMode?: RestClockMode;
+  defaultWorkoutView?: WorkoutViewMode;
   defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
 }
@@ -388,6 +390,19 @@ function parseUserSettings(
       });
     } else {
       result.restClockMode = rawUser.restClockMode;
+    }
+  }
+  if ('defaultWorkoutView' in rawUser && rawUser.defaultWorkoutView !== undefined) {
+    if (
+      rawUser.defaultWorkoutView !== 'list' &&
+      rawUser.defaultWorkoutView !== 'focus'
+    ) {
+      errors.push({
+        path: 'user.defaultWorkoutView',
+        message: 'must be "list" or "focus"',
+      });
+    } else {
+      result.defaultWorkoutView = rawUser.defaultWorkoutView;
     }
   }
   if (
@@ -1943,6 +1958,9 @@ export async function applyLiftitupRestore(
       userPatch.enableSetNoteHint = payload.user.enableSetNoteHint ?? true;
       if (payload.user.restClockMode !== undefined) {
         userPatch.restClockMode = payload.user.restClockMode;
+      }
+      if (payload.user.defaultWorkoutView !== undefined) {
+        userPatch.defaultWorkoutView = payload.user.defaultWorkoutView;
       }
       if (payload.user.defaultWeightStepKg !== undefined) {
         userPatch.defaultWeightStepKg = payload.user.defaultWeightStepKg;

@@ -34,12 +34,16 @@ const SCHEMA_V2_DDL = `
     enable_set_note_tags INTEGER NOT NULL DEFAULT 1 CHECK (enable_set_note_tags IN (0, 1)),
     enable_set_note_hint INTEGER NOT NULL DEFAULT 1 CHECK (enable_set_note_hint IN (0, 1)),
     rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown')),
+    default_workout_view TEXT NOT NULL DEFAULT 'list' CHECK (default_workout_view IN ('list', 'focus')),
     default_weight_step_kg DOUBLE PRECISION,
     apple_fitness_enabled INTEGER NOT NULL DEFAULT 1 CHECK (apple_fitness_enabled IN (0, 1)),
     apple_health_last_received_at TEXT,
     apple_health_last_received_kind TEXT CHECK (apple_health_last_received_kind IS NULL OR apple_health_last_received_kind IN ('workout', 'weight', 'both')),
     apple_health_last_received_linked INTEGER CHECK (apple_health_last_received_linked IS NULL OR apple_health_last_received_linked IN (0, 1)),
+    photo_quota INTEGER,
     is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
+    is_disabled INTEGER NOT NULL DEFAULT 0 CHECK (is_disabled IN (0, 1)),
+    must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1)),
     last_active_at TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
@@ -271,7 +275,260 @@ const SCHEMA_V2_DDL = `
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS progress_photos (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    taken_on TEXT NOT NULL,
+    pose TEXT NOT NULL CHECK (pose IN ('front', 'side', 'back')),
+    weight_kg DOUBLE PRECISION,
+    byte_size INTEGER NOT NULL,
+    thumb_byte_size INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_progress_photos_user_date ON progress_photos (user_id, taken_on DESC, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS progress_photo_blobs (
+    photo_id TEXT PRIMARY KEY,
+    full_bytes BYTEA NOT NULL,
+    thumb_bytes BYTEA NOT NULL,
+    FOREIGN KEY (photo_id) REFERENCES progress_photos(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    detail_json TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_events_user_created ON events (user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_events_type_created ON events (event_type, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    actor_user_id TEXT,
+    actor_label TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('admin_web', 'cli', 'mcp')),
+    action TEXT NOT NULL,
+    target_user_id TEXT,
+    reason TEXT,
+    detail_json TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log (created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_target ON audit_log (target_user_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS daily_snapshots (
+    snapshot_date TEXT PRIMARY KEY,
+    computed_at TEXT NOT NULL,
+    total_db_bytes BIGINT NOT NULL,
+    table_sizes_json TEXT NOT NULL,
+    overview_json TEXT NOT NULL,
+    per_user_storage_json TEXT NOT NULL,
+    cohorts_json TEXT NOT NULL,
+    catalog_usage_json TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS request_metric_buckets (
+    bucket_start TEXT NOT NULL,
+    route TEXT NOT NULL,
+    method TEXT NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    error_4xx_count INTEGER NOT NULL DEFAULT 0,
+    error_5xx_count INTEGER NOT NULL DEFAULT 0,
+    total_duration_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    max_duration_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (bucket_start, route, method)
+  );
+  CREATE INDEX IF NOT EXISTS idx_req_metrics_updated ON request_metric_buckets (bucket_start DESC);
+
+  CREATE TABLE IF NOT EXISTS app_errors (
+    id TEXT PRIMARY KEY,
+    route TEXT NOT NULL,
+    method TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    error_code TEXT,
+    message TEXT NOT NULL,
+    request_id TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_app_errors_created ON app_errors (created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS mcp_confirmations (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    api_key_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_mcp_confirmations_user ON mcp_confirmations (user_id, expires_at);
 `;
+
+const REPORTING_VIEWS: ReadonlyArray<{ name: string; selectSql: string }> = [
+  {
+    name: 'v_admin_user_activity',
+    selectSql: `
+      SELECT
+        u.id AS user_id,
+        u.username,
+        u.is_guest,
+        u.is_disabled,
+        u.unit,
+        u.theme,
+        u.theme_variant,
+        u.rest_clock_mode,
+        u.default_workout_view,
+        u.apple_fitness_enabled,
+        CASE WHEN ak.id IS NOT NULL THEN 1 ELSE 0 END AS has_api_key,
+        ak.last_used_at AS api_key_last_used_at,
+        u.created_at,
+        u.last_active_at,
+        COALESCE(ws_agg.session_count, 0)::int AS session_count,
+        ws_agg.last_session_date,
+        COALESCE(pp_agg.photo_count, 0)::int AS photo_count,
+        COALESCE(pp_agg.photo_bytes, 0)::bigint AS photo_bytes
+      FROM users u
+      LEFT JOIN api_keys ak ON ak.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*)::int AS session_count, MAX(session_date) AS last_session_date
+        FROM workout_sessions
+        GROUP BY user_id
+      ) ws_agg ON ws_agg.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*)::int AS photo_count, COALESCE(SUM(byte_size + thumb_byte_size), 0)::bigint AS photo_bytes
+        FROM progress_photos
+        GROUP BY user_id
+      ) pp_agg ON pp_agg.user_id = u.id
+    `,
+  },
+  {
+    name: 'v_admin_daily_workouts',
+    selectSql: `
+      SELECT
+        ws.session_date,
+        COUNT(*)::int AS session_count,
+        COUNT(DISTINCT ws.user_id)::int AS unique_user_count,
+        COALESCE(SUM(CASE WHEN ws.is_jolly = 1 THEN 1 ELSE 0 END), 0)::int AS jolly_session_count,
+        AVG(ws.duration_minutes) AS avg_duration_minutes
+      FROM workout_sessions ws
+      GROUP BY ws.session_date
+    `,
+  },
+  {
+    name: 'v_admin_exercise_usage',
+    selectSql: `
+      SELECT
+        e.id AS exercise_id,
+        e.slug,
+        CASE WHEN e.is_custom = 0 THEN e.name ELSE NULL END AS catalog_name,
+        e.tracking_type,
+        e.equipment,
+        e.category,
+        e.is_custom,
+        COUNT(we.id)::int AS log_count,
+        COUNT(DISTINCT ws.user_id)::int AS distinct_user_count
+      FROM exercises e
+      LEFT JOIN workout_exercises we ON we.exercise_id = e.id
+      LEFT JOIN workout_sessions ws ON ws.id = we.session_id
+      GROUP BY e.id, e.slug, e.name, e.tracking_type, e.equipment, e.category, e.is_custom
+    `,
+  },
+  {
+    name: 'v_admin_photo_storage',
+    selectSql: `
+      SELECT
+        u.id AS user_id,
+        u.username,
+        u.is_guest,
+        COALESCE(u.photo_quota, 300)::int AS effective_quota,
+        COUNT(pp.id)::int AS photo_count,
+        COALESCE(SUM(pp.byte_size), 0)::bigint AS total_full_bytes,
+        COALESCE(SUM(pp.thumb_byte_size), 0)::bigint AS total_thumb_bytes,
+        COALESCE(SUM(pp.byte_size + pp.thumb_byte_size), 0)::bigint AS total_bytes,
+        MIN(pp.created_at) AS first_photo_at,
+        MAX(pp.created_at) AS last_photo_at
+      FROM users u
+      LEFT JOIN progress_photos pp ON pp.user_id = u.id
+      GROUP BY u.id, u.username, u.is_guest, u.photo_quota
+    `,
+  },
+  {
+    name: 'v_admin_route_health',
+    selectSql: `
+      SELECT
+        bucket_start,
+        route,
+        method,
+        request_count,
+        error_4xx_count,
+        error_5xx_count,
+        total_duration_ms,
+        max_duration_ms,
+        updated_at
+      FROM request_metric_buckets
+    `,
+  },
+  {
+    name: 'v_admin_event_counts',
+    selectSql: `
+      SELECT
+        event_type,
+        COUNT(*)::int AS event_count,
+        COUNT(DISTINCT user_id)::int AS distinct_user_count,
+        MIN(created_at) AS first_at,
+        MAX(created_at) AS last_at
+      FROM events
+      GROUP BY event_type
+    `,
+  },
+];
+
+async function syncReportingViews(client: PoolClient): Promise<void> {
+  let isRealPostgres = false;
+  try {
+    await client.query('SELECT 1 FROM pg_views LIMIT 0');
+    isRealPostgres = true;
+  } catch {
+    isRealPostgres = false;
+  }
+
+  for (const view of REPORTING_VIEWS) {
+    if (isRealPostgres) {
+      await client.query(
+        `CREATE OR REPLACE VIEW ${view.name} AS ${view.selectSql}`,
+      );
+      continue;
+    }
+
+    // pg-mem does not implement View.drop() for CREATE OR REPLACE VIEW when a view already exists.
+    let existsInPgMem = false;
+    try {
+      await client.query(`SELECT 1 FROM ${view.name} LIMIT 0`);
+      existsInPgMem = true;
+    } catch {
+      existsInPgMem = false;
+    }
+    if (!existsInPgMem) {
+      await client.query(`CREATE VIEW ${view.name} AS ${view.selectSql}`);
+    }
+  }
+}
 
 function defaultRestForCategory(category: string): number {
   if (category === 'core' || category === 'cardio') return 60;
@@ -392,12 +649,16 @@ export async function initSchema(
       const statements = SCHEMA_V2_DDL.split(';')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
+      const pending: string[] = [];
       for (const stmt of statements) {
         const match = /^CREATE TABLE IF NOT EXISTS ([a-z_]+)\b/i.exec(stmt);
         if (match && existingTables.has(match[1].toLowerCase())) {
           continue;
         }
-        await client.query(stmt);
+        pending.push(stmt);
+      }
+      if (pending.length > 0) {
+        await client.query(pending.join(';\n'));
       }
     }
 
@@ -409,6 +670,9 @@ export async function initSchema(
     );
     await client.query(
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS rest_clock_mode TEXT NOT NULL DEFAULT 'stopwatch' CHECK (rest_clock_mode IN ('stopwatch', 'countdown'))",
+    );
+    await client.query(
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS default_workout_view TEXT NOT NULL DEFAULT 'list' CHECK (default_workout_view IN ('list', 'focus'))",
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS default_weight_step_kg DOUBLE PRECISION',
@@ -454,6 +718,18 @@ export async function initSchema(
     );
     await client.query(
       'ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS is_warmup INTEGER NOT NULL DEFAULT 0 CHECK (is_warmup IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_quota INTEGER',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_disabled INTEGER NOT NULL DEFAULT 0 CHECK (is_disabled IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1))',
+    );
+    await client.query(
+      'ALTER TABLE workout_sessions ADD COLUMN IF NOT EXISTS is_jolly INTEGER NOT NULL DEFAULT 0 CHECK (is_jolly IN (0, 1))',
     );
 
     // Approved Phase 5 non-additive cleanup: remove existing duplicate
@@ -519,5 +795,6 @@ export async function initSchema(
     );
 
     await syncExerciseCatalog(client);
+    await syncReportingViews(client);
   });
 }

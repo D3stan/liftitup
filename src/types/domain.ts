@@ -16,6 +16,8 @@ export type WeightUnit = 'kg' | 'lb';
 
 export type RestClockMode = 'stopwatch' | 'countdown';
 
+export type WorkoutViewMode = 'list' | 'focus';
+
 export type AppleHealthReceiveKind = 'workout' | 'weight' | 'both';
 
 export type AppTheme =
@@ -45,14 +47,38 @@ export interface UserProfile {
   enableSetNoteTags: boolean;
   enableSetNoteHint: boolean;
   restClockMode: RestClockMode;
+  defaultWorkoutView: WorkoutViewMode;
   defaultWeightStepKg: number | null;
   appleFitnessEnabled: boolean;
   appleHealthLastReceivedAt: string | null;
   appleHealthLastReceivedKind: AppleHealthReceiveKind | null;
   appleHealthLastReceivedLinked: boolean | null;
+  photoQuota?: number | null;
   isGuest: boolean;
+  isDisabled?: boolean;
+  mustChangePassword?: boolean;
   lastActiveAt: string;
   createdAt: string;
+}
+
+export type ProgressPhotoPose = 'front' | 'side' | 'back';
+
+export interface ProgressPhoto {
+  id: string;
+  userId: string;
+  takenOn: string; // YYYY-MM-DD
+  pose: ProgressPhotoPose;
+  weightKg: number | null;
+  byteSize: number;
+  thumbByteSize: number;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+}
+
+export interface ProgressPhotoQuota {
+  used: number;
+  limit: number;
 }
 
 export interface ApiKeyInfo {

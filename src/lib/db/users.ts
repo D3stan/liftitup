@@ -6,6 +6,7 @@ import type {
   ThemeVariant,
   UserProfile,
   WeightUnit,
+  WorkoutViewMode,
 } from '@/types/domain';
 import {
   DEFAULT_THEME,
@@ -34,12 +35,16 @@ type DbUserRow = {
   enable_set_note_tags?: number;
   enable_set_note_hint?: number;
   rest_clock_mode?: string;
+  default_workout_view?: string;
   default_weight_step_kg?: number | null;
   apple_fitness_enabled: number;
   apple_health_last_received_at?: string | null;
   apple_health_last_received_kind?: string | null;
   apple_health_last_received_linked?: number | null;
+  photo_quota?: number | null;
   is_guest: number;
+  is_disabled?: number;
+  must_change_password?: number;
   last_active_at: string;
   created_at: string;
 };
@@ -66,6 +71,7 @@ export interface CreateUserInput {
   enableSetNoteTags?: boolean;
   enableSetNoteHint?: boolean;
   restClockMode?: RestClockMode;
+  defaultWorkoutView?: WorkoutViewMode;
   defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
   isGuest?: boolean;
@@ -86,12 +92,17 @@ export interface UpdateUserSettingsInput {
   enableSetNoteTags?: boolean;
   enableSetNoteHint?: boolean;
   restClockMode?: RestClockMode;
+  defaultWorkoutView?: WorkoutViewMode;
   defaultWeightStepKg?: number | null;
   appleFitnessEnabled?: boolean;
 }
 
 export function isValidRestClockMode(val: unknown): val is RestClockMode {
   return val === 'stopwatch' || val === 'countdown';
+}
+
+export function isValidWorkoutViewMode(val: unknown): val is WorkoutViewMode {
+  return val === 'list' || val === 'focus';
 }
 
 export function mapUserRow(row: DbUserRow): UserProfile {
@@ -120,6 +131,8 @@ export function mapUserRow(row: DbUserRow): UserProfile {
         ? true
         : Boolean(row.enable_set_note_hint),
     restClockMode: row.rest_clock_mode === 'countdown' ? 'countdown' : 'stopwatch',
+    defaultWorkoutView:
+      row.default_workout_view === 'focus' ? 'focus' : 'list',
     defaultWeightStepKg:
       row.default_weight_step_kg === null || row.default_weight_step_kg === undefined
         ? null
@@ -137,7 +150,13 @@ export function mapUserRow(row: DbUserRow): UserProfile {
       row.apple_health_last_received_linked === undefined
         ? null
         : Boolean(row.apple_health_last_received_linked),
+    photoQuota:
+      row.photo_quota === null || row.photo_quota === undefined
+        ? null
+        : Number(row.photo_quota),
     isGuest: Boolean(row.is_guest),
+    isDisabled: Boolean(row.is_disabled),
+    mustChangePassword: Boolean(row.must_change_password),
     lastActiveAt: row.last_active_at,
     createdAt: row.created_at,
   };
@@ -207,6 +226,8 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
 
   const restClockMode: RestClockMode =
     input.restClockMode === 'countdown' ? 'countdown' : 'stopwatch';
+  const defaultWorkoutView: WorkoutViewMode =
+    input.defaultWorkoutView === 'focus' ? 'focus' : 'list';
 
   const row = await queryOne<DbUserRow>(
     `
@@ -215,9 +236,9 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       height_cm, weight_kg, age, training_years,
       unit, timezone, theme, theme_variant,
       enable_set_quality, always_show_rir, enable_set_note_tags, enable_set_note_hint,
-      rest_clock_mode, default_weight_step_kg,
+      rest_clock_mode, default_workout_view, default_weight_step_kg,
       apple_fitness_enabled, is_guest, last_active_at, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
     RETURNING *
     `,
     [
@@ -238,6 +259,7 @@ export async function createUser(input: CreateUserInput): Promise<UserProfile> {
       input.enableSetNoteTags === false ? 0 : 1,
       input.enableSetNoteHint === false ? 0 : 1,
       restClockMode,
+      defaultWorkoutView,
       input.defaultWeightStepKg ?? null,
       input.appleFitnessEnabled === false ? 0 : 1,
       input.isGuest ? 1 : 0,
@@ -316,6 +338,10 @@ export async function updateUserSettings(
   if (patch.restClockMode !== undefined) {
     setClauses.push(`rest_clock_mode = $${idx++}`);
     params.push(patch.restClockMode === 'countdown' ? 'countdown' : 'stopwatch');
+  }
+  if (patch.defaultWorkoutView !== undefined) {
+    setClauses.push(`default_workout_view = $${idx++}`);
+    params.push(patch.defaultWorkoutView === 'focus' ? 'focus' : 'list');
   }
   if (patch.defaultWeightStepKg !== undefined) {
     setClauses.push(`default_weight_step_kg = $${idx++}`);
@@ -401,4 +427,53 @@ export async function deleteExpiredGuests(
     }
     return deleted;
   });
+}
+
+export async function getUserByIdWithPassword(
+  userId: string,
+): Promise<UserWithPassword | null> {
+  const row = await queryOne<DbUserRow>('SELECT * FROM users WHERE id = $1', [
+    userId,
+  ]);
+  if (!row) return null;
+  return {
+    ...mapUserRow(row),
+    passwordHash: row.password_hash,
+  };
+}
+
+export async function updateUserPasswordAndClearMustChange(
+  userId: string,
+  passwordHash: string,
+): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>(
+    `UPDATE users
+     SET password_hash = $1, must_change_password = 0
+     WHERE id = $2
+     RETURNING *`,
+    [passwordHash, userId],
+  );
+  return row ? mapUserRow(row) : null;
+}
+
+export async function setUserDisabledFlag(
+  userId: string,
+  disabled: boolean,
+): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>(
+    'UPDATE users SET is_disabled = $1 WHERE id = $2 RETURNING *',
+    [disabled ? 1 : 0, userId],
+  );
+  return row ? mapUserRow(row) : null;
+}
+
+export async function setUserPhotoQuota(
+  userId: string,
+  photoQuota: number | null,
+): Promise<UserProfile | null> {
+  const row = await queryOne<DbUserRow>(
+    'UPDATE users SET photo_quota = $1 WHERE id = $2 RETURNING *',
+    [photoQuota, userId],
+  );
+  return row ? mapUserRow(row) : null;
 }

@@ -4,6 +4,7 @@ import type {
   TrackingType,
   WeightUnit,
   WorkoutSet,
+  WorkoutViewMode,
 } from '@/types/domain';
 import type { DraftRestClock } from '@/lib/workouts/clock';
 
@@ -79,6 +80,10 @@ export interface WorkoutDraft {
   completionSeqCounter?: number;
   /** Persisted rest clock state (stopwatch or countdown) so reloads preserve elapsed/target/stop state. */
   restClock?: DraftRestClock | null;
+  /** Active logger view mode ('list' or 'focus'); persisted across reloads. */
+  viewMode?: WorkoutViewMode;
+  /** Current step index in Focus mode (0..exercises.length, where exercises.length is Summary). */
+  focusExerciseIndex?: number;
   exercises: LoggerExercise[];
   updatedAt: string;
 }
