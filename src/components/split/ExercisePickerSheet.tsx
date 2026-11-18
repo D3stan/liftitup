@@ -3,19 +3,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Sheet, apiFetch, toast } from '@/components/ui';
-import type { Exercise } from '@/types/domain';
+import type { Exercise, TrackingType } from '@/types/domain';
 import { TRACKING_TYPE_LABEL } from './formatTarget';
 
 interface ExercisePickerSheetProps {
   open: boolean;
   onClose: () => void;
   onSelect: (exercise: Exercise) => void;
+  title?: string;
+  excludeExerciseId?: string;
+  preferCategory?: string;
+  preferTrackingType?: TrackingType;
 }
 
 export function ExercisePickerSheet({
   open,
   onClose,
   onSelect,
+  title = 'Add exercise',
+  excludeExerciseId,
+  preferCategory,
+  preferTrackingType,
 }: ExercisePickerSheetProps) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,18 +61,32 @@ export function ExercisePickerSheet({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return exercises.slice(0, 60);
-    return exercises
-      .filter(
+    let list = excludeExerciseId
+      ? exercises.filter((ex) => ex.id !== excludeExerciseId)
+      : exercises;
+
+    if (q) {
+      list = list.filter(
         (ex) =>
           ex.name.toLowerCase().includes(q) ||
           ex.aliases.some((a) => a.toLowerCase().includes(q)),
-      )
-      .slice(0, 60);
-  }, [exercises, query]);
+      );
+    }
+
+    if (preferCategory || preferTrackingType) {
+      const score = (ex: Exercise) =>
+        (preferCategory && ex.category === preferCategory ? 2 : 0) +
+        (preferTrackingType && ex.trackingType === preferTrackingType ? 1 : 0);
+      list = [...list].sort(
+        (a, b) => score(b) - score(a) || a.name.localeCompare(b.name),
+      );
+    }
+
+    return list.slice(0, 60);
+  }, [exercises, query, excludeExerciseId, preferCategory, preferTrackingType]);
 
   return (
-    <Sheet open={open} onClose={onClose} title="Add exercise">
+    <Sheet open={open} onClose={onClose} title={title}>
       <div className="space-y-3">
         <div className="relative">
           <Search
