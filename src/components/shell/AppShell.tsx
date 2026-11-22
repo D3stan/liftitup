@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { UserProfile } from '@/types/domain';
 import { applyThemeToDocument } from '@/lib/theme';
@@ -9,6 +9,12 @@ import { ApiClientError, apiFetch, Toaster } from '@/components/ui';
 import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
 import { ChangePasswordGate } from './ChangePasswordGate';
+
+const UserContext = createContext<UserProfile | null>(null);
+
+export function useCurrentUser(): UserProfile | null {
+  return useContext(UserContext);
+}
 
 const SHELL_LESS_PREFIXES = ['/welcome', '/onboarding'];
 
@@ -86,13 +92,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col">
-      <AppHeader user={user} />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-3 pt-3 pb-[calc(var(--tabbar)+var(--sab)+24px)]">
-        {children}
-      </main>
-      <BottomNav />
-      <Toaster />
-    </div>
+    <UserContext.Provider value={user}>
+      <div className="min-h-dvh flex flex-col">
+        <AppHeader user={user} />
+        <main className="mx-auto w-full max-w-2xl flex-1 px-3 pt-3 pb-[calc(var(--tabbar)+var(--sab)+24px)]">
+          {children}
+        </main>
+        <BottomNav />
+        <Toaster />
+      </div>
+    </UserContext.Provider>
   );
 }

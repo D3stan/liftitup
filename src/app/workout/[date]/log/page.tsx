@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -43,6 +43,7 @@ import ExercisePickerSheet from '@/components/workout/ExercisePickerSheet';
 import FloatingRestTimer from '@/components/workout/FloatingRestTimer';
 import FocusWorkoutView from '@/components/workout/FocusWorkoutView';
 import VariationSwapSheet from '@/components/workout/VariationSwapSheet';
+import { isDraftInProgress } from '@/lib/workouts/activeDraft';
 import {
   adjustRestClockTarget,
   computeSessionDurationMinutes,
@@ -319,6 +320,8 @@ function WorkoutLoggerInner() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  const skipDraftPersistRef = useRef(false);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [swapTargetIdx, setSwapTargetIdx] = useState<number | null>(null);
@@ -355,6 +358,7 @@ function WorkoutLoggerInner() {
 
         setDayView(dayRes);
         setExercisesCatalog(exRes.exercises);
+        skipDraftPersistRef.current = false;
 
         adoptLegacyWorkoutDrafts(dayRes.user.id);
         const existingDraft = !ignoreSavedDraft
@@ -452,7 +456,7 @@ function WorkoutLoggerInner() {
 
   // Persist draft automatically
   useEffect(() => {
-    if (!draft || !dayView) return;
+    if (!draft || !dayView || skipDraftPersistRef.current) return;
     saveUserWorkoutDraft(dayView.user.id, draftKey, {
       ...draft,
       updatedAt: new Date().toISOString(),
@@ -1302,6 +1306,7 @@ function WorkoutLoggerInner() {
         toast.success('Workout saved');
       }
 
+      skipDraftPersistRef.current = true;
       clearUserWorkoutDraft(dayView.user.id, draftKey);
       router.push(`/workout/${encodeURIComponent(targetDate)}`);
     } catch (err) {
@@ -1320,6 +1325,7 @@ function WorkoutLoggerInner() {
         `/api/workouts/sessions/${encodeURIComponent(sessionId)}`,
         { method: 'DELETE' },
       );
+      skipDraftPersistRef.current = true;
       clearUserWorkoutDraft(dayView.user.id, draftKey);
       toast.success('Workout deleted');
       router.push(`/workout/${encodeURIComponent(date)}`);
@@ -1328,6 +1334,15 @@ function WorkoutLoggerInner() {
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleDiscardDraft = () => {
+    if (!dayView) return;
+    skipDraftPersistRef.current = true;
+    clearUserWorkoutDraft(dayView.user.id, draftKey);
+    setConfirmDiscardOpen(false);
+    toast.success('Workout discarded');
+    router.push(`/workout/${encodeURIComponent(date)}`);
   };
 
   if (loading || !draft || !dayView) {
@@ -1381,6 +1396,8 @@ function WorkoutLoggerInner() {
       }
     }
   }
+
+  const isDraftActive = !sessionId && isDraftInProgress(draft);
 
   const viewMode: WorkoutViewMode =
     draft.viewMode === 'focus' ? 'focus' : 'list';
@@ -1559,6 +1576,8 @@ function WorkoutLoggerInner() {
           onRestAlertFired={handleRestAlertFired}
           onSave={handleSave}
           onRequestDeleteSession={() => setConfirmDeleteOpen(true)}
+          canDiscardDraft={isDraftActive}
+          onRequestDiscardDraft={() => setConfirmDiscardOpen(true)}
         />
       ) : (
         <>
@@ -1865,6 +1884,17 @@ function WorkoutLoggerInner() {
             <span>Delete workout</span>
           </Button>
         )}
+
+        {isDraftActive && (
+          <Button
+            variant="alt"
+            onClick={() => setConfirmDiscardOpen(true)}
+            className="w-full text-[var(--red)]"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Discard workout</span>
+          </Button>
+        )}
       </div>
         </>
       )}
@@ -1930,6 +1960,32 @@ function WorkoutLoggerInner() {
           >
             Delete
           </Button>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={confirmDiscardOpen}
+        onClose={() => setConfirmDiscardOpen(false)}
+        title="Discard Workout?"
+      >
+        <div className="space-y-3">
+          <p className="text-sm font-bold text-[var(--muted)]">
+            Your unsaved sets and active session clock will be cleared.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="alt"
+              onClick={() => setConfirmDiscardOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="red"
+              onClick={handleDiscardDraft}
+            >
+              Discard
+            </Button>
+          </div>
         </div>
       </Sheet>
     </main>

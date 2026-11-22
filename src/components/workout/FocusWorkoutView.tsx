@@ -127,6 +127,8 @@ export interface FocusWorkoutViewProps {
   onRestAlertFired: (startedAt: string) => void;
   onSave: () => void;
   onRequestDeleteSession: () => void;
+  canDiscardDraft?: boolean;
+  onRequestDiscardDraft?: () => void;
 }
 
 const AUTO_ADVANCE_DELAY_MS = 2000;
@@ -187,6 +189,8 @@ export default function FocusWorkoutView({
   onRestAlertFired,
   onSave,
   onRequestDeleteSession,
+  canDiscardDraft = false,
+  onRequestDiscardDraft,
 }: FocusWorkoutViewProps) {
   const exerciseCount = draft.exercises.length;
   const activeIndex = clampFocusIndex(
@@ -1530,6 +1534,17 @@ export default function FocusWorkoutView({
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>Delete workout</span>
+                </Button>
+              )}
+
+              {!isEditing && canDiscardDraft && onRequestDiscardDraft && (
+                <Button
+                  variant="alt"
+                  onClick={onRequestDiscardDraft}
+                  className="w-full text-[var(--red)]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Discard workout</span>
                 </Button>
               )}
             </div>

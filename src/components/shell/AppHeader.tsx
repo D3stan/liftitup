@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { Settings } from 'lucide-react';
 import type { UserProfile } from '@/types/domain';
+import { ActiveWorkoutBanner } from './ActiveWorkoutBanner';
 
 interface AppHeaderProps {
   user: UserProfile | null;
@@ -41,6 +42,10 @@ export function AppHeader({ user }: AppHeaderProps) {
           <Settings className="h-5 w-5" />
         </Link>
       </div>
+
+      <Suspense fallback={null}>
+        <ActiveWorkoutBanner userId={user?.id ?? null} />
+      </Suspense>
     </header>
   );
 }
