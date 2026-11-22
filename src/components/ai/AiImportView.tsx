@@ -71,6 +71,7 @@ export function AiImportView({ hideHeader = false }: { hideHeader?: boolean } = 
   const [confirming, setConfirming] = useState(false);
   const [validation, setValidation] = useState<ValidateApiResponse | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const validateSeqRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -88,6 +89,7 @@ export function AiImportView({ hideHeader = false }: { hideHeader?: boolean } = 
 
   const runValidate = useCallback(async (text: string) => {
     const trimmed = text.trim();
+    const seq = ++validateSeqRef.current;
     if (!trimmed) {
       setValidation(null);
       setValidating(false);
@@ -100,11 +102,15 @@ export function AiImportView({ hideHeader = false }: { hideHeader?: boolean } = 
         method: 'POST',
         body: JSON.stringify({ mode: 'validate', rawText: text }),
       });
+      if (seq !== validateSeqRef.current) return;
       setValidation(res);
     } catch (err) {
+      if (seq !== validateSeqRef.current) return;
       toast.error(err instanceof Error ? err.message : 'Validation failed');
     } finally {
-      setValidating(false);
+      if (seq === validateSeqRef.current) {
+        setValidating(false);
+      }
     }
   }, []);
 
@@ -112,6 +118,7 @@ export function AiImportView({ hideHeader = false }: { hideHeader?: boolean } = 
     setRawText(next);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!next.trim()) {
+      validateSeqRef.current += 1;
       setValidation(null);
       setValidating(false);
       return;
@@ -256,8 +263,11 @@ export function AiImportView({ hideHeader = false }: { hideHeader?: boolean } = 
               size="icon"
               aria-label="Clear"
               onClick={() => {
+                if (debounceRef.current) clearTimeout(debounceRef.current);
+                validateSeqRef.current += 1;
                 setRawText('');
                 setValidation(null);
+                setValidating(false);
               }}
             >
               <Trash2 className="h-4 w-4" />
@@ -268,7 +278,7 @@ export function AiImportView({ hideHeader = false }: { hideHeader?: boolean } = 
         <textarea
           value={rawText}
           onChange={(e) => handleTextChange(e.target.value)}
-          placeholder="Paste JSON here"
+          placeholder="Paste AI response or JSON here"
           rows={6}
           spellCheck={false}
           className="w-full rounded-[8px] border-[3px] border-[var(--line)] bg-[var(--surface)] p-3 text-base font-bold text-[var(--ink)] shadow-[3px_3px_0_var(--shadow-color)] focus:outline-none"
