@@ -65,6 +65,7 @@ export interface CalendarDay {
 export interface QueuePointer {
   index: number;
   dayId: string | null;
+  postponeRemaining?: number;
 }
 
 export interface ProjectCalendarInput {
@@ -487,11 +488,14 @@ export function projectCalendar(input: ProjectCalendarInput): CalendarDay[] {
 }
 
 /**
- * Returns the queue pointer entering `targetDate` (after applying any `reset`
- * event on `targetDate`, before completing/advancing `targetDate`).
+ * Returns the queue pointer (and any remaining multi-day postpone window)
+ * entering `targetDate` (after applying any `reset` event on `targetDate`,
+ * before completing/advancing `targetDate`).
  * Used for re-anchoring `rotation_anchor_date = today` when editing the split.
  */
-export function getPointerForDate(input: GetPointerForDateInput): QueuePointer {
+export function getPointerForDate(
+  input: GetPointerForDateInput
+): QueuePointer & { postponeRemaining: number } {
   const { queue, anchorDate, anchorIndex, events, sessions, today, targetDate } =
     input;
 
@@ -501,7 +505,7 @@ export function getPointerForDate(input: GetPointerForDateInput): QueuePointer {
 
   const sortedQueue = sortQueue(queue);
   if (sortedQueue.length === 0) {
-    return { index: 0, dayId: null };
+    return { index: 0, dayId: null, postponeRemaining: 0 };
   }
 
   const initialIdx = normalizeIndex(anchorIndex, sortedQueue.length);
@@ -509,6 +513,7 @@ export function getPointerForDate(input: GetPointerForDateInput): QueuePointer {
     return {
       index: initialIdx,
       dayId: sortedQueue[initialIdx].id,
+      postponeRemaining: 0,
     };
   }
 
@@ -541,11 +546,13 @@ export function getPointerForDate(input: GetPointerForDateInput): QueuePointer {
   const targetEvents = eventsByDate.get(targetDate) ?? [];
   if (targetEvents.some((e) => e.eventType === 'reset')) {
     state.qIdx = 0;
+    state.postponeRemaining = 0;
   }
 
   return {
     index: state.qIdx,
     dayId: sortedQueue[state.qIdx].id,
+    postponeRemaining: state.postponeRemaining,
   };
 }
 

@@ -535,6 +535,26 @@ async function resolveScheduleForDayId(
   return { scheduleId: row.schedule_id, scheduleDayId: row.schedule_day_id };
 }
 
+function isPgUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const record = err as { code?: unknown; cause?: unknown };
+  if (record.code === '23505') return true;
+  if (record.cause && isPgUniqueViolation(record.cause)) return true;
+  return false;
+}
+
+async function findWorkoutSessionByCid(
+  userId: string,
+  cid: string,
+): Promise<WorkoutSession | null> {
+  const existing = await queryOne<{ id: string }>(
+    'SELECT id FROM workout_sessions WHERE user_id = $1 AND cid = $2',
+    [userId, cid],
+  );
+  if (!existing) return null;
+  return getWorkoutSessionById(userId, existing.id);
+}
+
 export async function saveWorkoutSession(
   userId: string,
   input: SaveWorkoutSessionInput,
@@ -567,15 +587,9 @@ export async function saveWorkoutSession(
       : null;
 
   if (cid) {
-    const existing = await queryOne<{ id: string }>(
-      'SELECT id FROM workout_sessions WHERE user_id = $1 AND cid = $2',
-      [userId, cid],
-    );
-    if (existing) {
-      const session = await getWorkoutSessionById(userId, existing.id);
-      if (session) {
-        return { session, created: false };
-      }
+    const existingSession = await findWorkoutSessionByCid(userId, cid);
+    if (existingSession) {
+      return { session: existingSession, created: false };
     }
   }
 
@@ -614,42 +628,52 @@ export async function saveWorkoutSession(
 
   const sessionId = `sess_${crypto.randomUUID()}`;
 
-  await withTransaction(async () => {
-    await query(
-      `
-      INSERT INTO workout_sessions (
-        id, user_id, session_date, schedule_id, schedule_day_id,
-        is_jolly, jolly_mode, title, started_at, completed_at,
-        duration_minutes, user_weight_kg, notes, cid
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-    `,
-      [
-        sessionId,
-        userId,
-        input.sessionDate,
-        scheduleId,
-        scheduleDayId,
-        isJolly ? 1 : 0,
-        jollyMode,
-        title,
+  try {
+    await withTransaction(async () => {
+      await query(
+        `
+        INSERT INTO workout_sessions (
+          id, user_id, session_date, schedule_id, schedule_day_id,
+          is_jolly, jolly_mode, title, started_at, completed_at,
+          duration_minutes, user_weight_kg, notes, cid
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `,
+        [
+          sessionId,
+          userId,
+          input.sessionDate,
+          scheduleId,
+          scheduleDayId,
+          isJolly ? 1 : 0,
+          jollyMode,
+          title,
+          startedAt,
+          completedAt,
+          durationMinutes,
+          userWeightKg,
+          notes,
+          cid,
+        ],
+      );
+
+      await insertSessionExercises(sessionId, exercises, nowIso);
+
+      await linkBestUnlinkedHealthWorkoutToSessionInTx(userId, {
+        id: sessionId,
         startedAt,
         completedAt,
         durationMinutes,
-        userWeightKg,
-        notes,
-        cid,
-      ],
-    );
-
-    await insertSessionExercises(sessionId, exercises, nowIso);
-
-    await linkBestUnlinkedHealthWorkoutToSessionInTx(userId, {
-      id: sessionId,
-      startedAt,
-      completedAt,
-      durationMinutes,
+      });
     });
-  });
+  } catch (err) {
+    if (cid && isPgUniqueViolation(err)) {
+      const existingSession = await findWorkoutSessionByCid(userId, cid);
+      if (existingSession) {
+        return { session: existingSession, created: false };
+      }
+    }
+    throw err;
+  }
 
   const saved = await getWorkoutSessionById(userId, sessionId);
   if (!saved) {

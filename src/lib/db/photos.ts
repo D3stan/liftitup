@@ -6,7 +6,12 @@ import type {
 } from '@/types/domain';
 import { ApiError } from '@/lib/api/handler';
 import { DEFAULT_PHOTO_QUOTA } from '@/lib/photos/constants';
-import { query, queryOne, withTransaction } from './connection';
+import {
+  isPgMemActive,
+  query,
+  queryOne,
+  withTransaction,
+} from './connection';
 
 type DbProgressPhotoRow = {
   id: string;
@@ -182,6 +187,12 @@ export async function createProgressPhoto(input: {
   createdAt?: string;
 }): Promise<{ photo: ProgressPhoto; quota: ProgressPhotoQuota }> {
   return withTransaction(async () => {
+    if (!isPgMemActive()) {
+      await query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [
+        input.userId,
+      ]);
+    }
+
     const limit = await getUserPhotoQuota(input.userId);
     const used = await countUserPhotos(input.userId);
     if (used >= limit) {

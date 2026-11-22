@@ -298,10 +298,16 @@ export async function replaceActiveScheduleForUser(
     const oldSchedule = await getActiveSchedule(user.id);
 
     let oldQueue: QueueDay[] = [];
-    let pointer: { index: number; dayId: string | null } = {
+    let pointer: {
+      index: number;
+      dayId: string | null;
+      postponeRemaining: number;
+    } = {
       index: 0,
       dayId: null,
+      postponeRemaining: 0,
     };
+    let oldEvents: ScheduleEvent[] = [];
 
     if (oldSchedule) {
       oldQueue = oldSchedule.days.map((d) => ({
@@ -310,7 +316,7 @@ export async function replaceActiveScheduleForUser(
         label: d.label,
         isRestDay: d.isRestDay,
       }));
-      const events = await listScheduleEvents(user.id, oldSchedule.id);
+      oldEvents = await listScheduleEvents(user.id, oldSchedule.id);
       const sessions = await listWorkoutSessions(user.id, {
         from: oldSchedule.rotationAnchorDate,
         includeExercises: false,
@@ -319,7 +325,7 @@ export async function replaceActiveScheduleForUser(
         queue: oldQueue,
         anchorDate: oldSchedule.rotationAnchorDate,
         anchorIndex: oldSchedule.rotationAnchorIndex,
-        events: events.map((e) => ({
+        events: oldEvents.map((e) => ({
           id: e.id,
           eventDate: e.eventDate,
           eventType: e.eventType,
@@ -508,6 +514,39 @@ export async function replaceActiveScheduleForUser(
          WHERE id = $5`,
         [scheduleName, todayStr, mappedIndex, now, scheduleId],
       );
+
+      // Preserve any active multi-day postpone window entering todayStr across
+      // the re-anchor boundary (days before todayStr are excluded from projection).
+      const carryoverPostpone = Math.min(
+        3,
+        Math.max(0, Math.trunc(pointer.postponeRemaining ?? 0)),
+      );
+      if (carryoverPostpone > 0) {
+        const existingPostponesOnToday = oldEvents.filter(
+          (e) => e.eventDate === todayStr && e.eventType === 'postpone',
+        );
+        const maxExistingShift = existingPostponesOnToday.reduce(
+          (max, e) => Math.max(max, e.shiftDays ?? 1),
+          0,
+        );
+        const desiredShift = Math.min(
+          3,
+          Math.max(carryoverPostpone, maxExistingShift),
+        ) as 1 | 2 | 3;
+
+        if (
+          existingPostponesOnToday.length === 0 ||
+          maxExistingShift < desiredShift
+        ) {
+          await createScheduleEvent({
+            userId: user.id,
+            scheduleId,
+            eventDate: todayStr,
+            eventType: 'postpone',
+            shiftDays: desiredShift,
+          });
+        }
+      }
     } else {
       scheduleId = crypto.randomUUID();
       await query(

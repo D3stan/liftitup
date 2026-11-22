@@ -810,7 +810,7 @@ describe('getPointerForDate & remapPointerAfterEdit — B.4 Re-anchoring', () =>
       targetDate: '2026-11-09',
     });
 
-    assert.deepEqual(pointer, { index: 2, dayId: 'd-legs1' });
+    assert.deepEqual(pointer, { index: 2, dayId: 'd-legs1', postponeRemaining: 0 });
 
     // Edit split: insert 'Core' at position 0, shifting Legs1 to position 3
     const newDays: QueueDay[] = [
@@ -870,6 +870,144 @@ describe('getPointerForDate & remapPointerAfterEdit — B.4 Re-anchoring', () =>
       0
     );
     assert.equal(remapPointerAfterEdit(STD_QUEUE, [], 2), 0);
+  });
+
+  it('getPointerForDate preserves remaining multi-day postpone window entering targetDate', () => {
+    const events: QueueEvent[] = [
+      { eventDate: '2026-11-10', eventType: 'postpone', shiftDays: 3 },
+    ];
+
+    // Day 1 of 3-day postpone: entering Nov 10 (event is on Nov 10 itself, so 0 carryover before it)
+    const day1 = getPointerForDate({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-09',
+      anchorIndex: 2, // Legs1
+      events,
+      sessions: [],
+      today: '2026-11-10',
+      targetDate: '2026-11-10',
+    });
+    assert.deepEqual(day1, {
+      index: 2,
+      dayId: 'd-legs1',
+      postponeRemaining: 0,
+    });
+
+    // Day 2 of 3-day postpone (Nov 11): 2 postponed days remain (Nov 11, Nov 12)
+    const day2 = getPointerForDate({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-09',
+      anchorIndex: 2,
+      events,
+      sessions: [],
+      today: '2026-11-11',
+      targetDate: '2026-11-11',
+    });
+    assert.deepEqual(day2, {
+      index: 2,
+      dayId: 'd-legs1',
+      postponeRemaining: 2,
+    });
+
+    // Re-anchoring on Nov 11 with carried-over postpone(2) keeps Nov 11 & 12 postponed, Legs1 on Nov 13
+    const reprojected = projectCalendar({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-11',
+      anchorIndex: day2.index,
+      events: [
+        {
+          eventDate: '2026-11-11',
+          eventType: 'postpone',
+          shiftDays: day2.postponeRemaining,
+        },
+      ],
+      sessions: [],
+      today: '2026-11-11',
+      rangeStart: '2026-11-11',
+      rangeEnd: '2026-11-14',
+    });
+    assert.deepEqual(
+      reprojected.map((d) => [d.date, d.status, d.plannedDay?.label ?? null]),
+      [
+        ['2026-11-11', 'postponed', null],
+        ['2026-11-12', 'postponed', null],
+        ['2026-11-13', 'planned', 'Legs1'],
+        ['2026-11-14', 'rest', 'Rest'],
+      ]
+    );
+
+    // Day 3 of 3-day postpone (Nov 12): 1 postponed day remains
+    const day3 = getPointerForDate({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-09',
+      anchorIndex: 2,
+      events,
+      sessions: [],
+      today: '2026-11-12',
+      targetDate: '2026-11-12',
+    });
+    assert.deepEqual(day3, {
+      index: 2,
+      dayId: 'd-legs1',
+      postponeRemaining: 1,
+    });
+
+    // Day 4 (Nov 13): postpone window has expired
+    const day4 = getPointerForDate({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-09',
+      anchorIndex: 2,
+      events,
+      sessions: [],
+      today: '2026-11-13',
+      targetDate: '2026-11-13',
+    });
+    assert.deepEqual(day4, {
+      index: 2,
+      dayId: 'd-legs1',
+      postponeRemaining: 0,
+    });
+  });
+
+  it('getPointerForDate clears postponeRemaining on targetDate reset or prior completion', () => {
+    const resetOnTarget = getPointerForDate({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-09',
+      anchorIndex: 2,
+      events: [
+        { eventDate: '2026-11-10', eventType: 'postpone', shiftDays: 3 },
+        { eventDate: '2026-11-11', eventType: 'reset' },
+      ],
+      sessions: [],
+      today: '2026-11-11',
+      targetDate: '2026-11-11',
+    });
+    assert.deepEqual(resetOnTarget, {
+      index: 0,
+      dayId: 'd-push1',
+      postponeRemaining: 0,
+    });
+
+    const completedDuringPostpone = getPointerForDate({
+      queue: STD_QUEUE,
+      anchorDate: '2026-11-09',
+      anchorIndex: 2,
+      events: [{ eventDate: '2026-11-10', eventType: 'postpone', shiftDays: 3 }],
+      sessions: [
+        makeSession({
+          id: 's-override',
+          sessionDate: '2026-11-10',
+          scheduleDayId: 'd-legs1',
+        }),
+      ],
+      today: '2026-11-11',
+      targetDate: '2026-11-11',
+    });
+    assert.deepEqual(completedDuringPostpone, {
+      index: 3,
+      dayId: 'd-rest',
+      postponeRemaining: 0,
+    });
   });
 });
 
