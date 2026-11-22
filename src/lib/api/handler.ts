@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { recordRequestMetric } from '@/lib/admin/metrics';
 import { generateRequestId, logger, type LogFields } from '@/lib/logger';
+import {
+  buildRateLimitHeaders,
+  checkRequestRateLimit,
+} from './rateLimit';
 
 export interface StandardErrorBody {
   error: {
@@ -40,6 +44,12 @@ export class ApiError extends Error {
     return new ApiError(403, 'FORBIDDEN', message);
   }
 
+  static passwordChangeRequired(
+    message = 'Password change required before continuing',
+  ): ApiError {
+    return new ApiError(403, 'PASSWORD_CHANGE_REQUIRED', message);
+  }
+
   static notFound(message = 'Resource not found'): ApiError {
     return new ApiError(404, 'NOT_FOUND', message);
   }
@@ -54,6 +64,10 @@ export class ApiError extends Error {
 
   static payloadTooLarge(message = 'Payload too large'): ApiError {
     return new ApiError(413, 'PAYLOAD_TOO_LARGE', message);
+  }
+
+  static tooManyRequests(message = 'Too many requests'): ApiError {
+    return new ApiError(429, 'RATE_LIMITED', message);
   }
 
   static internal(message = 'Internal server error'): ApiError {
@@ -114,6 +128,43 @@ export function withApiHandler<TParams = Record<string, string>>(
       },
     };
 
+    const rateLimit = checkRequestRateLimit(req, routeName);
+    const rateLimitHeaders = rateLimit ? buildRateLimitHeaders(rateLimit) : {};
+
+    if (rateLimit && !rateLimit.allowed) {
+      const durationMs = Math.round(performance.now() - startedAt);
+      recordRequestMetric({
+        route: routeName,
+        method,
+        status: 429,
+        durationMs,
+        requestId,
+      });
+      logger.warn('rate limit exceeded', {
+        ...baseFields(),
+        status: 429,
+        durationMs,
+        tier: rateLimit.tier,
+        bucket: rateLimit.bucket,
+        clientIp: rateLimit.clientIp,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      });
+      const body: StandardErrorBody = {
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many requests. Please try again later.',
+        },
+        requestId,
+      };
+      return NextResponse.json(body, {
+        status: 429,
+        headers: {
+          'x-request-id': requestId,
+          ...rateLimitHeaders,
+        },
+      });
+    }
+
     try {
       const response = await fn(req, ctx);
       const durationMs = Math.round(performance.now() - startedAt);
@@ -121,6 +172,9 @@ export function withApiHandler<TParams = Record<string, string>>(
 
       try {
         response.headers.set('x-request-id', requestId);
+        for (const [k, v] of Object.entries(rateLimitHeaders)) {
+          response.headers.set(k, v);
+        }
       } catch {
         // Some synthetic responses may have immutable headers
       }
@@ -188,7 +242,10 @@ export function withApiHandler<TParams = Record<string, string>>(
         });
         return NextResponse.json(body, {
           status: err.status,
-          headers: { 'x-request-id': requestId },
+          headers: {
+            'x-request-id': requestId,
+            ...rateLimitHeaders,
+          },
         });
       }
 
@@ -218,7 +275,10 @@ export function withApiHandler<TParams = Record<string, string>>(
       };
       return NextResponse.json(body, {
         status: 500,
-        headers: { 'x-request-id': requestId },
+        headers: {
+          'x-request-id': requestId,
+          ...rateLimitHeaders,
+        },
       });
     }
   };

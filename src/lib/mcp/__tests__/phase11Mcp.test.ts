@@ -52,6 +52,7 @@ const { setTestPool, closeDb, query, queryOne } = await import(
 );
 const { initSchema } = await import('@/lib/db/schema');
 const { createUser, getUserById } = await import('@/lib/db/users');
+const { recordBodyMetric } = await import('@/lib/db/bodyMetrics');
 const { createAuthSession, upsertApiKey } = await import('@/lib/db/sessions');
 const { createProgressPhoto, countUserPhotos } = await import(
   '@/lib/db/photos'
@@ -67,7 +68,14 @@ const {
   resetSnapshotThrottleForTests,
   setUserDisabledState,
 } = await import('@/lib/admin');
-const { recordAppleHealthIngestOutcome } = await import('@/lib/admin/metrics');
+const { recordAppleHealthIngestOutcome, sanitizeErrorMessage } = await import(
+  '@/lib/admin/metrics'
+);
+const { resetRateLimitForTests } = await import('@/lib/api/rateLimit');
+const { logger, redactSensitiveText } = await import('@/lib/logger');
+const { getMcpClientConfigSnippet, getMcpTokenEndpointUrl } = await import(
+  '@/lib/mcp/config'
+);
 const { ingestAppleHealthPayload } = await import(
   '@/lib/integrations/appleHealth'
 );
@@ -130,6 +138,7 @@ async function setupMemDb() {
   resetMetricsBufferForTests();
   resetSnapshotThrottleForTests();
   resetPhotoLinkRateLimitForTests();
+  resetRateLimitForTests();
   return pool;
 }
 
@@ -1276,4 +1285,203 @@ test('Phase 11 MCP Part B: admin read/act, privacy, reporting views, digest, ano
     assert.equal(e.detail?.apiKeyId, admin.keyInfo.id);
     assert.equal(e.detail?.apiKeyPrefix, admin.keyInfo.keyPrefix);
   }
+});
+
+test('MCP URL token authentication (?token=...), config snippets, and log/error secret redaction', async (t) => {
+  await setupMemDb();
+  const capturedLogs: string[] = [];
+  const origLog = console.log;
+  const origWarn = console.warn;
+  const origError = console.error;
+  console.log = (...args: unknown[]) => {
+    capturedLogs.push(args.map(String).join(' '));
+  };
+  console.warn = (...args: unknown[]) => {
+    capturedLogs.push(args.map(String).join(' '));
+  };
+  console.error = (...args: unknown[]) => {
+    capturedLogs.push(args.map(String).join(' '));
+  };
+
+  t.after(async () => {
+    console.log = origLog;
+    console.warn = origWarn;
+    console.error = origError;
+    await closeDb();
+  });
+
+  const user = await issueUserWithKey({ id: 'usr_url_tok', username: 'url_tok_user' });
+
+  async function callMcpWithQueryToken(
+    query: string,
+    method: string,
+    params: Record<string, unknown> = {},
+    headers: Record<string, string> = {},
+  ) {
+    const req = new NextRequest(`https://lift.example.test/api/mcp${query}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    });
+    const res = await mcpPost(req, { params: Promise.resolve({}) });
+    return {
+      res,
+      json: (await res.json()) as {
+        result?: Record<string, unknown>;
+        error?: { code?: number | string; message: string };
+      },
+    };
+  }
+
+  // 1. Valid ?token=<api_key> authenticates tools/list and tools/call
+  const listRes = await callMcpWithQueryToken(
+    `?token=${encodeURIComponent(user.rawKey)}`,
+    'tools/list',
+  );
+  assert.equal(listRes.res.status, 200);
+  assert.equal(listRes.res.headers.get('cache-control'), 'private, no-store');
+  assert.equal(listRes.res.headers.get('referrer-policy'), 'no-referrer');
+  assert.ok(Array.isArray(listRes.json.result?.tools));
+
+  const profRes = await callMcpWithQueryToken(
+    `?token=${encodeURIComponent(user.rawKey)}`,
+    'tools/call',
+    { name: 'get_profile', arguments: {} },
+  );
+  assert.equal(profRes.res.status, 200);
+  const prof = profRes.json.result?.structuredContent as {
+    profile: { id: string; username: string };
+  };
+  assert.equal(prof.profile.id, user.user.id);
+
+  // 2. Invalid, empty, or missing ?token= fails with 401 and never echoes raw token
+  const invalidRes = await callMcpWithQueryToken('?token=liuk_not_a_real_key_1234', 'tools/list');
+  assert.equal(invalidRes.res.status, 401);
+  assert.equal(JSON.stringify(invalidRes.json).includes('liuk_not_a_real_key_1234'), false);
+
+  const emptyRes = await callMcpWithQueryToken('?token=%20%20', 'tools/list');
+  assert.equal(emptyRes.res.status, 401);
+
+  const missingRes = await callMcpWithQueryToken('', 'tools/list');
+  assert.equal(missingRes.res.status, 401);
+
+  // 3. Malformed Authorization header does NOT fall back to ?token=, while valid Bearer takes precedence
+  const malformedHeaderRes = await callMcpWithQueryToken(
+    `?token=${encodeURIComponent(user.rawKey)}`,
+    'tools/list',
+    {},
+    { authorization: 'Basic abc123' },
+  );
+  assert.equal(malformedHeaderRes.res.status, 401);
+
+  const bearerPrecedenceRes = await callMcpWithQueryToken(
+    '?token=liuk_wrong_query_token',
+    'tools/list',
+    {},
+    { authorization: `Bearer ${user.rawKey}` },
+  );
+  assert.equal(bearerPrecedenceRes.res.status, 200);
+
+  // 4. Key regeneration invalidates old ?token= and accepts new ?token=
+  const key2 = generateApiKey();
+  await upsertApiKey(user.user.id, key2.keyHash, key2.keyPrefix);
+  const oldTokRes = await callMcpWithQueryToken(
+    `?token=${encodeURIComponent(user.rawKey)}`,
+    'tools/list',
+  );
+  assert.equal(oldTokRes.res.status, 401);
+
+  const newTokRes = await callMcpWithQueryToken(
+    `?token=${encodeURIComponent(key2.rawKey)}`,
+    'tools/list',
+  );
+  assert.equal(newTokRes.res.status, 200);
+
+  // 5. Disabled user cannot authenticate via ?token=
+  await setUserDisabledState({
+    targetUserId: user.user.id,
+    disabled: true,
+    reason: 'test',
+    actor: { actorUserId: null, actorLabel: 'test', source: 'cli' },
+  });
+  const disabledTokRes = await callMcpWithQueryToken(
+    `?token=${encodeURIComponent(key2.rawKey)}`,
+    'tools/list',
+  );
+  assert.equal(disabledTokRes.res.status, 401);
+
+  // 6. Verify logger and error sanitizers redact URL tokens, raw keys, and Bearer tokens
+  logger.info('test url log', {
+    url: `https://lift.example.test/api/mcp?token=${key2.rawKey}&foo=1`,
+    err: new Error(`Failed request to /api/mcp?token=${user.rawKey}`),
+  });
+  const combinedLogs = capturedLogs.join('\n');
+  assert.equal(combinedLogs.includes(user.rawKey), false);
+  assert.equal(combinedLogs.includes(key2.rawKey), false);
+  assert.equal(combinedLogs.includes('liuk_not_a_real_key_1234'), false);
+  assert.match(combinedLogs, /\?token=\*\*\*/);
+  assert.equal(
+    redactSensitiveText(`https://lift.example.test/api/mcp?token=secret_abc_123&x=1`),
+    'https://lift.example.test/api/mcp?token=***&x=1',
+  );
+  assert.equal(
+    sanitizeErrorMessage(new Error(`GET /api/mcp?token=${key2.rawKey}`)),
+    'GET /api/mcp?token=***',
+  );
+
+  // 7. Config helpers expose both Bearer and URL token formats cleanly
+  assert.equal(
+    getMcpTokenEndpointUrl('https://lift.example.test', null),
+    'https://lift.example.test/api/mcp?token=<YOUR_API_KEY>',
+  );
+  assert.equal(
+    getMcpTokenEndpointUrl('https://lift.example.test/', 'liuk_abc123'),
+    'https://lift.example.test/api/mcp?token=liuk_abc123',
+  );
+  const bearerCfg = JSON.parse(
+    getMcpClientConfigSnippet('https://lift.example.test', 'liuk_abc123', 'bearer'),
+  ) as { mcpServers: { liftitup: { url: string; headers?: { Authorization?: string } } } };
+  assert.equal(bearerCfg.mcpServers.liftitup.url, 'https://lift.example.test/api/mcp');
+  assert.equal(bearerCfg.mcpServers.liftitup.headers?.Authorization, 'Bearer liuk_abc123');
+
+  const urlTokCfg = JSON.parse(
+    getMcpClientConfigSnippet('https://lift.example.test', 'liuk_abc123', 'url_token'),
+  ) as { mcpServers: { liftitup: { url: string; headers?: unknown } } };
+  assert.equal(
+    urlTokCfg.mcpServers.liftitup.url,
+    'https://lift.example.test/api/mcp?token=liuk_abc123',
+  );
+  assert.equal(urlTokCfg.mcpServers.liftitup.headers, undefined);
+});
+
+test('MCP get_profile returns the 15 most recent body weight entries (not the 15 oldest)', async (t) => {
+  await setupMemDb();
+  t.after(async () => {
+    await closeDb();
+  });
+
+  const user = await issueUserWithKey({ id: 'usr_prof_bm', username: 'prof_bm_user' });
+  for (let day = 1; day <= 20; day += 1) {
+    const dd = String(day).padStart(2, '0');
+    await recordBodyMetric({
+      userId: user.user.id,
+      measuredOn: `2026-10-${dd}`,
+      weightKg: 70 + day * 0.1,
+      source: 'manual',
+      createdAt: `2026-10-${dd}T08:00:00.000Z`,
+    });
+  }
+
+  const prof = await callMcpTool(user.rawKey, 'get_profile');
+  assert.equal(prof.result?.isError, false);
+  const recent = prof.result?.structuredContent?.recentBodyMetrics as Array<{
+    measuredOn: string;
+    weightKg: number;
+  }>;
+  assert.equal(recent.length, 15);
+  assert.equal(recent[0]?.measuredOn, '2026-10-06');
+  assert.equal(recent[14]?.measuredOn, '2026-10-20');
 });

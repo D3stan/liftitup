@@ -88,7 +88,12 @@ export async function recordBodyMetric(input: {
 
 export async function listBodyMetrics(
   userId: string,
-  opts?: { from?: string; to?: string; limit?: number },
+  opts?: {
+    from?: string;
+    to?: string;
+    limit?: number;
+    order?: 'asc' | 'desc';
+  },
 ): Promise<BodyMetric[]> {
   const clauses = ['user_id = $1'];
   const params: Array<string | number> = [userId];
@@ -109,8 +114,9 @@ export async function listBodyMetrics(
     params.push(opts.limit);
   }
 
+  const dir = opts?.order === 'desc' ? 'DESC' : 'ASC';
   const res = await query<DbBodyMetricRow>(
-    `SELECT * FROM body_metrics WHERE ${clauses.join(' AND ')} ORDER BY measured_on ASC, created_at ASC ${limitSql}`,
+    `SELECT * FROM body_metrics WHERE ${clauses.join(' AND ')} ORDER BY measured_on ${dir}, created_at ${dir}, id ${dir} ${limitSql}`,
     params,
   );
 

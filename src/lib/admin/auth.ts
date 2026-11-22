@@ -123,6 +123,9 @@ export async function requireAdminSessionAuth(
   }
 
   ctx?.setUserId?.(auth.user.id);
+  if (auth.user.mustChangePassword) {
+    throw ApiError.passwordChangeRequired();
+  }
   return auth;
 }
 

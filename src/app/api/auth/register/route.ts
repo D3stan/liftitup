@@ -50,6 +50,23 @@ function optionalBoundedNumber(
   return val;
 }
 
+function isUsernameUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const anyErr = err as { code?: unknown; constraint?: unknown; message?: unknown };
+  if (
+    typeof anyErr.constraint === 'string' &&
+    anyErr.constraint &&
+    !anyErr.constraint.includes('username')
+  ) {
+    return false;
+  }
+  if (anyErr.code === '23505') return true;
+  if (typeof anyErr.message === 'string') {
+    return /unique constraint|duplicate key/i.test(anyErr.message);
+  }
+  return false;
+}
+
 export const POST = withApiHandler(
   'auth.register',
   async (req: NextRequest, ctx) => {
@@ -119,35 +136,43 @@ export const POST = withApiHandler(
 
     const passwordHash = await hashPassword(body.password);
 
-    const user = await withTransaction(async () => {
-      if (await getUserByUsername(username)) {
+    let user: Awaited<ReturnType<typeof createUser>>;
+    try {
+      user = await withTransaction(async () => {
+        if (await getUserByUsername(username)) {
+          throw ApiError.conflict('Username is already taken');
+        }
+
+        const created = await createUser({
+          username,
+          displayName,
+          passwordHash,
+          heightCm: heightCm ?? null,
+          weightKg: weightKg ?? 75,
+          age: age === undefined ? null : Math.round(age),
+          trainingYears: trainingYears ?? null,
+          unit,
+          timezone,
+          isGuest: false,
+        });
+
+        if (weightKg !== undefined) {
+          await recordBodyMetric({
+            userId: created.id,
+            measuredOn: localDateForTimezone(created.timezone),
+            weightKg,
+            source: 'settings',
+          });
+        }
+
+        return created;
+      });
+    } catch (err) {
+      if (isUsernameUniqueViolation(err)) {
         throw ApiError.conflict('Username is already taken');
       }
-
-      const created = await createUser({
-        username,
-        displayName,
-        passwordHash,
-        heightCm: heightCm ?? null,
-        weightKg: weightKg ?? 75,
-        age: age === undefined ? null : Math.round(age),
-        trainingYears: trainingYears ?? null,
-        unit,
-        timezone,
-        isGuest: false,
-      });
-
-      if (weightKg !== undefined) {
-        await recordBodyMetric({
-          userId: created.id,
-          measuredOn: localDateForTimezone(created.timezone),
-          weightKg,
-          source: 'settings',
-        });
-      }
-
-      return created;
-    });
+      throw err;
+    }
 
     if (priorTokenHash) {
       await deleteAuthSession(priorTokenHash);

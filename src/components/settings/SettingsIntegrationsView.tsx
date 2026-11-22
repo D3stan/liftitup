@@ -3,7 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Copy, KeyRound, RefreshCw } from 'lucide-react';
 import { Button, apiFetch, toast } from '@/components/ui';
-import { getMcpClientConfigSnippet, normalizeMcpEndpointUrl } from '@/lib/mcp/config';
+import {
+  getMcpClientConfigSnippet,
+  getMcpTokenEndpointUrl,
+  normalizeMcpEndpointUrl,
+  type McpAuthMode,
+} from '@/lib/mcp/config';
 import type { ApiKeyInfo } from '@/types/domain';
 import { SettingsSubpageShell } from './SettingsSubpageShell';
 import { useSettingsData } from './useSettingsData';
@@ -12,6 +17,7 @@ interface RegenerateKeyPayload {
   apiKey: string;
   keyPrefix: string;
   mcpUrl: string;
+  mcpTokenUrl?: string;
   apiKeyInfo: ApiKeyInfo;
 }
 
@@ -21,6 +27,7 @@ export function SettingsIntegrationsView() {
   const [origin, setOrigin] = useState('');
   const [regenBusy, setRegenBusy] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [configAuthMode, setConfigAuthMode] = useState<McpAuthMode>('bearer');
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -55,9 +62,11 @@ export function SettingsIntegrationsView() {
   }
 
   const mcpUrl = origin ? normalizeMcpEndpointUrl(origin) : '/api/mcp';
+  const mcpTokenUrl = getMcpTokenEndpointUrl(origin, revealedKey);
   const snippet = getMcpClientConfigSnippet(
     origin || 'https://lift.0xpuddu.com',
     revealedKey,
+    configAuthMode,
   );
 
   return (
@@ -71,7 +80,7 @@ export function SettingsIntegrationsView() {
 
           <div className="flex flex-col gap-1">
             <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
-              Endpoint
+              Endpoint (Bearer Header)
             </span>
             <div className="flex items-center gap-2">
               <input
@@ -95,6 +104,40 @@ export function SettingsIntegrationsView() {
                 )}
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
+              Endpoint with Token (URL Auth)
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={mcpTokenUrl}
+                aria-label="MCP Endpoint with Token"
+                className="min-h-[44px] w-full rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] px-3 font-mono text-sm"
+              />
+              <Button
+                variant="alt"
+                size="icon"
+                onClick={() => copyText('mcp-token-url', mcpTokenUrl, 'Token URL')}
+                aria-label="Copy MCP endpoint with token"
+                className="min-h-[44px] min-w-[44px] shrink-0"
+              >
+                {copiedId === 'mcp-token-url' ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              Use <code className="font-mono">?token=&lt;api_key&gt;</code> for
+              clients that do not support custom{' '}
+              <code className="font-mono">Authorization</code> headers. Treat
+              this URL like a password.
+            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -171,22 +214,38 @@ export function SettingsIntegrationsView() {
           )}
 
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
                 Client Config
               </span>
-              <Button
-                variant="alt"
-                onClick={() => copyText('mcp-snippet', snippet, 'Config')}
-                className="min-h-[44px] gap-1.5 px-3 text-sm"
-              >
-                {copiedId === 'mcp-snippet' ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                Copy
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant={configAuthMode === 'bearer' ? 'primary' : 'alt'}
+                  onClick={() => setConfigAuthMode('bearer')}
+                  className="min-h-[36px] px-2.5 text-xs"
+                >
+                  Bearer Header
+                </Button>
+                <Button
+                  variant={configAuthMode === 'url_token' ? 'primary' : 'alt'}
+                  onClick={() => setConfigAuthMode('url_token')}
+                  className="min-h-[36px] px-2.5 text-xs"
+                >
+                  Token in URL
+                </Button>
+                <Button
+                  variant="alt"
+                  onClick={() => copyText('mcp-snippet', snippet, 'Config')}
+                  className="min-h-[36px] gap-1.5 px-3 text-sm"
+                >
+                  {copiedId === 'mcp-snippet' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  Copy
+                </Button>
+              </div>
             </div>
             <pre className="overflow-x-auto rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] p-3 font-mono text-xs">
               {snippet}
