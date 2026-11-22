@@ -414,6 +414,9 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
       'csv',
       'heart rate',
       'calories',
+      'siri',
+      'icloud',
+      'prompt',
     ],
   },
 

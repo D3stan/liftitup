@@ -8,6 +8,7 @@ import {
   ingestAppleHealthPayload,
   listAppleHealthWorkouts,
 } from '@/lib/integrations/appleHealth';
+import { getConfiguredAppleHealthShortcutUrl } from '@/lib/integrations/appleHealthShortcutConfig';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -46,6 +47,7 @@ export const GET = withApiHandler(
         lastReceivedAt: user.appleHealthLastReceivedAt,
         lastReceivedKind: user.appleHealthLastReceivedKind,
         lastReceivedLinked: user.appleHealthLastReceivedLinked,
+        shortcutUrl: getConfiguredAppleHealthShortcutUrl(),
         workouts,
       },
       { headers: CORS_HEADERS },

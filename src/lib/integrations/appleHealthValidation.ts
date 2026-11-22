@@ -166,30 +166,34 @@ function resolveFirstPresent(
   return { value: undefined, fieldName: `${prefix}.${keys[0]}` };
 }
 
+function parseDateOrIsoToYmd(
+  val: unknown,
+  fieldName: string,
+  timezone: string,
+): string {
+  if (isValidYmd(val)) {
+    return val.trim();
+  }
+  if (typeof val === 'string' && Number.isFinite(Date.parse(val))) {
+    return formatDateInTimezone(timezone, new Date(val));
+  }
+  throw new AppleHealthValidationError(
+    `${fieldName} must be a valid YYYY-MM-DD date or ISO timestamp`,
+  );
+}
+
 function parseWeightMeasuredDate(
   item: Record<string, unknown>,
   prefix: string,
   timezone: string,
+  rootFallback?: Record<string, unknown>,
 ): string {
   if (hasValue(item.measuredOn)) {
-    if (!isValidYmd(item.measuredOn)) {
-      throw new AppleHealthValidationError(
-        `${prefix}.measuredOn must be a valid YYYY-MM-DD date`,
-      );
-    }
-    return item.measuredOn.trim();
+    return parseDateOrIsoToYmd(item.measuredOn, `${prefix}.measuredOn`, timezone);
   }
 
   if (hasValue(item.date)) {
-    if (isValidYmd(item.date)) {
-      return item.date.trim();
-    }
-    if (typeof item.date === 'string' && Number.isFinite(Date.parse(item.date))) {
-      return formatDateInTimezone(timezone, new Date(item.date));
-    }
-    throw new AppleHealthValidationError(
-      `${prefix}.date must be a valid YYYY-MM-DD date or ISO timestamp`,
-    );
+    return parseDateOrIsoToYmd(item.date, `${prefix}.date`, timezone);
   }
 
   if (hasValue(item.startedAt)) {
@@ -202,6 +206,24 @@ function parseWeightMeasuredDate(
       );
     }
     return formatDateInTimezone(timezone, new Date(item.startedAt));
+  }
+
+  for (const alias of ['startDate', 'measuredAt', 'recordedAt', 'timestamp'] as const) {
+    if (hasValue(item[alias])) {
+      return parseDateOrIsoToYmd(item[alias], `${prefix}.${alias}`, timezone);
+    }
+  }
+
+  if (rootFallback) {
+    if (hasValue(rootFallback.measuredOn)) {
+      return parseDateOrIsoToYmd(rootFallback.measuredOn, 'measuredOn', timezone);
+    }
+    if (hasValue(rootFallback.date)) {
+      return parseDateOrIsoToYmd(rootFallback.date, 'date', timezone);
+    }
+    if (hasValue(rootFallback.startedAt)) {
+      return parseDateOrIsoToYmd(rootFallback.startedAt, 'startedAt', timezone);
+    }
   }
 
   throw new AppleHealthValidationError(
@@ -230,6 +252,7 @@ function validateSingleItem(
   index: number,
   timezone: string,
   defaultSource: AppleHealthSource,
+  rootFallback?: Record<string, unknown>,
 ): ValidatedAppleHealthItem {
   const prefix = `workouts[${index}]`;
   if (!isPlainObject(rawItem)) {
@@ -252,6 +275,11 @@ function validateSingleItem(
     ['durationMinutes', 'duration'],
     prefix,
   );
+  const startedField = resolveFirstPresent(
+    rawItem,
+    ['startedAt', 'startDate'],
+    prefix,
+  );
 
   const hasWorkoutMeta =
     hasValue(rawItem.workoutType) ||
@@ -263,11 +291,39 @@ function validateSingleItem(
     hasValue(rawItem.maxHeartRate) ||
     hasValue(rawItem.maxHr);
 
+  const hasExplicitWorkoutTemplateKeys =
+    'workoutType' in rawItem ||
+    'durationMinutes' in rawItem ||
+    'duration' in rawItem ||
+    'activeCalories' in rawItem ||
+    'kcal' in rawItem ||
+    'calories' in rawItem ||
+    'avgHeartRate' in rawItem ||
+    'avgHr' in rawItem ||
+    'maxHeartRate' in rawItem ||
+    'maxHr' in rawItem;
+
+  const hasWeightDateKeys =
+    hasValue(rawItem.measuredOn) ||
+    hasValue(rawItem.date) ||
+    hasValue(rawItem.measuredAt) ||
+    hasValue(rawItem.recordedAt) ||
+    hasValue(rawItem.timestamp) ||
+    Boolean(
+      rootFallback &&
+        (hasValue(rootFallback.measuredOn) || hasValue(rootFallback.date)),
+    );
+
   const hasWeight = hasValue(weightField.value);
   const hasDuration = hasValue(durationField.value);
 
   // Weight-only item: has bodyweightKg/weightKg and NO workout fields
-  if (hasWeight && !hasDuration && !hasWorkoutMeta) {
+  if (
+    hasWeight &&
+    !hasDuration &&
+    !hasWorkoutMeta &&
+    (!hasExplicitWorkoutTemplateKeys || hasWeightDateKeys)
+  ) {
     const bodyweightKg = parseOptionalWeight(
       weightField.value,
       weightField.fieldName,
@@ -275,7 +331,12 @@ function validateSingleItem(
     if (bodyweightKg === null) {
       throw new AppleHealthValidationError(`${weightField.fieldName} is missing`);
     }
-    const measuredDate = parseWeightMeasuredDate(rawItem, prefix, timezone);
+    const measuredDate = parseWeightMeasuredDate(
+      rawItem,
+      prefix,
+      timezone,
+      rootFallback,
+    );
     return {
       kind: 'weight',
       bodyweightKg,
@@ -285,18 +346,18 @@ function validateSingleItem(
   }
 
   // Workout item (with optional bodyweightKg)
-  if (!hasValue(rawItem.startedAt)) {
-    throw new AppleHealthValidationError(`${prefix}.startedAt is missing`);
+  if (!hasValue(startedField.value)) {
+    throw new AppleHealthValidationError(`${startedField.fieldName} is missing`);
   }
   if (
-    typeof rawItem.startedAt !== 'string' ||
-    !Number.isFinite(Date.parse(rawItem.startedAt))
+    typeof startedField.value !== 'string' ||
+    !Number.isFinite(Date.parse(startedField.value))
   ) {
     throw new AppleHealthValidationError(
-      `${prefix}.startedAt must be a valid ISO timestamp`,
+      `${startedField.fieldName} must be a valid ISO timestamp`,
     );
   }
-  const startedAt = new Date(rawItem.startedAt).toISOString();
+  const startedAt = new Date(startedField.value).toISOString();
 
   if (!hasDuration) {
     throw new AppleHealthValidationError(`${prefix}.durationMinutes is missing`);
@@ -314,12 +375,15 @@ function validateSingleItem(
 
   let workoutType = 'Traditional Strength Training';
   if (rawItem.workoutType !== undefined && rawItem.workoutType !== null) {
-    if (typeof rawItem.workoutType !== 'string' || !rawItem.workoutType.trim()) {
+    if (typeof rawItem.workoutType !== 'string') {
       throw new AppleHealthValidationError(
         `${prefix}.workoutType must be a non-empty string`,
       );
     }
-    workoutType = rawItem.workoutType.trim().slice(0, 80);
+    const trimmedType = rawItem.workoutType.trim();
+    if (trimmedType) {
+      workoutType = trimmedType.slice(0, 80);
+    }
   }
 
   const calField = resolveFirstPresent(
@@ -414,6 +478,7 @@ export function validateAppleHealthIngestPayload(
   let dryRun = false;
   let topSource: AppleHealthSource = options.defaultSource ?? 'shortcut_webhook';
   let rawItems: unknown[];
+  let rootFallback: Record<string, unknown> | undefined;
 
   if (Array.isArray(body)) {
     rawItems = body;
@@ -430,6 +495,7 @@ export function validateAppleHealthIngestPayload(
         throw new AppleHealthValidationError('workouts must be an array');
       }
       rawItems = obj.workouts;
+      rootFallback = obj;
     } else {
       rawItems = [obj];
     }
@@ -456,6 +522,7 @@ export function validateAppleHealthIngestPayload(
       i,
       options.timezone,
       topSource,
+      rootFallback,
     );
     if (validated.kind === 'workout') {
       hasWorkout = true;
