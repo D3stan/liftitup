@@ -87,9 +87,16 @@ const { POST: loginPost } = await import('@/app/api/auth/login/route');
 const { POST: registerPost } = await import('@/app/api/auth/register/route');
 const { POST: guestPost } = await import('@/app/api/auth/guest/route');
 const { GET: meGet } = await import('@/app/api/auth/me/route');
+const { POST: logoutPost } = await import('@/app/api/auth/logout/route');
 const { POST: changePasswordPost } = await import(
   '@/app/api/auth/change-password/route'
 );
+const { GET: settingsGet } = await import('@/app/api/settings/route');
+const { POST: settingsApiKeyPost } = await import(
+  '@/app/api/settings/api-key/route'
+);
+const { POST: mcpPost } = await import('@/app/api/mcp/route');
+const { resetRateLimitForTests } = await import('@/lib/api/rateLimit');
 const { GET: adminOverviewGet } = await import('@/app/api/admin/overview/route');
 const { GET: adminStorageGet } = await import('@/app/api/admin/storage/route');
 const { GET: adminAdoptionGet } = await import('@/app/api/admin/adoption/route');
@@ -969,4 +976,214 @@ test('Phase 10 additive migration adds new columns and admin tables to legacy v2
   ]) {
     assert.ok(tableSet.has(tbl), `Expected table ${tbl} to be created`);
   }
+});
+
+test('Phase 10 Audit fixes: mustChangePassword server/API/admin enforcement & concurrent duplicate register returns 409', async (t) => {
+  const pool = createMemPool();
+  setTestPool(pool);
+  resetActivityThrottleForTests();
+  resetMetricsBufferForTests();
+  resetSnapshotThrottleForTests();
+  resetRateLimitForTests();
+
+  const prevAdminEnv = process.env.ADMIN_USER_IDS;
+  t.after(async () => {
+    process.env.ADMIN_USER_IDS = prevAdminEnv;
+    resetMetricsBufferForTests();
+    resetRateLimitForTests();
+    await closeDb();
+  });
+
+  await initSchema(pool);
+
+  // 1. Concurrent duplicate username registrations return 201 and 409 (never 500)
+  const [reg1, reg2] = await Promise.all([
+    registerPost(
+      makeCookieReq('http://localhost:3000/api/auth/register', {
+        method: 'POST',
+        body: { username: 'Race_User', password: 'password123' },
+      }),
+      { params: Promise.resolve({}) },
+    ),
+    registerPost(
+      makeCookieReq('http://localhost:3000/api/auth/register', {
+        method: 'POST',
+        body: { username: ' race_user ', password: 'password123' },
+      }),
+      { params: Promise.resolve({}) },
+    ),
+  ]);
+  const statuses = [reg1.status, reg2.status].sort((a, b) => a - b);
+  assert.deepEqual(statuses, [201, 409]);
+  const conflictRes = reg1.status === 409 ? reg1 : reg2;
+  const conflictBody = (await conflictRes.json()) as {
+    error: { code: string; message: string };
+  };
+  assert.equal(conflictBody.error.code, 'CONFLICT');
+
+  // 2. mustChangePassword blocks APIs, API-key minting, MCP, and admin APIs until password changed
+  const adminUser = await createUser({
+    id: 'usr_mcpw_admin',
+    username: 'mcpw_admin',
+    displayName: 'Admin',
+    passwordHash: await hashPassword('adminpass123'),
+  });
+  process.env.ADMIN_USER_IDS = adminUser.id;
+
+  // Create API key BEFORE reset
+  const preResetKey = generateApiKey();
+  await upsertApiKey(adminUser.id, preResetKey.keyHash, preResetKey.keyPrefix);
+
+  const resetRes = await resetUserPassword({
+    username: adminUser.username,
+    source: 'cli',
+    actorLabel: 'cli',
+    reason: 'security test',
+  });
+
+  const loginRes = await loginPost(
+    makeCookieReq('http://localhost:3000/api/auth/login', {
+      method: 'POST',
+      body: { username: adminUser.username, password: resetRes.temporaryPassword },
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(loginRes.status, 200);
+  const cookieMatch = /liftitup_session=([^;]+)/.exec(
+    loginRes.headers.get('set-cookie') ?? '',
+  );
+  assert.ok(cookieMatch?.[1]);
+  const tempCookie = cookieMatch[1];
+
+  // /api/auth/me stays accessible and reports mustChangePassword=true
+  const meRes = await meGet(
+    makeCookieReq('http://localhost:3000/api/auth/me', {
+      cookieToken: tempCookie,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(meRes.status, 200);
+  const meJson = (await meRes.json()) as { user: { mustChangePassword: boolean } };
+  assert.equal(meJson.user.mustChangePassword, true);
+
+  // App APIs, API-key minting, MCP, and admin APIs all return 403 PASSWORD_CHANGE_REQUIRED
+  const settingsRes = await settingsGet(
+    makeCookieReq('http://localhost:3000/api/settings', {
+      cookieToken: tempCookie,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(settingsRes.status, 403);
+  assert.equal(
+    ((await settingsRes.json()) as { error: { code: string } }).error.code,
+    'PASSWORD_CHANGE_REQUIRED',
+  );
+
+  const mintKeyRes = await settingsApiKeyPost(
+    makeCookieReq('http://localhost:3000/api/settings/api-key', {
+      method: 'POST',
+      cookieToken: tempCookie,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(mintKeyRes.status, 403);
+  assert.equal(
+    ((await mintKeyRes.json()) as { error: { code: string } }).error.code,
+    'PASSWORD_CHANGE_REQUIRED',
+  );
+
+  const keySettingsRes = await settingsGet(
+    makeCookieReq('http://localhost:3000/api/settings', {
+      apiKey: preResetKey.rawKey,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(keySettingsRes.status, 403);
+  assert.equal(
+    ((await keySettingsRes.json()) as { error: { code: string } }).error.code,
+    'PASSWORD_CHANGE_REQUIRED',
+  );
+
+  const mcpBlockedRes = await mcpPost(
+    new NextRequest('http://localhost:3000/api/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${preResetKey.rawKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(mcpBlockedRes.status, 403);
+  assert.equal(
+    ((await mcpBlockedRes.json()) as { error: { code: string } }).error.code,
+    'PASSWORD_CHANGE_REQUIRED',
+  );
+
+  const adminOverviewBlocked = await adminOverviewGet(
+    makeCookieReq('http://localhost:3000/api/admin/overview', {
+      cookieToken: tempCookie,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(adminOverviewBlocked.status, 403);
+  assert.equal(
+    ((await adminOverviewBlocked.json()) as { error: { code: string } }).error.code,
+    'PASSWORD_CHANGE_REQUIRED',
+  );
+
+  // Changing password clears the gate and restores access
+  const pwChangeRes = await changePasswordPost(
+    makeCookieReq('http://localhost:3000/api/auth/change-password', {
+      method: 'POST',
+      cookieToken: tempCookie,
+      body: { newPassword: 'new_secure_password_123' },
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(pwChangeRes.status, 200);
+
+  const settingsAfterRes = await settingsGet(
+    makeCookieReq('http://localhost:3000/api/settings', {
+      cookieToken: tempCookie,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(settingsAfterRes.status, 200);
+
+  const adminAfterRes = await adminOverviewGet(
+    makeCookieReq('http://localhost:3000/api/admin/overview', {
+      cookieToken: tempCookie,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(adminAfterRes.status, 200);
+
+  // /api/auth/logout works even when mustChangePassword is true
+  await resetUserPassword({
+    username: adminUser.username,
+    source: 'cli',
+    actorLabel: 'cli',
+    reason: 'logout test',
+  });
+  const loginRes2 = await loginPost(
+    makeCookieReq('http://localhost:3000/api/auth/login', {
+      method: 'POST',
+      body: { username: adminUser.username, password: (await resetUserPassword({ username: adminUser.username, source: 'cli', actorLabel: 'cli', reason: 'logout test 2' })).temporaryPassword },
+    }),
+    { params: Promise.resolve({}) },
+  );
+  const cookie2 = /liftitup_session=([^;]+)/.exec(
+    loginRes2.headers.get('set-cookie') ?? '',
+  )?.[1];
+  assert.ok(cookie2);
+  const logoutRes = await logoutPost(
+    makeCookieReq('http://localhost:3000/api/auth/logout', {
+      method: 'POST',
+      cookieToken: cookie2,
+    }),
+    { params: Promise.resolve({}) },
+  );
+  assert.equal(logoutRes.status, 200);
 });

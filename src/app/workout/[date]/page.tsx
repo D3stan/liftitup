@@ -33,6 +33,8 @@ import {
   computeSessionRestSummary,
   formatRestSeconds,
 } from '@/lib/workouts/rest';
+import { useCurrentUser } from '@/components/shell/AppShell';
+import { useActiveWorkout } from '@/components/workout/useActiveWorkout';
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   planned: { label: 'Planned', className: 'gold' },
@@ -50,8 +52,10 @@ export default function WorkoutDayPage() {
   const params = useParams<{ date: string }>();
   const router = useRouter();
   const date = params.date;
+  const currentUser = useCurrentUser();
 
   const [data, setData] = useState<WorkoutDayViewResponse | null>(null);
+  const activeWorkout = useActiveWorkout(data?.user.id ?? currentUser?.id ?? null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -171,6 +175,14 @@ export default function WorkoutDayPage() {
   const jollyEvent = calendarDay.events.find(
     (e) => e.eventType === 'jolly_instead' || e.eventType === 'jolly_extra',
   );
+  const activeForThisDate =
+    activeWorkout && activeWorkout.date === date ? activeWorkout : null;
+  const activePlannedForThisDate =
+    activeForThisDate?.mode === 'planned' ? activeForThisDate : null;
+  const activeJollyForThisDate =
+    activeForThisDate && activeForThisDate.mode !== 'planned'
+      ? activeForThisDate
+      : null;
 
   return (
     <main className="mx-auto max-w-xl space-y-4 px-4 pb-28 pt-4">
@@ -191,6 +203,37 @@ export default function WorkoutDayPage() {
           </span>
         </div>
       </div>
+
+      {/* Active Jolly Workout in progress on this date */}
+      {activeJollyForThisDate && (
+        <section className="card border-[var(--line)] bg-[var(--green-bg)] space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="pill !bg-[var(--card)] text-xs">
+                  In progress
+                </span>
+                {activeJollyForThisDate.totalWorkingSets > 0 && (
+                  <span className="text-xs font-bold text-[var(--muted)]">
+                    {activeJollyForThisDate.completedWorkingSets}/
+                    {activeJollyForThisDate.totalWorkingSets} sets
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-1 truncate font-marker text-2xl text-[var(--ink)]">
+                {activeJollyForThisDate.title}
+              </h2>
+            </div>
+            <Link
+              href={activeJollyForThisDate.href}
+              className="btn big shrink-0 no-underline"
+            >
+              <Play className="h-5 w-5" />
+              <span>Resume</span>
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Logged Sessions (Read-Only) */}
       {sessions.map((session) => {
@@ -424,6 +467,17 @@ export default function WorkoutDayPage() {
         <section className="card space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div>
+              {activePlannedForThisDate && (
+                <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                  <span className="pill green text-xs">In progress</span>
+                  {activePlannedForThisDate.totalWorkingSets > 0 && (
+                    <span className="text-xs font-bold text-[var(--muted)]">
+                      {activePlannedForThisDate.completedWorkingSets}/
+                      {activePlannedForThisDate.totalWorkingSets} sets
+                    </span>
+                  )}
+                </div>
+              )}
               <h1 className="font-marker text-2xl text-[var(--ink)]">
                 {plannedDay.label}
               </h1>
@@ -431,11 +485,15 @@ export default function WorkoutDayPage() {
 
             {canStartPlanned && (
               <Link
-                href={`/workout/${encodeURIComponent(date)}/log`}
-                className="btn big"
+                href={
+                  activePlannedForThisDate
+                    ? activePlannedForThisDate.href
+                    : `/workout/${encodeURIComponent(date)}/log`
+                }
+                className={`btn big ${activePlannedForThisDate ? 'green' : ''}`}
               >
                 <Play className="h-5 w-5" />
-                <span>Start</span>
+                <span>{activePlannedForThisDate ? 'Resume' : 'Start'}</span>
               </Link>
             )}
           </div>

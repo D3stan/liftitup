@@ -1,5 +1,16 @@
 export const DRAFT_PREFIX = 'liftitup_workout_draft_v2:';
+export const WORKOUT_DRAFTS_CHANGED_EVENT = 'liftitup:workout-drafts-changed';
 const USER_SCOPE_PREFIX = 'user:';
+
+function notifyDraftsChanged(storage?: DraftStorageLike): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (storage && storage !== window.localStorage) return;
+    window.dispatchEvent(new Event(WORKOUT_DRAFTS_CHANGED_EVENT));
+  } catch {
+    // Ignore storage or window access errors
+  }
+}
 
 export interface DraftStorageLike {
   readonly length: number;
@@ -47,6 +58,7 @@ export function saveWorkoutDraft<T>(
     } else {
       store.setItem(storageKey, JSON.stringify(draft));
     }
+    notifyDraftsChanged(storage);
   } catch {
     // Ignore storage quota errors
   }
@@ -174,6 +186,10 @@ export function adoptLegacyWorkoutDrafts(
     }
   }
 
+  if (legacyKeys.length > 0) {
+    notifyDraftsChanged(storage);
+  }
+
   return adopted;
 }
 
@@ -202,6 +218,10 @@ export function clearAllUserDrafts(
     } catch {
       // ignore
     }
+  }
+
+  if (matchingKeys.length > 0) {
+    notifyDraftsChanged(storage);
   }
 
   return matchingKeys.length;

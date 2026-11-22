@@ -74,6 +74,7 @@ const { applyLiftitupRestore } = await import(
   '@/lib/imports/liftitupRestore'
 );
 const { filterSettingsItems } = await import('@/lib/settings/registry');
+const { createProgressPhoto } = await import('@/lib/db/photos');
 const { GET: photosListGet, POST: photosPost } = await import(
   '@/app/api/photos/route'
 );
@@ -572,4 +573,85 @@ test('Phase 8 routes enforce session-cookie auth, guest blocking, security heade
   );
 
   await closeDb();
+});
+
+test('createProgressPhoto locks the user row FOR UPDATE when real Postgres is active', async () => {
+  const memDb = newDb();
+  const pgAdapter = memDb.adapters.createPg();
+  const innerPool = new pgAdapter.Pool();
+  const sqlLog: string[] = [];
+
+  class FakeRealPgPool {
+    async connect() {
+      const client = await innerPool.connect();
+      return {
+        async query(sql: string, params?: unknown[]) {
+          const trimmed = sql.trim();
+          sqlLog.push(trimmed);
+          if (
+            trimmed === 'BEGIN' ||
+            trimmed === 'COMMIT' ||
+            trimmed === 'ROLLBACK' ||
+            trimmed.startsWith('SAVEPOINT') ||
+            trimmed.startsWith('RELEASE SAVEPOINT') ||
+            trimmed.startsWith('ROLLBACK TO SAVEPOINT')
+          ) {
+            return { rows: [], rowCount: 0 };
+          }
+          // pg-mem does not implement FOR UPDATE; strip it only at the fake PG boundary
+          // while recording the exact SQL sent by createProgressPhoto.
+          const execSql = trimmed.replace(/\s+FOR UPDATE$/i, '');
+          return params && params.length > 0
+            ? client.query(execSql, params)
+            : client.query(execSql);
+        },
+        release() {
+          client.release();
+        },
+      };
+    }
+    async query(sql: string, params?: unknown[]) {
+      sqlLog.push(sql.trim());
+      return params && params.length > 0
+        ? innerPool.query(sql, params)
+        : innerPool.query(sql);
+    }
+    async end() {
+      await innerPool.end();
+    }
+  }
+
+  setTestPool(new FakeRealPgPool() as unknown as Pool);
+  try {
+    await pingDb();
+    const user = await createUser({
+      username: 'lock_test_user',
+      displayName: 'Lock Test',
+      passwordHash: 'hash',
+      unit: 'kg',
+      timezone: 'UTC',
+    });
+
+    sqlLog.length = 0;
+    const created = await createProgressPhoto({
+      userId: user.id,
+      takenOn: '2026-11-16',
+      pose: 'front',
+      weightKg: null,
+      fullBytes: Buffer.from('full'),
+      thumbBytes: Buffer.from('thumb'),
+    });
+
+    assert.equal(created.quota.used, 1);
+    const lockIdx = sqlLog.findIndex((s) =>
+      /^SELECT id FROM users WHERE id = \$1 FOR UPDATE$/i.test(s),
+    );
+    const countIdx = sqlLog.findIndex((s) =>
+      s.includes('FROM progress_photos WHERE user_id = $1'),
+    );
+    assert.ok(lockIdx >= 0, 'Expected SELECT ... FOR UPDATE on users');
+    assert.ok(countIdx > lockIdx, 'FOR UPDATE lock must precede quota count');
+  } finally {
+    await closeDb();
+  }
 });

@@ -90,7 +90,8 @@ export interface AiImportPreview {
 
 export const AI_ONBOARDING_PROMPT = `Ask me 4 quick questions first: height (cm), weight (kg), age, and years of training.
 Then ask me to describe my current workout split (I may send text, voice transcript, or a screenshot).
-Once I reply, return ONLY valid JSON matching this schema (no extra prose):
+Once I reply, output ONLY valid JSON inside a fenced markdown code block (\`\`\`json ... \`\`\`) so it is easy to copy (no extra prose), matching this schema:
+\`\`\`json
 {
   "profile": { "heightCm": 178, "weightKg": 78, "age": 26, "trainingYears": 3, "unit": "kg" },
   "schedule": {
@@ -117,6 +118,7 @@ Once I reply, return ONLY valid JSON matching this schema (no extra prose):
     ]
   }
 }
+\`\`\`
 Allowed trackingType values: weight_reps, bodyweight_reps, weighted_bodyweight, assisted_bodyweight, time, weight_time, distance, distance_time.
 For time exercises use "targetTimeSeconds" instead of reps; for distance use "targetDistanceM".
 Optional "targetWarmupSets" (integer 0..10, default 0) can be set alongside "targetSets".
@@ -164,31 +166,163 @@ export function buildEditPlanPrompt(input: EditPromptInput): string {
   const currentJson = JSON.stringify(currentJsonObj, null, 2);
 
   return `Here is my current LiftItUp profile and rotation split JSON:
+\`\`\`json
 ${currentJson}
+\`\`\`
 
 I want to modify my plan: [describe your changes here].
-First show me a concise Before -> After summary of what changes, then output the complete updated JSON in the exact same schema (valid JSON block only for the code block).`;
+First show me a concise Before -> After summary of what changes, then output the complete updated JSON in the exact same schema inside a fenced markdown code block (\`\`\`json ... \`\`\`, valid JSON only inside the code block).`;
+}
+
+interface FencedBlock {
+  lang: string;
+  content: string;
+}
+
+function isJsonObjectString(text: string): boolean {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return isPlainObject(parsed);
+  } catch {
+    return false;
+  }
+}
+
+function extractLastValidJsonObject(text: string): string | null {
+  let lastValid: string | null = null;
+  let i = 0;
+
+  while (i < text.length) {
+    const start = text.indexOf('{', i);
+    if (start === -1) break;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let end = -1;
+
+    for (let j = start; j < text.length; j += 1) {
+      const ch = text[j];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (ch === '{') {
+        depth += 1;
+      } else if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          end = j;
+          break;
+        }
+      }
+    }
+
+    if (end !== -1) {
+      const candidate = text.slice(start, end + 1);
+      if (isJsonObjectString(candidate)) {
+        lastValid = candidate;
+      }
+      // Always advance past the closing brace so we never descend into nested
+      // objects of a malformed outer `{...}` object.
+      i = end + 1;
+      continue;
+    }
+
+    i = start + 1;
+  }
+
+  return lastValid;
+}
+
+const JSON_FENCE_LANGS = new Set(['json', 'jsonc', 'json5']);
+
+function isJsonIntendedBlock(block: FencedBlock): boolean {
+  if (JSON_FENCE_LANGS.has(block.lang)) return true;
+  if (block.lang === '') {
+    return block.content.startsWith('{') || block.content.startsWith('[');
+  }
+  return isJsonObjectString(block.content);
+}
+
+function collectFencedBlocks(text: string): FencedBlock[] {
+  const blocks: FencedBlock[] = [];
+  // Prefer line-anchored Markdown fences (``` or ~~~) so backticks inside JSON strings don't close the block early.
+  const lineFenceRegex =
+    /^[ \t]*(```|~~~)[ \t]*([a-zA-Z0-9_-]*)[ \t]*\n([\s\S]*?)^[ \t]*\1[ \t]*$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = lineFenceRegex.exec(text)) !== null) {
+    const content = match[3].trim();
+    if (content) {
+      blocks.push({ lang: match[2].toLowerCase(), content });
+    }
+  }
+  if (blocks.length > 0) return blocks;
+
+  // Fallback for single-line / inline fenced blocks like ```json {...} ```
+  const inlineFenceRegex =
+    /```(?:([a-zA-Z0-9_-]+)(?=\s)|(json)\b)?\s*([\s\S]*?)```/gi;
+  while ((match = inlineFenceRegex.exec(text)) !== null) {
+    const lang = (match[1] ?? match[2] ?? '').toLowerCase();
+    const content = match[3].trim();
+    if (content) {
+      blocks.push({ lang, content });
+    }
+  }
+  return blocks;
 }
 
 export function extractJsonText(rawText: string): string {
-  const trimmed = rawText.trim();
+  const trimmed = rawText
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
   if (!trimmed) return '';
 
-  // Collect fenced code blocks (` ```json ... ``` ` or ` ``` ... ``` `)
-  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
-  const fencedBlocks: string[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = fenceRegex.exec(trimmed)) !== null) {
-    const inner = match[1].trim();
-    if (inner) fencedBlocks.push(inner);
-  }
+  const fencedBlocks = collectFencedBlocks(trimmed);
   if (fencedBlocks.length > 0) {
-    // Prefer the last JSON block (useful when AI writes Before -> After then final JSON block)
-    return fencedBlocks[fencedBlocks.length - 1];
+    // Check backwards for the final JSON-intended fenced block. Returning a malformed
+    // JSON-intended block directly ensures syntax errors are reported at root rather than
+    // falling back to an earlier block or descending into a valid nested object.
+    for (let i = fencedBlocks.length - 1; i >= 0; i -= 1) {
+      const block = fencedBlocks[i];
+      if (!isJsonIntendedBlock(block)) continue;
+
+      if (isJsonObjectString(block.content)) {
+        return block.content;
+      }
+      if (!block.content.startsWith('{')) {
+        const innerJson = extractLastValidJsonObject(block.content);
+        if (innerJson) return innerJson;
+      }
+      return block.content;
+    }
+
+    const fallbackValid = extractLastValidJsonObject(trimmed);
+    if (fallbackValid) return fallbackValid;
+
+    return fencedBlocks[fencedBlocks.length - 1].content;
   }
 
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     return trimmed;
+  }
+
+  const validJson = extractLastValidJsonObject(trimmed);
+  if (validJson) {
+    return validJson;
   }
 
   const firstBrace = trimmed.indexOf('{');

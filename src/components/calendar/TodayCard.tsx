@@ -4,13 +4,16 @@ import React from 'react';
 import Link from 'next/link';
 import { MoreHorizontal, Play, ArrowUpRight } from 'lucide-react';
 import type { HydratedCalendarDay } from '@/lib/schedule/repo';
+import type { ActiveWorkoutSummary } from '@/lib/workouts/activeDraft';
 import type { RotationSchedule } from '@/types/domain';
+import { formatDisplayDate } from '@/components/workout/trackingFormat';
 import { formatDayHeader } from './dateUtils';
 
 interface TodayCardProps {
   today: string;
   schedule: RotationSchedule | null;
   todayDay: HydratedCalendarDay | null;
+  activeWorkout?: ActiveWorkoutSummary | null;
   onOpenPlan: () => void;
 }
 
@@ -88,12 +91,68 @@ function getTodayHeadline(day: HydratedCalendarDay): {
   }
 }
 
+function ActiveWorkoutCallout({
+  today,
+  activeWorkout,
+}: {
+  today: string;
+  activeWorkout: ActiveWorkoutSummary;
+}) {
+  const dateLabel =
+    activeWorkout.date === today
+      ? 'Today'
+      : formatDisplayDate(activeWorkout.date);
+  const progressLabel =
+    activeWorkout.totalWorkingSets > 0
+      ? `${activeWorkout.completedWorkingSets}/${activeWorkout.totalWorkingSets} sets`
+      : activeWorkout.completedWarmupSets > 0
+        ? `${activeWorkout.completedWarmupSets} warmup sets`
+        : null;
+
+  return (
+    <div className="flex items-center justify-between gap-2.5 rounded-[10px] border-[2.5px] border-[var(--line)] bg-[var(--green-bg)] p-2.5 text-[var(--ink)]">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="pill !bg-[var(--card)] !px-2 !py-0 text-[11px]">
+            In progress
+          </span>
+          <span className="truncate text-xs font-bold text-[var(--muted)]">
+            {progressLabel ? `${dateLabel} · ${progressLabel}` : dateLabel}
+          </span>
+        </div>
+        <p className="mt-0.5 truncate font-marker text-base text-[var(--ink)]">
+          {activeWorkout.title}
+        </p>
+      </div>
+      <Link
+        href={activeWorkout.href}
+        className="btn shrink-0 no-underline !min-h-[44px] !px-3 text-sm"
+      >
+        <Play className="h-4 w-4" />
+        <span>Resume workout</span>
+      </Link>
+    </div>
+  );
+}
+
 export function TodayCard({
   today,
   schedule,
   todayDay,
+  activeWorkout = null,
   onOpenPlan,
 }: TodayCardProps) {
+  const isActiveTodayPrimary = Boolean(
+    activeWorkout &&
+      activeWorkout.date === today &&
+      ((activeWorkout.mode === 'planned' && todayDay?.status === 'planned') ||
+        (activeWorkout.mode !== 'planned' &&
+          (todayDay?.status === 'jolly_extra' ||
+            todayDay?.status === 'jolly_instead'))),
+  );
+  const otherActiveWorkout =
+    activeWorkout && !isActiveTodayPrimary ? activeWorkout : null;
+
   if (!schedule) {
     return (
       <section className="card space-y-3" aria-label="Today">
@@ -112,6 +171,12 @@ export function TodayCard({
             AI setup
           </Link>
         </div>
+        {otherActiveWorkout && (
+          <ActiveWorkoutCallout
+            today={today}
+            activeWorkout={otherActiveWorkout}
+          />
+        )}
       </section>
     );
   }
@@ -130,6 +195,12 @@ export function TodayCard({
   const cardFgClass = isPlannedToday
     ? 'text-[var(--btn-gold-fg)]'
     : 'text-[var(--ink)]';
+  const activeProgressText =
+    isActiveTodayPrimary && activeWorkout
+      ? activeWorkout.totalWorkingSets > 0
+        ? `In progress · ${activeWorkout.completedWorkingSets}/${activeWorkout.totalWorkingSets} sets`
+        : 'In progress'
+      : null;
 
   return (
     <section className={cardClass} aria-label="Today">
@@ -156,32 +227,57 @@ export function TodayCard({
           <h2 className={`font-marker text-2xl truncate ${cardFgClass}`}>
             {info.title}
           </h2>
-          {info.badge && (
+          {activeProgressText ? (
             <div className="mt-1">
-              <span className={`${info.badgeClass} text-xs`}>{info.badge}</span>
+              <span className="pill green text-xs text-[var(--ink)]">
+                {activeProgressText}
+              </span>
             </div>
+          ) : (
+            info.badge && (
+              <div className="mt-1">
+                <span className={`${info.badgeClass} text-xs`}>{info.badge}</span>
+              </div>
+            )
           )}
         </div>
 
-        <Link
-          href={`/workout/${today}`}
-          className={`btn shrink-0 no-underline ${
-            todayDay?.status === 'planned' ? 'alt' : ''
-          }`}
-        >
-          {info.isStartable ? (
-            <>
-              <Play className="h-4 w-4" />
-              Start
-            </>
-          ) : (
-            <>
-              Open
-              <ArrowUpRight className="h-4 w-4" />
-            </>
-          )}
-        </Link>
+        {isActiveTodayPrimary && activeWorkout ? (
+          <Link
+            href={activeWorkout.href}
+            className="btn green shrink-0 no-underline"
+          >
+            <Play className="h-4 w-4" />
+            <span>Resume workout</span>
+          </Link>
+        ) : (
+          <Link
+            href={`/workout/${today}`}
+            className={`btn shrink-0 no-underline ${
+              todayDay?.status === 'planned' ? 'alt' : ''
+            }`}
+          >
+            {info.isStartable ? (
+              <>
+                <Play className="h-4 w-4" />
+                Start
+              </>
+            ) : (
+              <>
+                Open
+                <ArrowUpRight className="h-4 w-4" />
+              </>
+            )}
+          </Link>
+        )}
       </div>
+
+      {otherActiveWorkout && (
+        <ActiveWorkoutCallout
+          today={today}
+          activeWorkout={otherActiveWorkout}
+        />
+      )}
     </section>
   );
 }

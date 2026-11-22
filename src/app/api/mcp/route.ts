@@ -30,6 +30,10 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
     apiKeyPrefix,
     origin: req.nextUrl.origin,
   };
+  const securityHeaders = {
+    'Cache-Control': 'private, no-store',
+    'Referrer-Policy': 'no-referrer',
+  };
 
   let rawBody: string;
   try {
@@ -41,7 +45,7 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
         id: null,
         error: { code: -32700, message: 'Parse error: unable to read body' },
       },
-      { status: 400 },
+      { status: 400, headers: securityHeaders },
     );
   }
 
@@ -55,7 +59,7 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
         id: null,
         error: { code: -32700, message: 'Parse error: invalid JSON' },
       },
-      { status: 400 },
+      { status: 400, headers: securityHeaders },
     );
   }
 
@@ -67,7 +71,7 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
           id: null,
           error: { code: -32600, message: 'Invalid Request: empty batch' },
         },
-        { status: 400 },
+        { status: 400, headers: securityHeaders },
       );
     }
 
@@ -92,9 +96,9 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
     }
 
     if (responses.length === 0) {
-      return new NextResponse(null, { status: 202 });
+      return new NextResponse(null, { status: 202, headers: securityHeaders });
     }
-    return NextResponse.json(responses);
+    return NextResponse.json(responses, { headers: securityHeaders });
   }
 
   if (!parsed || typeof parsed !== 'object') {
@@ -104,7 +108,7 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
         id: null,
         error: { code: -32600, message: 'Invalid Request: expected JSON-RPC object' },
       },
-      { status: 400 },
+      { status: 400, headers: securityHeaders },
     );
   }
 
@@ -114,8 +118,8 @@ export const POST = withApiHandler('mcp.post', async (req: NextRequest, ctx) => 
     mcpCtx,
   );
   if (rpcResponse === null) {
-    return new NextResponse(null, { status: 202 });
+    return new NextResponse(null, { status: 202, headers: securityHeaders });
   }
 
-  return NextResponse.json(rpcResponse);
+  return NextResponse.json(rpcResponse, { headers: securityHeaders });
 });

@@ -6,12 +6,21 @@ import {
   AlertTriangle,
   Check,
   Copy,
+  ExternalLink,
   FlaskConical,
   KeyRound,
+  Sparkles,
   Upload,
   Watch,
 } from 'lucide-react';
 import { Button, apiFetch, toast } from '@/components/ui';
+import {
+  APPLE_HEALTH_DRY_RUN_TEMPLATE,
+  APPLE_HEALTH_WEIGHT_ONLY_JSON_TEMPLATE,
+  APPLE_HEALTH_WORKOUT_JSON_TEMPLATE,
+  buildAppleHealthSiriPrompt,
+  buildAppleHealthWebhookUrl,
+} from '@/lib/integrations/appleHealthPrompt';
 import { parseAppleHealthFileStrict } from '@/lib/integrations/appleHealthValidation';
 import type {
   AppleHealthReceiveKind,
@@ -21,54 +30,9 @@ import type {
 
 interface AppleFitnessPanelProps {
   user: UserProfile;
+  shortcutUrl?: string | null;
   onUserUpdated: (user: UserProfile) => void;
 }
-
-const DRY_RUN_TEMPLATE = JSON.stringify(
-  {
-    dryRun: true,
-    workouts: [
-      {
-        workoutType: 'Traditional Strength Training',
-        startedAt: '2026-11-16T09:00:00Z',
-        durationMinutes: 45,
-      },
-    ],
-  },
-  null,
-  2,
-);
-
-const WORKOUT_JSON_TEMPLATE = JSON.stringify(
-  {
-    workouts: [
-      {
-        workoutType: 'Traditional Strength Training',
-        startedAt: '2026-11-16T09:00:00Z',
-        durationMinutes: 52,
-        activeCalories: 310,
-        avgHeartRate: 136,
-        maxHeartRate: 168,
-        bodyweightKg: 75.4,
-      },
-    ],
-  },
-  null,
-  2,
-);
-
-const WEIGHT_ONLY_JSON_TEMPLATE = JSON.stringify(
-  {
-    workouts: [
-      {
-        bodyweightKg: 75.4,
-        measuredOn: '2026-11-16',
-      },
-    ],
-  },
-  null,
-  2,
-);
 
 function formatLastReceivedTime(iso: string | null, timezone: string): string {
   if (!iso) return 'Never';
@@ -102,6 +66,7 @@ function formatLinkedLabel(
 
 export function AppleFitnessPanel({
   user,
+  shortcutUrl: initialShortcutUrl = null,
   onUserUpdated,
 }: AppleFitnessPanelProps) {
   const [workouts, setWorkouts] = useState<AppleHealthWorkout[]>([]);
@@ -110,6 +75,9 @@ export function AppleFitnessPanel({
   const [dryRunReply, setDryRunReply] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
+  const [shortcutUrl, setShortcutUrl] = useState<string | null>(
+    initialShortcutUrl,
+  );
   const [lastReceived, setLastReceived] = useState<{
     at: string | null;
     kind: AppleHealthReceiveKind | null;
@@ -124,6 +92,10 @@ export function AppleFitnessPanel({
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    setShortcutUrl(initialShortcutUrl);
+  }, [initialShortcutUrl]);
 
   useEffect(() => {
     setLastReceived({
@@ -144,9 +116,13 @@ export function AppleFitnessPanel({
         lastReceivedAt: string | null;
         lastReceivedKind: AppleHealthReceiveKind | null;
         lastReceivedLinked: boolean | null;
+        shortcutUrl?: string | null;
         workouts: AppleHealthWorkout[];
       }>('/api/integrations/apple-health');
       setWorkouts(res.workouts);
+      if (res.shortcutUrl !== undefined) {
+        setShortcutUrl(res.shortcutUrl);
+      }
       setLastReceived({
         at: res.lastReceivedAt,
         kind: res.lastReceivedKind,
@@ -161,9 +137,8 @@ export function AppleFitnessPanel({
     void loadWorkouts();
   }, [loadWorkouts]);
 
-  const webhookUrl = origin
-    ? `${origin}/api/integrations/apple-health`
-    : '/api/integrations/apple-health';
+  const webhookUrl = buildAppleHealthWebhookUrl(origin);
+  const siriPrompt = buildAppleHealthSiriPrompt(origin);
 
   async function copyText(id: string, value: string, label: string) {
     try {
@@ -295,10 +270,14 @@ export function AppleFitnessPanel({
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p className="min-w-0">
             <strong>Strict validation active:</strong> the webhook requires a
-            valid <code className="font-mono">startedAt</code> and positive{' '}
-            <code className="font-mono">durationMinutes</code> for workouts (or{' '}
-            <code className="font-mono">bodyweightKg</code> + date for weight).
-            Older Shortcuts that relied on lenient defaults now receive{' '}
+            valid <code className="font-mono">startedAt</code> (ISO-8601) and
+            positive <code className="font-mono">durationMinutes</code> for
+            workouts, or <code className="font-mono">bodyweightKg</code> +{' '}
+            <code className="font-mono">measuredOn</code> (
+            <code className="font-mono">YYYY-MM-DD</code> or{' '}
+            <code className="font-mono">date</code> /{' '}
+            <code className="font-mono">startedAt</code>) for weight-only
+            entries. Older Shortcuts that relied on lenient defaults now receive{' '}
             <code className="font-mono">400</code> errors.
           </p>
         </div>
@@ -457,6 +436,99 @@ export function AppleFitnessPanel({
           </Link>
         </div>
 
+        <div className="flex flex-col gap-2 rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] p-3 text-sm">
+          <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
+            Ready-to-Install iCloud Shortcut
+          </span>
+          {shortcutUrl ? (
+            <>
+              <p className="text-[var(--ink)]">
+                Open the pre-built iOS Shortcut on your iPhone, or copy the link
+                below. You will be prompted for your personal API key during
+                setup.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <a
+                  href={shortcutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn min-h-[44px] flex-1 justify-center gap-2 no-underline"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open iCloud Shortcut
+                </a>
+                <Button
+                  variant="alt"
+                  onClick={() =>
+                    copyText('icloud-shortcut-url', shortcutUrl, 'Shortcut URL')
+                  }
+                  className="min-h-[44px] gap-2 px-4"
+                >
+                  {copiedId === 'icloud-shortcut-url' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  Copy Shortcut Link
+                </Button>
+              </div>
+              <input
+                type="text"
+                readOnly
+                value={shortcutUrl}
+                aria-label="iCloud Shortcut URL"
+                className="min-h-[44px] w-full min-w-0 rounded-xl border-2 border-[var(--line)] bg-[var(--surface-alt)] px-3 font-mono text-xs"
+              />
+            </>
+          ) : (
+            <p className="text-xs text-[var(--muted)]">
+              No iCloud Shortcut link is configured yet. Set{' '}
+              <code className="font-mono">APPLE_HEALTH_SHORTCUT_URL</code> in
+              your environment to show a one-tap install link here, or build
+              your own Shortcut with the Siri / AI prompt below.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] p-3 text-sm">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
+              Build Automatically with Siri / AI
+            </span>
+            <p className="text-[var(--ink)]">
+              Copy this self-contained prompt and paste it into{' '}
+              <strong>Siri / Apple Intelligence</strong>, ChatGPT, or Claude to
+              build the iOS Shortcut with your exact webhook URL,{' '}
+              <code className="font-mono">Authorization</code> header, and
+              validated JSON schema.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            onClick={() =>
+              copyText('siri-ai-prompt', siriPrompt, 'Prompt for Siri / AI')
+            }
+            className="min-h-[44px] w-full justify-center gap-2"
+          >
+            {copiedId === 'siri-ai-prompt' ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {copiedId === 'siri-ai-prompt'
+              ? 'Copied Prompt for Siri / AI'
+              : 'Copy Prompt for Siri / AI'}
+          </Button>
+          <details className="rounded-lg border border-[var(--line)]/30 bg-[var(--surface-alt)]/50 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-bold text-[var(--ink)]">
+              Preview prompt
+            </summary>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-[var(--ink)]">
+              {siriPrompt}
+            </pre>
+          </details>
+        </div>
+
         <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm text-[var(--ink)]">
           <li>
             Open Apple <strong>Shortcuts</strong> → <strong>Automation</strong>{' '}
@@ -476,25 +548,38 @@ export function AppleFitnessPanel({
           </li>
           <li>
             <strong>Read workout details:</strong> from the automation&apos;s
-            Shortcut Input (or <em>Find Health Samples</em>), read Workout Type,
-            Start Date (ISO-8601), Duration in minutes, Active Calories (optional),
-            and Average / Max Heart Rate (optional).
+            Shortcut Input (or <em>Find Health Samples</em>), read{' '}
+            <code className="font-mono">workoutType</code> (optional),{' '}
+            <code className="font-mono">startedAt</code> (ISO-8601),{' '}
+            <code className="font-mono">durationMinutes</code> (positive
+            number), and optional{' '}
+            <code className="font-mono">activeCalories</code>,{' '}
+            <code className="font-mono">avgHeartRate</code>, and{' '}
+            <code className="font-mono">maxHeartRate</code>.
           </li>
           <li>
             <strong>Send workout POST:</strong> add a second{' '}
             <em>Get Contents of URL</em> (<code className="font-mono">POST</code>
             ) to the Webhook URL with your{' '}
             <code className="font-mono">Authorization</code> header and the
-            workout JSON below. Retries with the same start time and workout type
-            update in place, and workouts within ±15 min of a logged session
-            link automatically in either order.
+            workout JSON below (omit empty optional fields). Retries with the
+            same start time and workout type update in place, and workouts within
+            ±15 min of a logged session link automatically in either order.
           </li>
           <li>
             <strong>Optional bodyweight sync:</strong> add{' '}
             <em>Find Health Samples</em> (Type: <strong>Weight</strong> in kg,
             sort by Start Date Latest, Limit 1) and include{' '}
             <code className="font-mono">bodyweightKg</code> inside the workout
-            JSON — or send a weight-only payload when logging morning weigh-ins.
+            JSON — or, for a standalone weigh-in without workout fields, send
+            the weight-only JSON with both{' '}
+            <code className="font-mono">bodyweightKg</code> and{' '}
+            <code className="font-mono">measuredOn</code> (
+            <code className="font-mono">YYYY-MM-DD</code>, or{' '}
+            <code className="font-mono">date</code> /{' '}
+            <code className="font-mono">startedAt</code> ISO-8601). Note:
+            tapping Play manually on a Workout automation sends empty workout
+            fields, so test with the Dry-Run or Weight-Only JSON instead.
           </li>
         </ol>
 
@@ -506,7 +591,11 @@ export function AppleFitnessPanel({
             <Button
               variant="alt"
               onClick={() =>
-                copyText('dry-run-json', DRY_RUN_TEMPLATE, 'Dry-run JSON')
+                copyText(
+                  'dry-run-json',
+                  APPLE_HEALTH_DRY_RUN_TEMPLATE,
+                  'Dry-run JSON',
+                )
               }
               className="min-h-[44px] gap-1.5 px-3 text-sm"
             >
@@ -519,7 +608,7 @@ export function AppleFitnessPanel({
             </Button>
           </div>
           <pre className="overflow-x-auto rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] p-3 font-mono text-xs">
-            {DRY_RUN_TEMPLATE}
+            {APPLE_HEALTH_DRY_RUN_TEMPLATE}
           </pre>
         </div>
 
@@ -531,7 +620,11 @@ export function AppleFitnessPanel({
             <Button
               variant="alt"
               onClick={() =>
-                copyText('workout-json', WORKOUT_JSON_TEMPLATE, 'Workout JSON')
+                copyText(
+                  'workout-json',
+                  APPLE_HEALTH_WORKOUT_JSON_TEMPLATE,
+                  'Workout JSON',
+                )
               }
               className="min-h-[44px] gap-1.5 px-3 text-sm"
             >
@@ -544,7 +637,7 @@ export function AppleFitnessPanel({
             </Button>
           </div>
           <pre className="overflow-x-auto rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] p-3 font-mono text-xs">
-            {WORKOUT_JSON_TEMPLATE}
+            {APPLE_HEALTH_WORKOUT_JSON_TEMPLATE}
           </pre>
         </div>
 
@@ -558,7 +651,7 @@ export function AppleFitnessPanel({
               onClick={() =>
                 copyText(
                   'weight-json',
-                  WEIGHT_ONLY_JSON_TEMPLATE,
+                  APPLE_HEALTH_WEIGHT_ONLY_JSON_TEMPLATE,
                   'Weight-only JSON',
                 )
               }
@@ -573,7 +666,7 @@ export function AppleFitnessPanel({
             </Button>
           </div>
           <pre className="overflow-x-auto rounded-xl border-2 border-[var(--line)] bg-[var(--surface)] p-3 font-mono text-xs">
-            {WEIGHT_ONLY_JSON_TEMPLATE}
+            {APPLE_HEALTH_WEIGHT_ONLY_JSON_TEMPLATE}
           </pre>
         </div>
       </section>

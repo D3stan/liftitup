@@ -63,7 +63,18 @@ const {
   compareOverlapScores,
   computeIntervalOverlap,
   parseAppleHealthFileStrict,
+  validateAppleHealthIngestPayload,
 } = await import('@/lib/integrations/appleHealthValidation');
+const {
+  APPLE_HEALTH_DRY_RUN_TEMPLATE,
+  APPLE_HEALTH_WEIGHT_ONLY_JSON_TEMPLATE,
+  APPLE_HEALTH_WORKOUT_JSON_TEMPLATE,
+  buildAppleHealthSiriPrompt,
+} = await import('@/lib/integrations/appleHealthPrompt');
+const {
+  getConfiguredAppleHealthShortcutUrl,
+  parseConfiguredShortcutUrl,
+} = await import('@/lib/integrations/appleHealthShortcutConfig');
 const {
   GET: appleHealthGet,
   POST: appleHealthPost,
@@ -1235,6 +1246,177 @@ test('GET apple-health, JSON export, MCP get_profile, and settings search expose
       (item) => item.id === 'apple-health-integration',
     ),
   );
+  assert.ok(
+    filterSettingsItems('siri').some(
+      (item) => item.id === 'apple-health-integration',
+    ),
+  );
 
   await closeDb();
+});
+
+test('UI JSON templates, Shortcut aliases (ISO measuredOn, startDate, measuredAt, top-level date), and empty workout-template error clarity', async () => {
+  // All three UI templates must pass strict validation
+  for (const raw of [
+    APPLE_HEALTH_DRY_RUN_TEMPLATE,
+    APPLE_HEALTH_WORKOUT_JSON_TEMPLATE,
+    APPLE_HEALTH_WEIGHT_ONLY_JSON_TEMPLATE,
+  ]) {
+    const parsed = JSON.parse(raw) as unknown;
+    const validated = validateAppleHealthIngestPayload(parsed, {
+      timezone: 'UTC',
+    });
+    assert.ok(validated.items.length >= 1);
+  }
+
+  // Weight-only item with ISO timestamp in measuredOn converts to user's timezone
+  const isoMeasuredOn = validateAppleHealthIngestPayload(
+    {
+      workouts: [
+        {
+          bodyweightKg: 75.4,
+          measuredOn: '2026-11-16T03:15:00Z',
+        },
+      ],
+    },
+    { timezone: 'America/New_York' },
+  );
+  assert.equal(isoMeasuredOn.items[0].kind, 'weight');
+  assert.equal(isoMeasuredOn.items[0].measuredDate, '2026-11-15');
+
+  // Weight-only aliases: measuredAt, recordedAt, timestamp, startDate
+  for (const key of ['measuredAt', 'recordedAt', 'timestamp', 'startDate'] as const) {
+    const res = validateAppleHealthIngestPayload(
+      {
+        workouts: [{ bodyweightKg: 76.2, [key]: '2026-11-16T08:00:00Z' }],
+      },
+      { timezone: 'UTC' },
+    );
+    assert.equal(res.items[0].kind, 'weight');
+    assert.equal(res.items[0].measuredDate, '2026-11-16');
+  }
+
+  // Top-level measuredOn fallback when workouts[0] omits it
+  const topLevelDate = validateAppleHealthIngestPayload(
+    {
+      measuredOn: '2026-11-16',
+      workouts: [{ bodyweightKg: 74.9 }],
+    },
+    { timezone: 'UTC' },
+  );
+  assert.equal(topLevelDate.items[0].kind, 'weight');
+  assert.equal(topLevelDate.items[0].measuredDate, '2026-11-16');
+
+  // Workout item supports startDate alias and empty string workoutType default
+  const workoutAlias = validateAppleHealthIngestPayload(
+    {
+      workouts: [
+        {
+          workoutType: '   ',
+          startDate: '2026-11-16T09:00:00Z',
+          durationMinutes: 40,
+        },
+      ],
+    },
+    { timezone: 'UTC' },
+  );
+  assert.equal(workoutAlias.items[0].kind, 'workout');
+  if (workoutAlias.items[0].kind === 'workout') {
+    assert.equal(workoutAlias.items[0].workoutType, 'Traditional Strength Training');
+    assert.equal(workoutAlias.items[0].durationMinutes, 40);
+  }
+
+  // Empty workout Shortcut run with bodyweightKg populated reports startedAt missing, not measuredOn missing
+  assert.throws(
+    () =>
+      validateAppleHealthIngestPayload(
+        {
+          workouts: [
+            {
+              workoutType: '',
+              startedAt: '',
+              durationMinutes: '',
+              bodyweightKg: 75.4,
+            },
+          ],
+        },
+        { timezone: 'UTC' },
+      ),
+    (err: unknown) =>
+      err instanceof AppleHealthValidationError &&
+      err.message.includes('workouts[0].startedAt'),
+  );
+});
+
+test('Siri / AI prompt includes exact origin endpoint, auth header, and valid JSON schemas', () => {
+  const prompt = buildAppleHealthSiriPrompt('https://lift.example.com/');
+  assert.ok(prompt.includes('https://lift.example.com/api/integrations/apple-health'));
+  assert.ok(prompt.includes('POST'));
+  assert.ok(prompt.includes('Authorization: Bearer'));
+  assert.ok(prompt.includes('"bodyweightKg"'));
+  assert.ok(prompt.includes('"measuredOn"'));
+  assert.ok(prompt.includes('"startedAt"'));
+  assert.ok(prompt.includes('"durationMinutes"'));
+  assert.ok(prompt.includes(APPLE_HEALTH_WORKOUT_JSON_TEMPLATE));
+  assert.ok(prompt.includes(APPLE_HEALTH_WEIGHT_ONLY_JSON_TEMPLATE));
+  assert.ok(prompt.includes(APPLE_HEALTH_DRY_RUN_TEMPLATE));
+});
+
+test('APPLE_HEALTH_SHORTCUT_URL is validated and served dynamically by GET /api/integrations/apple-health', async () => {
+  assert.equal(parseConfiguredShortcutUrl(undefined), null);
+  assert.equal(parseConfiguredShortcutUrl('   '), null);
+  assert.equal(parseConfiguredShortcutUrl('javascript:alert(1)'), null);
+  assert.equal(parseConfiguredShortcutUrl('not-a-url'), null);
+  assert.equal(
+    parseConfiguredShortcutUrl('  https://www.icloud.com/shortcuts/abc123  '),
+    'https://www.icloud.com/shortcuts/abc123',
+  );
+
+  setupMemPool();
+  await pingDb();
+  const { rawToken } = await createAuthedUser('shortcut_url');
+
+  const prevUrl = process.env.APPLE_HEALTH_SHORTCUT_URL;
+  try {
+    delete process.env.APPLE_HEALTH_SHORTCUT_URL;
+    assert.equal(getConfiguredAppleHealthShortcutUrl(), null);
+
+    const unsetRes = await appleHealthGet(
+      makeSessionReq(
+        'http://localhost/api/integrations/apple-health',
+        'GET',
+        rawToken,
+      ),
+      routeCtx,
+    );
+    assert.equal(unsetRes.status, 200);
+    const unsetJson = (await unsetRes.json()) as { shortcutUrl: string | null };
+    assert.equal(unsetJson.shortcutUrl, null);
+
+    process.env.APPLE_HEALTH_SHORTCUT_URL =
+      'https://www.icloud.com/shortcuts/9f8e7d6c5b4a';
+    assert.equal(
+      getConfiguredAppleHealthShortcutUrl(),
+      'https://www.icloud.com/shortcuts/9f8e7d6c5b4a',
+    );
+
+    const setRes = await appleHealthGet(
+      makeSessionReq(
+        'http://localhost/api/integrations/apple-health',
+        'GET',
+        rawToken,
+      ),
+      routeCtx,
+    );
+    assert.equal(setRes.status, 200);
+    const setJson = (await setRes.json()) as { shortcutUrl: string | null };
+    assert.equal(
+      setJson.shortcutUrl,
+      'https://www.icloud.com/shortcuts/9f8e7d6c5b4a',
+    );
+  } finally {
+    if (prevUrl === undefined) delete process.env.APPLE_HEALTH_SHORTCUT_URL;
+    else process.env.APPLE_HEALTH_SHORTCUT_URL = prevUrl;
+    await closeDb();
+  }
 });

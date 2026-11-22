@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { hasActivePool, query, queryOne } from '@/lib/db/connection';
-import { logger } from '@/lib/logger';
+import { logger, redactSensitiveText } from '@/lib/logger';
 
 interface BufferedMetricBucket {
   bucketStart: string;
@@ -61,11 +61,7 @@ export function sanitizeErrorMessage(err: unknown): string {
         ? err
         : 'Internal server error';
 
-  return raw
-    .replace(/liuk_[a-zA-Z0-9]+/g, 'liuk_***')
-    .replace(/scrypt:[0-9a-f:]+/gi, 'scrypt:***')
-    .replace(/Bearer\s+\S+/gi, 'Bearer ***')
-    .replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgres://***')
+  return redactSensitiveText(raw)
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 300);

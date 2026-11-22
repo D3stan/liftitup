@@ -122,28 +122,41 @@ export async function optionalAuth(req: NextRequest): Promise<AuthContext | null
   };
 }
 
+export interface RequireAuthOptions {
+  allowMustChangePassword?: boolean;
+}
+
 /**
  * Enforces authentication via cookie session or API key; throws 401 ApiError otherwise.
+ * Throws 403 `PASSWORD_CHANGE_REQUIRED` when `mustChangePassword` is true unless
+ * `allowMustChangePassword` is set.
  */
 export async function requireAuth(
   req: NextRequest,
   ctx?: { setUserId?: (id: string | null) => void },
+  opts?: RequireAuthOptions,
 ): Promise<AuthContext> {
   const auth = await optionalAuth(req);
   if (!auth) {
     throw ApiError.unauthorized('Authentication required');
   }
   ctx?.setUserId?.(auth.user.id);
+  if (!opts?.allowMustChangePassword && auth.user.mustChangePassword) {
+    throw ApiError.passwordChangeRequired();
+  }
   return auth;
 }
 
 /**
  * Enforces authentication via session cookie only; rejects API-key callers (Bearer / x-api-key)
  * with 403 and unauthenticated requests with 401.
+ * Throws 403 `PASSWORD_CHANGE_REQUIRED` when `mustChangePassword` is true unless
+ * `allowMustChangePassword` is set.
  */
 export async function requireSessionAuth(
   req: NextRequest,
   ctx?: { setUserId?: (id: string | null) => void },
+  opts?: RequireAuthOptions,
 ): Promise<AuthContext> {
   if (
     req.headers.get('authorization') !== null ||
@@ -158,25 +171,50 @@ export async function requireSessionAuth(
     throw ApiError.unauthorized('Session authentication required');
   }
   ctx?.setUserId?.(auth.user.id);
+  if (!opts?.allowMustChangePassword && auth.user.mustChangePassword) {
+    throw ApiError.passwordChangeRequired();
+  }
   return auth;
 }
 
 /**
- * Enforces Bearer API-key authentication only (for `/api/mcp`). Throws 401 otherwise.
+ * Enforces API-key authentication (for `/api/mcp`) via either
+ * `Authorization: Bearer <api_key>` header or `?token=<api_key>` URL query parameter.
+ * Throws 401 otherwise, or 403 `PASSWORD_CHANGE_REQUIRED` if password reset is pending.
  */
 export async function requireApiKeyAuth(
   req: NextRequest,
   ctx?: { setUserId?: (id: string | null) => void },
 ): Promise<AuthContext> {
-  const bearer = extractBearerToken(req);
-  if (!bearer) {
-    throw ApiError.unauthorized('Bearer API key required');
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== null && authHeader.trim() !== '') {
+    const bearer = extractBearerToken(req);
+    if (!bearer) {
+      throw ApiError.unauthorized('Bearer API key required');
+    }
+    const auth = await resolveFromApiKey(bearer);
+    if (!auth) {
+      throw ApiError.unauthorized('Invalid API key');
+    }
+    ctx?.setUserId?.(auth.user.id);
+    if (auth.user.mustChangePassword) {
+      throw ApiError.passwordChangeRequired();
+    }
+    return auth;
   }
-  const auth = await resolveFromApiKey(bearer);
+
+  const urlToken = req.nextUrl?.searchParams?.get('token')?.trim() ?? '';
+  if (!urlToken) {
+    throw ApiError.unauthorized('API key required');
+  }
+  const auth = await resolveFromApiKey(urlToken);
   if (!auth) {
     throw ApiError.unauthorized('Invalid API key');
   }
   ctx?.setUserId?.(auth.user.id);
+  if (auth.user.mustChangePassword) {
+    throw ApiError.passwordChangeRequired();
+  }
   return auth;
 }
 

@@ -239,6 +239,37 @@ test('workouts query lifecycle: day view, transactional save, cid idempotency, e
       () => updateWorkoutSession(guest.id, session.id, { title: 'Gone' }),
       (err: unknown) => err instanceof ApiError && err.status === 404,
     );
+
+    // Concurrent duplicate cid race resolves idempotently without PG 23505 failure
+    const raceCid = 'race-cid-concurrent-1';
+    const racePayload = {
+      sessionDate: today,
+      title: 'Concurrent Push',
+      isJolly: true,
+      jollyMode: 'extra' as const,
+      cid: raceCid,
+      exercises: [
+        {
+          exerciseId: 'barbell-bench-press',
+          orderIndex: 0,
+          sets: [{ setNumber: 1, weightKg: 80, reps: 8, isCompleted: true }],
+        },
+      ],
+    };
+    const raceResults = await Promise.all([
+      saveWorkoutSession(guest.id, racePayload),
+      saveWorkoutSession(guest.id, racePayload),
+      saveWorkoutSession(guest.id, racePayload),
+    ]);
+    const createdFlags = raceResults.map((r) => r.created).sort();
+    assert.deepEqual(createdFlags, [false, false, true]);
+    const uniqueRaceIds = new Set(raceResults.map((r) => r.session.id));
+    assert.equal(uniqueRaceIds.size, 1);
+    const raceRowCount = await queryOne<{ cnt: number }>(
+      'SELECT COUNT(*)::int AS cnt FROM workout_sessions WHERE user_id = $1 AND cid = $2',
+      [guest.id, raceCid],
+    );
+    assert.equal(Number(raceRowCount?.cnt), 1);
   } finally {
     await closeDb();
   }

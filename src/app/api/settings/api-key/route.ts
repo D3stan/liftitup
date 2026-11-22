@@ -21,11 +21,13 @@ export const POST = withApiHandler(
       '',
     );
     const mcpUrl = `${baseUrl}/api/mcp`;
+    const mcpTokenUrl = `${mcpUrl}?token=${encodeURIComponent(rawKey)}`;
 
     return NextResponse.json({
       apiKey: rawKey,
       keyPrefix,
       mcpUrl,
+      mcpTokenUrl,
       apiKeyInfo,
     });
   },

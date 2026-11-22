@@ -5,12 +5,24 @@ import { AppleFitnessPanel } from '@/components/integrations/AppleFitnessPanel';
 import { SettingsSubpageShell } from './SettingsSubpageShell';
 import { useSettingsData } from './useSettingsData';
 
-export function SettingsAppleHealthView() {
+interface SettingsAppleHealthViewProps {
+  shortcutUrl?: string | null;
+}
+
+export function SettingsAppleHealthView({
+  shortcutUrl = null,
+}: SettingsAppleHealthViewProps) {
   const { user, setUser, loading } = useSettingsData();
 
   return (
     <SettingsSubpageShell title="Apple Health" user={user} loading={loading}>
-      {user && <AppleFitnessPanel user={user} onUserUpdated={setUser} />}
+      {user && (
+        <AppleFitnessPanel
+          user={user}
+          shortcutUrl={shortcutUrl}
+          onUserUpdated={setUser}
+        />
+      )}
     </SettingsSubpageShell>
   );
 }

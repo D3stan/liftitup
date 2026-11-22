@@ -1,4 +1,9 @@
-export { getMcpClientConfigSnippet, normalizeMcpEndpointUrl } from './config';
+export {
+  getMcpClientConfigSnippet,
+  getMcpTokenEndpointUrl,
+  normalizeMcpEndpointUrl,
+  type McpAuthMode,
+} from './config';
 export {
   ADMIN_MCP_TOOLS_DEFINITIONS,
   ALL_USER_MCP_TOOLS_DEFINITIONS,

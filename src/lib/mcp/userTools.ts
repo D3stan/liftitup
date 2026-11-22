@@ -1443,7 +1443,9 @@ export async function executeUserToolCall(
 
   switch (name) {
     case 'get_profile': {
-      const recentBodyMetrics = await listBodyMetrics(user.id, { limit: 15 });
+      const recentBodyMetrics = (
+        await listBodyMetrics(user.id, { limit: 15, order: 'desc' })
+      ).reverse();
       return wrapToolResult({
         profile: {
           id: user.id,

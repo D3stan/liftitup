@@ -14,9 +14,13 @@ import {
 import { WeekCalendar } from '@/components/calendar/WeekCalendar';
 import { TodayCard } from '@/components/calendar/TodayCard';
 import { PlanActionsSheet } from '@/components/calendar/PlanActionsSheet';
+import { useCurrentUser } from '@/components/shell/AppShell';
+import { useActiveWorkout } from '@/components/workout/useActiveWorkout';
 import type { RotationSchedule } from '@/types/domain';
 
 export default function HomePage() {
+  const user = useCurrentUser();
+  const activeWorkout = useActiveWorkout(user?.id ?? null);
   const [today] = useState<string>(() => formatLocalDate(new Date()));
   const [weekStart, setWeekStart] = useState<string>(() =>
     getWeekStartMonday(formatLocalDate(new Date())),
@@ -87,6 +91,7 @@ export default function HomePage() {
         today={today}
         schedule={schedule}
         todayDay={todayDay}
+        activeWorkout={activeWorkout}
         onOpenPlan={() => setPlanOpen(true)}
       />
 

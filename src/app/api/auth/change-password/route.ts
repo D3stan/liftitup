@@ -16,7 +16,9 @@ interface ChangePasswordBody {
 export const POST = withApiHandler(
   'auth.changePassword',
   async (req: NextRequest, ctx) => {
-    const { user } = await requireSessionAuth(req, ctx);
+    const { user } = await requireSessionAuth(req, ctx, {
+      allowMustChangePassword: true,
+    });
 
     if (user.isGuest) {
       throw ApiError.forbidden('Guest accounts cannot change passwords');
