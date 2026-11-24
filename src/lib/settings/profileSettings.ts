@@ -122,7 +122,7 @@ export function validateSettingsPatch(
   if (body.theme !== undefined) {
     if (!isValidAppTheme(body.theme)) {
       throw ApiError.validation(
-        'theme must be "notebook", "cutecore", "analog-horror", "brazilian-phonk", "future-funk", or "lofi-art"',
+        'theme must be "notebook", "cutecore", "analog-horror", "brazilian-phonk", "future-funk", "lofi-art", or "frutiger-aero"',
       );
     }
     patch.theme = body.theme;

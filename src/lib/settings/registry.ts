@@ -167,7 +167,7 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
     id: 'appearance-theme',
     title: 'Theme & Light/Dark Variant',
     description:
-      'Switch between Notebook, Cutecore, Analog Horror, Phonk, Future Funk, and Lo-fi Art.',
+      'Switch between Notebook, Cutecore, Analog Horror, Phonk, Future Funk, Lo-fi Art, and Frutiger Aero.',
     categoryId: 'appearance',
     categoryTitle: 'Appearance',
     href: '/settings/appearance',
@@ -183,6 +183,9 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
       'brazilian phonk',
       'future funk',
       'lofi',
+      'frutiger aero',
+      'glossy',
+      'aqua',
       'color',
     ],
   },

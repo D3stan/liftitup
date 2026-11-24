@@ -527,6 +527,100 @@ function LofiArtMiniPreview() {
   );
 }
 
+function FrutigerAeroMiniPreview() {
+  return (
+    <div
+      aria-hidden="true"
+      className="relative h-24 w-full overflow-hidden p-2"
+      style={{
+        backgroundColor: '#cfeef7',
+        backgroundImage:
+          'linear-gradient(180deg, #a9dff2 0%, #d8f3fc 55%, #d4f0d8 100%)',
+        border: '2px solid #2f7fa3',
+        borderRadius: '18px',
+      }}
+    >
+      {/* Inline SVG: sunlit sky, glossy rolling hills, and aqua glass bubbles */}
+      <svg
+        viewBox="0 0 200 72"
+        preserveAspectRatio="none"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-16 w-full"
+      >
+        <defs>
+          <linearGradient id="fa-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#9fdcef" />
+            <stop offset="100%" stopColor="#dff5fd" />
+          </linearGradient>
+          <radialGradient id="fa-bubble" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+            <stop offset="55%" stopColor="#bfe9f7" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#59b7d8" stopOpacity="0.35" />
+          </radialGradient>
+          <linearGradient id="fa-hill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8fd9a8" />
+            <stop offset="100%" stopColor="#3fae5f" />
+          </linearGradient>
+          <linearGradient id="fa-hill-back" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#b8ec9f" />
+            <stop offset="100%" stopColor="#74c98a" />
+          </linearGradient>
+        </defs>
+        {/* Sky */}
+        <rect x="0" y="0" width="200" height="52" fill="url(#fa-sky)" />
+        {/* Sun glow */}
+        <circle cx="164" cy="16" r="12" fill="#fff3c4" opacity="0.9" />
+        <circle cx="164" cy="16" r="7" fill="#ffe478" />
+        {/* Rolling hills */}
+        <path
+          d="M0 46 Q50 30 100 44 T200 42 L200 72 L0 72 Z"
+          fill="url(#fa-hill-back)"
+        />
+        <path
+          d="M0 52 Q60 40 120 52 T200 48 L200 72 L0 72 Z"
+          fill="url(#fa-hill)"
+        />
+        {/* Glossy aqua bubbles */}
+        <circle cx="34" cy="20" r="12" fill="url(#fa-bubble)" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="1" />
+        <circle cx="58" cy="34" r="7" fill="url(#fa-bubble)" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="0.8" />
+        <circle cx="118" cy="16" r="9" fill="url(#fa-bubble)" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="1" />
+        <circle cx="86" cy="28" r="4.5" fill="url(#fa-bubble)" stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.6" />
+      </svg>
+
+      <div className="relative z-10 flex items-center justify-between">
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold"
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.75)',
+            color: '#0c2a3d',
+            border: '1.5px solid #2f7fa3',
+            boxShadow: '0 1px 3px rgba(31, 111, 143, 0.35)',
+          }}
+        >
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{
+              backgroundColor: '#ffb02e',
+              boxShadow: '0 0 3px rgba(255, 176, 46, 0.8)',
+            }}
+          />
+          AERO
+        </span>
+        <span
+          className="rounded-full px-1.5 py-0.5 text-[8px] font-bold"
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.7)',
+            color: '#0c2a3d',
+            border: '1.5px solid #2f7fa3',
+            fontFamily: '"Trebuchet MS", "Segoe UI", sans-serif',
+          }}
+        >
+          2006
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function ThemeSelector({
   theme,
   themeVariant,
@@ -613,6 +707,7 @@ export function ThemeSelector({
                 {meta.id === 'brazilian-phonk' && <BrazilianPhonkMiniPreview />}
                 {meta.id === 'future-funk' && <FutureFunkMiniPreview />}
                 {meta.id === 'lofi-art' && <LofiArtMiniPreview />}
+                {meta.id === 'frutiger-aero' && <FrutigerAeroMiniPreview />}
 
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">

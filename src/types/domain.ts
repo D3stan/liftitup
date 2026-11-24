@@ -26,7 +26,8 @@ export type AppTheme =
   | 'analog-horror'
   | 'brazilian-phonk'
   | 'future-funk'
-  | 'lofi-art';
+  | 'lofi-art'
+  | 'frutiger-aero';
 
 export type ThemeVariant = 'light' | 'dark';
 

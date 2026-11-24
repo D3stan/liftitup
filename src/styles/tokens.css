@@ -320,3 +320,47 @@
   --inset-shadow: inset 2px 2px 0 rgba(16, 18, 32, 0.4);
   --input-focus-bg: #292e47;
 }
+
+/* ==========================================================================
+   FRUTIGER AERO (Late-2000s Glossy Aqua & Sunlit Glassmorphism)
+   ========================================================================== */
+[data-theme="frutiger-aero"] {
+  --paper: #cfeef7;
+  --card: #ffffff;
+  --surface: #f5faff;
+  --surface-alt: #d6f0f9;
+  --ink: #0c2a3d;
+  --muted: #3d6b80;
+  --line: #2f7fa3;
+  --red: #e84c58;
+  --red-bg: #ffd3da;
+  --gold: #ffb02e;
+  --btn-gold-fg: #0c2a3d;
+  --gold-bg: #ffe4b0;
+  --blue: #1f6fd4;
+  --blue-bg: #cfe3ff;
+  --green: #2e8b3d;
+  --green-bg: #b3e4bd;
+  --note: #dff7b8;
+  --shadow-color: #1f6f8f;
+  --btn-red-fg: #ffffff;
+  --backdrop: rgba(12, 42, 61, 0.45);
+  --selection-bg: #ffb02e;
+  --selection-fg: #0c2a3d;
+
+  --wob: 18px;
+  --wob-sm: 14px;
+  --font-body: "Trebuchet MS", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Trebuchet MS", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --text-base: 17px;
+
+  --note-shadow: 4px 4px 0 rgba(31, 111, 143, 0.45);
+  --tape-bg: rgba(255, 255, 255, 0.6);
+  --tape-border: rgba(47, 127, 163, 0.4);
+  --red-stripe: #c93643;
+  --gold-stripe: #e69412;
+  --green-stripe: #257531;
+  --bar-divider: rgba(12, 42, 61, 0.18);
+  --inset-shadow: inset 2px 2px 0 rgba(31, 111, 143, 0.25);
+  --input-focus-bg: #ffffff;
+}

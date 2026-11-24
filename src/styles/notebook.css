@@ -578,6 +578,45 @@ button, a, [role="button"], .chip, .tab, .pill, .tappable {
   transform: none;
 }
 
+/* Frutiger Aero: glossy aqua sky & sunlit glass, clean rounded cards, zero wobble */
+[data-theme="frutiger-aero"] body {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(180deg, #a9dff2 0%, #d8f3fc 55%, #d4f0d8 100%);
+}
+
+[data-theme="frutiger-aero"] .card,
+[data-theme="frutiger-aero"] .hero-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.68) 55%, rgba(255, 255, 255, 0.42) 100%),
+    var(--card);
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 6px 18px rgba(31, 111, 143, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="frutiger-aero"] .hero-card,
+[data-theme="frutiger-aero"] .wobble-grid > *,
+[data-theme="frutiger-aero"] .note,
+[data-theme="frutiger-aero"] .note::before,
+[data-theme="frutiger-aero"] .brand,
+[data-theme="frutiger-aero"] .brand-badge {
+  transform: none;
+}
+
+[data-theme="frutiger-aero"] .bar,
+[data-theme="frutiger-aero"] .level-box,
+[data-theme="frutiger-aero"] .pill,
+[data-theme="frutiger-aero"] .btn,
+[data-theme="frutiger-aero"] .nb-input {
+  border-radius: 14px;
+}
+
+[data-theme="frutiger-aero"] .sheet-panel {
+  border-radius: 20px 20px 0 0;
+}
+
 /* Reduced Motion Accessibility */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
