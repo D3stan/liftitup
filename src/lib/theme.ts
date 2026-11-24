@@ -52,6 +52,12 @@ export const APP_THEMES: readonly ThemeMeta[] = [
     subtitle: 'Rainy twilight & warm lamp',
     supportsVariants: false,
   },
+  {
+    id: 'frutiger-aero',
+    name: 'Frutiger Aero',
+    subtitle: 'Glossy aqua & sunlit glass',
+    supportsVariants: false,
+  },
 ] as const;
 
 export function isValidAppTheme(val: unknown): val is AppTheme {
@@ -61,7 +67,8 @@ export function isValidAppTheme(val: unknown): val is AppTheme {
     val === 'analog-horror' ||
     val === 'brazilian-phonk' ||
     val === 'future-funk' ||
-    val === 'lofi-art'
+    val === 'lofi-art' ||
+    val === 'frutiger-aero'
   );
 }
 
@@ -75,6 +82,7 @@ export function getThemeColor(theme: AppTheme, variant: ThemeVariant): string {
   if (theme === 'brazilian-phonk') return '#09090d';
   if (theme === 'future-funk') return '#170b2b';
   if (theme === 'lofi-art') return '#1c1f33';
+  if (theme === 'frutiger-aero') return '#cfeef7';
   return variant === 'dark' ? '#171512' : '#ece2c6';
 }
 

@@ -27,7 +27,7 @@ const SCHEMA_V2_DDL = `
     training_years DOUBLE PRECISION,
     unit TEXT NOT NULL DEFAULT 'kg' CHECK (unit IN ('kg', 'lb')),
     timezone TEXT NOT NULL DEFAULT 'UTC',
-    theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art')),
+    theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art', 'frutiger-aero')),
     theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark')),
     enable_set_quality INTEGER NOT NULL DEFAULT 0 CHECK (enable_set_quality IN (0, 1)),
     always_show_rir INTEGER NOT NULL DEFAULT 0 CHECK (always_show_rir IN (0, 1)),
@@ -663,7 +663,7 @@ export async function initSchema(
     }
 
     await client.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art'))",
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'notebook' CHECK (theme IN ('notebook', 'cutecore', 'analog-horror', 'brazilian-phonk', 'future-funk', 'lofi-art', 'frutiger-aero'))",
     );
     await client.query(
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_variant TEXT NOT NULL DEFAULT 'light' CHECK (theme_variant IN ('light', 'dark'))",

@@ -10,7 +10,7 @@ import {
   THEME_VARIANT_STORAGE_KEY,
 } from '@/lib/theme';
 
-const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');var v=localStorage.getItem('${THEME_VARIANT_STORAGE_KEY}');if(t!=='notebook'&&t!=='cutecore'&&t!=='analog-horror'&&t!=='brazilian-phonk'&&t!=='future-funk'&&t!=='lofi-art')t='${DEFAULT_THEME}';if(v!=='light'&&v!=='dark')v='${DEFAULT_THEME_VARIANT}';var d=document.documentElement;d.dataset.theme=t;d.dataset.variant=t==='notebook'?v:'default';var c=t==='cutecore'?'#ffeaf2':t==='analog-horror'?'#0a0b0d':t==='brazilian-phonk'?'#09090d':t==='future-funk'?'#170b2b':t==='lofi-art'?'#1c1f33':(v==='dark'?'#171512':'#ece2c6');var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',c);}catch(e){}})();`;
+const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');var v=localStorage.getItem('${THEME_VARIANT_STORAGE_KEY}');if(t!=='notebook'&&t!=='cutecore'&&t!=='analog-horror'&&t!=='brazilian-phonk'&&t!=='future-funk'&&t!=='lofi-art'&&t!=='frutiger-aero')t='${DEFAULT_THEME}';if(v!=='light'&&v!=='dark')v='${DEFAULT_THEME_VARIANT}';var d=document.documentElement;d.dataset.theme=t;d.dataset.variant=t==='notebook'?v:'default';var c=t==='cutecore'?'#ffeaf2':t==='analog-horror'?'#0a0b0d':t==='brazilian-phonk'?'#09090d':t==='future-funk'?'#170b2b':t==='lofi-art'?'#1c1f33':t==='frutiger-aero'?'#cfeef7':(v==='dark'?'#171512':'#ece2c6');var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',c);}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: 'LiftItUp — Workout & Rotation Tracker',
